@@ -46,6 +46,12 @@ export default function App() {
   const [scrapeProgress, setScrapeProgress] = useState(0); 
   const [scrapeTimeRemaining, setScrapeTimeRemaining] = useState(''); 
   const [scrapePhase, setScrapePhase] = useState('idle'); 
+  const [scrapeLimit, setScrapeLimit] = useState(30); // Customize maximum matches to scrape
+  const [matchesRemaining, setMatchesRemaining] = useState(0); // Count of matches left to scrape 
+  const [currentPrimary, setCurrentPrimary] = useState(0);
+  const [totalPrimary, setTotalPrimary] = useState(0);
+  const [currentDeep, setCurrentDeep] = useState(0);
+  const [totalDeep, setTotalDeep] = useState(0);
   
   // Modals state
   const [showAddBetModal, setShowAddBetModal] = useState(false);
@@ -59,6 +65,7 @@ export default function App() {
   const [batchGlobalBookmaker, setBatchGlobalBookmaker] = useState('Unibet'); // Global bookmaker input
   const [batchLoading, setBatchLoading] = useState(false); // Loading state for batch registering
   const [batchProgress, setBatchProgress] = useState(0); // Count of successfully placed batch bets
+  const [crawlLoading, setCrawlLoading] = useState(false); // Track on-demand crawling loading state
   
   // Form States
   const [newBetForm, setNewBetForm] = useState({
@@ -125,6 +132,35 @@ export default function App() {
     const res = await fetch('/api/predictions');
     const json = await res.json();
     if (json.success) setPredictions(json.data);
+  };
+
+  const handleCrawlHistory = async (matchId) => {
+    setCrawlLoading(true);
+    try {
+      const res = await fetch(`/api/predictions/${matchId}/crawl-history`, {
+        method: 'POST'
+      });
+      const json = await res.json();
+      if (json.success) {
+        // Re-fetch all predictions to get updated stats
+        const predRes = await fetch('/api/predictions');
+        const predJson = await predRes.json();
+        if (predJson.success) {
+          setPredictions(predJson.data);
+          // Find the updated match details
+          const updatedMatch = predJson.data.find(p => p.match_id === matchId);
+          if (updatedMatch) {
+            setSelectedMatchDetails(updatedMatch);
+          }
+        }
+      } else {
+        alert("Erreur lors de la récupération de l'historique : " + (json.error?.message || "Erreur inconnue"));
+      }
+    } catch (err) {
+      alert("Erreur réseau : " + err.message);
+    } finally {
+      setCrawlLoading(false);
+    }
   };
 
   const fetchStats = async () => {
@@ -341,16 +377,25 @@ export default function App() {
     setScrapeProgress(5);
     setScrapePhase('discovering');
     setScrapeTimeRemaining('Calcul en cours...');
+    setMatchesRemaining(0);
+    setCurrentPrimary(0);
+    setTotalPrimary(scrapeLimit);
+    setCurrentDeep(0);
+    setTotalDeep(0);
     setScraperLogs([{ message: "[Predictix] Lancement du scraper...", type: 'system' }]);
     
-    let totalPrimary = 15; // default guess
+    let totalPrimary = scrapeLimit; // default guess
     let currentPrimary = 0;
     let totalDeep = 6; // default guess
     let currentDeep = 0;
     let inDeepCrawl = false;
 
     try {
-      const response = await fetch('/api/predictions/scrape', { method: 'POST' });
+      const response = await fetch('/api/predictions/scrape', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limit: scrapeLimit })
+      });
       if (!response.body) {
         throw new Error("Le serveur n'a pas renvoyé de flux de données.");
       }
@@ -390,7 +435,9 @@ export default function App() {
                 if (msg.includes("Discovered") && msg.includes("homepage")) {
                   const matchDiscover = msg.match(/Discovered (\d+) matches/);
                   if (matchDiscover) {
-                    totalPrimary = Math.min(parseInt(matchDiscover[1], 10), 20); // cap at limit (default 20)
+                    totalPrimary = Math.min(parseInt(matchDiscover[1], 10), scrapeLimit);
+                    setMatchesRemaining(totalPrimary);
+                    setTotalPrimary(totalPrimary);
                   }
                 }
                 
@@ -399,11 +446,16 @@ export default function App() {
                 if (primaryMatch) {
                   currentPrimary = parseInt(primaryMatch[1], 10);
                   totalPrimary = parseInt(primaryMatch[2], 10);
+                  setCurrentPrimary(currentPrimary);
+                  setTotalPrimary(totalPrimary);
                   setScrapePhase('scraping_primary');
                   const progressVal = Math.round((currentPrimary / totalPrimary) * 75);
                   setScrapeProgress(progressVal);
 
-                  const remainingSec = Math.max(0, ((totalPrimary - currentPrimary) + totalDeep) * 8);
+                  const remaining = totalPrimary - currentPrimary;
+                  setMatchesRemaining(remaining);
+
+                  const remainingSec = Math.max(0, (remaining + totalDeep) * 8);
                   const mins = Math.floor(remainingSec / 60);
                   const secs = remainingSec % 60;
                   setScrapeTimeRemaining(mins > 0 ? `${mins} min ${secs}s` : `${secs}s`);
@@ -415,17 +467,24 @@ export default function App() {
                   if (deepMatch) {
                     totalDeep = Math.min(parseInt(deepMatch[1], 10), 12); // backend caps uncached links at 12
                     inDeepCrawl = true;
+                    setTotalDeep(totalDeep);
+                    setCurrentDeep(0);
                     setScrapePhase('scraping_history');
+                    setMatchesRemaining(totalDeep);
                   }
                 }
 
-                // 3. Deep crawl phase step: Scraping de l'historique sur Tor :
-                if (msg.includes("Scraping de l'historique sur Tor") && inDeepCrawl) {
+                // 3. Deep crawl phase step: Deep crawling over Tor:
+                if ((msg.includes("Deep crawling over Tor") || msg.includes("Scraping de l'historique sur Tor")) && inDeepCrawl) {
                   currentDeep++;
+                  setCurrentDeep(currentDeep);
                   const progressVal = Math.round(75 + (Math.min(currentDeep, totalDeep) / totalDeep) * 20); // Capped at 95%
                   setScrapeProgress(progressVal);
 
-                  const remainingSec = Math.max(0, (totalDeep - currentDeep) * 8);
+                  const remaining = Math.max(0, totalDeep - currentDeep);
+                  setMatchesRemaining(remaining);
+
+                  const remainingSec = Math.max(0, remaining * 8);
                   const mins = Math.floor(remainingSec / 60);
                   const secs = remainingSec % 60;
                   setScrapeTimeRemaining(mins > 0 ? `${mins} min ${secs}s` : `${secs}s`);
@@ -435,6 +494,7 @@ export default function App() {
                 if (msg.includes("Analyse et importation") || msg.includes("Enregistrement dans SQLite")) {
                   setScrapePhase('importing');
                   setScrapeProgress(96);
+                  setMatchesRemaining(0);
                   setScrapeTimeRemaining("Importation en cours...");
                 }
 
@@ -442,6 +502,7 @@ export default function App() {
                 if (msg.includes("Scraping annulé par l'utilisateur")) {
                   setScrapePhase('stopped');
                   setScrapeProgress(0);
+                  setMatchesRemaining(0);
                   setScrapeTimeRemaining("Annulé");
                 }
               } else if (eventData.type === 'error') {
@@ -451,6 +512,7 @@ export default function App() {
                 setScraperLogs(prev => [...prev, { message: `[Predictix] Scraping terminé avec succès ! ${eventData.count} prédictions synchronisées.`, type: 'success' }]);
                 setScrapePhase('completed');
                 setScrapeProgress(100);
+                setMatchesRemaining(0);
                 setScrapeTimeRemaining("Terminé");
                 fetchPredictions();
                 fetchStats();
@@ -1063,7 +1125,34 @@ export default function App() {
                       </p>
                     </div>
                     
-                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '4px 10px', height: '36px' }}>
+                        <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                          Limite :
+                        </span>
+                        <input 
+                          type="number" 
+                          min="1" 
+                          max="200" 
+                          value={scrapeLimit}
+                          onChange={(e) => setScrapeLimit(Math.min(200, Math.max(1, parseInt(e.target.value, 10) || 1)))}
+                          disabled={scraping}
+                          style={{ 
+                            width: '45px', 
+                            background: 'transparent', 
+                            border: 'none', 
+                            color: 'var(--color-accent-solid)', 
+                            fontWeight: 700, 
+                            fontSize: '13px', 
+                            fontFamily: 'Outfit', 
+                            outline: 'none', 
+                            textAlign: 'center',
+                            padding: 0
+                          }}
+                        />
+                        <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>matchs</span>
+                      </div>
+
                       {scraping && (
                         <button 
                           className="btn btn-danger"
@@ -1111,9 +1200,17 @@ export default function App() {
                             {scrapePhase === 'stopped' && "Scraping arrêté."}
                           </span>
                         </span>
-                        <span style={{ fontFamily: 'Outfit', fontWeight: 700, color: 'var(--color-accent-solid)' }}>
-                          {scrapeProgress}%
-                        </span>
+                        
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          {matchesRemaining > 0 && (
+                            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '2px 8px' }}>
+                              {matchesRemaining} match{matchesRemaining > 1 ? 's' : ''} restant{matchesRemaining > 1 ? 's' : ''}
+                            </span>
+                          )}
+                          <span style={{ fontFamily: 'Outfit', fontWeight: 700, color: 'var(--color-accent-solid)' }}>
+                            {scrapeProgress}%
+                          </span>
+                        </div>
                       </div>
                       
                       {/* Track progress */}
@@ -1127,13 +1224,63 @@ export default function App() {
                         }} />
                       </div>
 
-                      {/* Time Remaining */}
-                      {scrapeTimeRemaining && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', fontSize: '11.5px', color: 'var(--text-muted)' }}>
-                          <span>Temps restant estimé :</span>
-                          <span style={{ fontWeight: 700, color: 'var(--text-secondary)' }}>{scrapeTimeRemaining}</span>
+                      {/* Detailed Scraper Info Dashboard Panel */}
+                      <div style={{ 
+                        display: 'grid', 
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', 
+                        gap: '12px', 
+                        marginTop: '16px', 
+                        paddingTop: '16px', 
+                        borderTop: '1px solid rgba(255,255,255,0.05)' 
+                      }}>
+                        {/* Time Remaining Box */}
+                        <div style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: '6px', padding: '10px' }}>
+                          <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px', fontWeight: 600 }}>
+                            Temps Restant
+                          </div>
+                          <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'Outfit' }}>
+                            {scrapeTimeRemaining || "Calcul..."}
+                          </div>
                         </div>
-                      )}
+
+                        {/* Scraped Matches Progress Box */}
+                        <div style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: '6px', padding: '10px' }}>
+                          <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px', fontWeight: 600 }}>
+                            Matchs Principaux
+                          </div>
+                          <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'Outfit' }}>
+                            {currentPrimary} / {totalPrimary || scrapeLimit}
+                          </div>
+                        </div>
+
+                        {/* Deep H2H Crawl Progress Box */}
+                        <div style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: '6px', padding: '10px' }}>
+                          <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px', fontWeight: 600 }}>
+                            Profondeur H2H
+                          </div>
+                          <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'Outfit' }}>
+                            {scrapePhase === 'scraping_history' ? `${currentDeep} / ${totalDeep}` : (totalDeep > 0 ? `${currentDeep} / ${totalDeep}` : 'En attente...')}
+                          </div>
+                        </div>
+
+                        {/* Tor Anonymous Routing proxy status */}
+                        <div style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: '6px', padding: '10px' }}>
+                          <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px', fontWeight: 600 }}>
+                            Réseau Proxy
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', fontWeight: 700, color: 'var(--color-success)', fontFamily: 'Outfit' }}>
+                            <span style={{ 
+                              width: '6px', 
+                              height: '6px', 
+                              borderRadius: '50%', 
+                              background: 'var(--color-success)',
+                              boxShadow: '0 0 6px var(--color-success)',
+                              display: 'inline-block'
+                            }}></span>
+                            <span>Tor SOCKS5 Actif</span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
 
@@ -2089,58 +2236,67 @@ export default function App() {
               </div>
 
               {/* Historical Lists */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                {/* Section 1: H2H */}
-                <div>
-                  <h4 style={{ fontSize: '13px', fontFamily: 'Outfit', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)', marginBottom: '10px', borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '4px' }}>
-                    Confrontations Directes (H2H)
-                  </h4>
-                  {selectedMatchDetails.recent_h2h_matches && selectedMatchDetails.recent_h2h_matches.length > 0 ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px', scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
-                      {selectedMatchDetails.recent_h2h_matches.map((m, idx) => (
-                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(255,255,255,0.015)', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '12.5px', alignItems: 'center' }}>
-                          <span style={{ color: 'var(--text-secondary)', fontSize: '11px', width: '70px', flexShrink: 0 }}>{m.date}</span>
-                          
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexGrow: 1, justifyContent: 'center', padding: '0 8px' }}>
-                            {m.home_logo ? (
-                              <img src={m.home_logo} alt="" style={{ width: '14px', height: '14px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
-                            ) : (
-                              <div style={{ width: '14px', height: '14px', borderRadius: '50%', background: 'var(--bg-tertiary)', flexShrink: 0 }} />
-                            )}
-                            <span style={{ color: 'var(--text-primary)', fontWeight: 500, maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>{m.home_team}</span>
-                            
-                            <strong style={{ color: 'var(--text-muted)', margin: '0 4px', background: 'rgba(255,255,255,0.04)', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', flexShrink: 0 }}>{m.score}</strong>
-                            
-                            <span style={{ color: 'var(--text-primary)', fontWeight: 500, maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>{m.away_team}</span>
-                            {m.away_logo ? (
-                              <img src={m.away_logo} alt="" style={{ width: '14px', height: '14px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
-                            ) : (
-                              <div style={{ width: '14px', height: '14px', borderRadius: '50%', background: 'var(--bg-tertiary)', flexShrink: 0 }} />
-                            )}
-                          </div>
-                          
-                          <span style={{ fontWeight: 700, color: 'var(--color-success)', background: 'rgba(16, 185, 129, 0.08)', padding: '3px 8px', borderRadius: '4px', fontSize: '11px', marginLeft: '12px', flexShrink: 0 }}>
-                            Corners: {m.first_half_corners_home} - {m.first_half_corners_away}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic', margin: 0 }}>Aucune confrontation H2H en cache dans l'historique.</p>
-                  )}
+              {crawlLoading ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 20px', background: 'rgba(255,255,255,0.015)', border: '1.5px dashed var(--border-color)', borderRadius: '12px', gap: '16px', margin: '20px 0' }}>
+                  <div style={{ width: '36px', height: '36px', border: '3.5px solid rgba(255,255,255,0.08)', borderTop: '3.5px solid var(--color-accent-solid)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+                  <style>{`
+                    @keyframes spin {
+                      0% { transform: rotate(0deg); }
+                      100% { transform: rotate(360deg); }
+                    }
+                  `}</style>
+                  <div style={{ textAlign: 'center' }}>
+                    <h4 style={{ fontSize: '14.5px', fontFamily: 'Outfit', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+                      Analyse de l'Historique en cours...
+                    </h4>
+                    <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '6px 0 0 0', maxWidth: '380px', lineHeight: '1.4' }}>
+                      Récupération des confrontations et corners 1MT depuis Matchendirect via Tor SOCKS5. Cette opération prend environ 10 à 15 secondes.
+                    </p>
+                  </div>
                 </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  {/* Call to action if stats are empty */}
+                  {(!selectedMatchDetails.recent_h2h_matches?.length && 
+                    !selectedMatchDetails.recent_home_matches?.length && 
+                    !selectedMatchDetails.recent_away_matches?.length) && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 16px', background: 'rgba(9, 132, 227, 0.03)', border: '1px dashed rgba(9, 132, 227, 0.25)', borderRadius: '12px', gap: '12px', textAlign: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-accent-solid)' }}>
+                        <RefreshCcw size={16} />
+                        <span style={{ fontSize: '14px', fontFamily: 'Outfit', fontWeight: 700 }}>Statistiques Vides</span>
+                      </div>
+                      <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0, maxWidth: '400px', lineHeight: '1.4' }}>
+                        Les confrontations directes et les moyennes de corners ne sont pas encore disponibles pour ce match.
+                      </p>
+                      <button 
+                        className="btn btn-primary" 
+                        style={{ padding: '8px 20px', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '8px', cursor: 'pointer', fontWeight: 700, fontFamily: 'Outfit' }}
+                        onClick={() => handleCrawlHistory(selectedMatchDetails.match_id)}
+                      >
+                        <RefreshCcw size={13} />
+                        Analyser l'historique du match
+                      </button>
+                    </div>
+                  )}
 
-                {/* Section 2: Recent Home */}
-                <div>
-                  <h4 style={{ fontSize: '13px', fontFamily: 'Outfit', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)', marginBottom: '10px', borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '4px' }}>
-                    Derniers matchs de {selectedMatchDetails.home_team} (à domicile)
-                  </h4>
-                  {selectedMatchDetails.recent_home_matches && selectedMatchDetails.recent_home_matches.length > 0 ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px', scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
-                      {selectedMatchDetails.recent_home_matches.map((m, idx) => {
-                        const obtained = m.home_team === selectedMatchDetails.home_team ? m.first_half_corners_home : m.first_half_corners_away;
-                        const conceded = m.home_team === selectedMatchDetails.home_team ? m.first_half_corners_away : m.first_half_corners_home;
-                        return (
+                  {/* Section 1: H2H */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '4px' }}>
+                      <h4 style={{ fontSize: '13px', fontFamily: 'Outfit', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)', margin: 0 }}>
+                        Confrontations Directes (H2H)
+                      </h4>
+                      {selectedMatchDetails.recent_h2h_matches?.length > 0 && (
+                        <button 
+                          style={{ background: 'transparent', border: 'none', color: 'var(--color-accent-solid)', fontSize: '11.5px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', padding: 0 }}
+                          onClick={() => handleCrawlHistory(selectedMatchDetails.match_id)}
+                        >
+                          <RefreshCcw size={11} /> Mettre à jour
+                        </button>
+                      )}
+                    </div>
+                    {selectedMatchDetails.recent_h2h_matches && selectedMatchDetails.recent_h2h_matches.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px', scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
+                        {selectedMatchDetails.recent_h2h_matches.map((m, idx) => (
                           <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(255,255,255,0.015)', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '12.5px', alignItems: 'center' }}>
                             <span style={{ color: 'var(--text-secondary)', fontSize: '11px', width: '70px', flexShrink: 0 }}>{m.date}</span>
                             
@@ -2162,62 +2318,106 @@ export default function App() {
                               )}
                             </div>
                             
-                            <span style={{ fontWeight: 600, color: 'var(--color-accent-solid)', background: 'rgba(9, 132, 227, 0.08)', padding: '3px 8px', borderRadius: '4px', fontSize: '11px', marginLeft: '12px', flexShrink: 0 }} title="Corners obtenus / concédés en 1ère mi-temps">
-                              Corners: {obtained} - {conceded}
+                            <span style={{ fontWeight: 700, color: 'var(--color-success)', background: 'rgba(16, 185, 129, 0.08)', padding: '3px 8px', borderRadius: '4px', fontSize: '11px', marginLeft: '12px', flexShrink: 0 }}>
+                              Corners: {m.first_half_corners_home} - {m.first_half_corners_away}
                             </span>
                           </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic', margin: 0 }}>Aucun match récent en cache.</p>
-                  )}
-                </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic', margin: 0 }}>Aucune confrontation H2H en cache dans l'historique.</p>
+                    )}
+                  </div>
 
-                {/* Section 3: Recent Away */}
-                <div>
-                  <h4 style={{ fontSize: '13px', fontFamily: 'Outfit', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)', marginBottom: '10px', borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '4px' }}>
-                    Derniers matchs de {selectedMatchDetails.away_team} (à l'extérieur)
-                  </h4>
-                  {selectedMatchDetails.recent_away_matches && selectedMatchDetails.recent_away_matches.length > 0 ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px', scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
-                      {selectedMatchDetails.recent_away_matches.map((m, idx) => {
-                        const obtained = m.home_team === selectedMatchDetails.away_team ? m.first_half_corners_home : m.first_half_corners_away;
-                        const conceded = m.home_team === selectedMatchDetails.away_team ? m.first_half_corners_away : m.first_half_corners_home;
-                        return (
-                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(255,255,255,0.015)', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '12.5px', alignItems: 'center' }}>
-                            <span style={{ color: 'var(--text-secondary)', fontSize: '11px', width: '70px', flexShrink: 0 }}>{m.date}</span>
-                            
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexGrow: 1, justifyContent: 'center', padding: '0 8px' }}>
-                              {m.home_logo ? (
-                                <img src={m.home_logo} alt="" style={{ width: '14px', height: '14px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
-                              ) : (
-                                <div style={{ width: '14px', height: '14px', borderRadius: '50%', background: 'var(--bg-tertiary)', flexShrink: 0 }} />
-                              )}
-                              <span style={{ color: 'var(--text-primary)', fontWeight: 500, maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>{m.home_team}</span>
+                  {/* Section 2: Recent Home */}
+                  <div>
+                    <h4 style={{ fontSize: '13px', fontFamily: 'Outfit', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)', marginBottom: '10px', borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '4px' }}>
+                      Derniers matchs de {selectedMatchDetails.home_team} (à domicile)
+                    </h4>
+                    {selectedMatchDetails.recent_home_matches && selectedMatchDetails.recent_home_matches.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px', scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
+                        {selectedMatchDetails.recent_home_matches.map((m, idx) => {
+                          const obtained = m.home_team === selectedMatchDetails.home_team ? m.first_half_corners_home : m.first_half_corners_away;
+                          const conceded = m.home_team === selectedMatchDetails.home_team ? m.first_half_corners_away : m.first_half_corners_home;
+                          return (
+                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(255,255,255,0.015)', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '12.5px', alignItems: 'center' }}>
+                              <span style={{ color: 'var(--text-secondary)', fontSize: '11px', width: '70px', flexShrink: 0 }}>{m.date}</span>
                               
-                              <strong style={{ color: 'var(--text-muted)', margin: '0 4px', background: 'rgba(255,255,255,0.04)', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', flexShrink: 0 }}>{m.score}</strong>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexGrow: 1, justifyContent: 'center', padding: '0 8px' }}>
+                                {m.home_logo ? (
+                                  <img src={m.home_logo} alt="" style={{ width: '14px', height: '14px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
+                                ) : (
+                                  <div style={{ width: '14px', height: '14px', borderRadius: '50%', background: 'var(--bg-tertiary)', flexShrink: 0 }} />
+                                )}
+                                <span style={{ color: 'var(--text-primary)', fontWeight: 500, maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>{m.home_team}</span>
+                                
+                                <strong style={{ color: 'var(--text-muted)', margin: '0 4px', background: 'rgba(255,255,255,0.04)', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', flexShrink: 0 }}>{m.score}</strong>
+                                
+                                <span style={{ color: 'var(--text-primary)', fontWeight: 500, maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>{m.away_team}</span>
+                                {m.away_logo ? (
+                                  <img src={m.away_logo} alt="" style={{ width: '14px', height: '14px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
+                                ) : (
+                                  <div style={{ width: '14px', height: '14px', borderRadius: '50%', background: 'var(--bg-tertiary)', flexShrink: 0 }} />
+                                )}
+                              </div>
                               
-                              <span style={{ color: 'var(--text-primary)', fontWeight: 500, maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>{m.away_team}</span>
-                              {m.away_logo ? (
-                                <img src={m.away_logo} alt="" style={{ width: '14px', height: '14px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
-                              ) : (
-                                <div style={{ width: '14px', height: '14px', borderRadius: '50%', background: 'var(--bg-tertiary)', flexShrink: 0 }} />
-                              )}
+                              <span style={{ fontWeight: 600, color: 'var(--color-accent-solid)', background: 'rgba(9, 132, 227, 0.08)', padding: '3px 8px', borderRadius: '4px', fontSize: '11px', marginLeft: '12px', flexShrink: 0 }} title="Corners obtenus / concédés en 1ère mi-temps">
+                                Corners: {obtained} - {conceded}
+                              </span>
                             </div>
-                            
-                            <span style={{ fontWeight: 600, color: 'var(--color-accent-solid)', background: 'rgba(9, 132, 227, 0.08)', padding: '3px 8px', borderRadius: '4px', fontSize: '11px', marginLeft: '12px', flexShrink: 0 }} title="Corners obtenus / concédés en 1ère mi-temps">
-                              Corners: {obtained} - {conceded}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic', margin: 0 }}>Aucun match récent en cache.</p>
-                  )}
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic', margin: 0 }}>Aucun match récent en cache.</p>
+                    )}
+                  </div>
+
+                  {/* Section 3: Recent Away */}
+                  <div>
+                    <h4 style={{ fontSize: '13px', fontFamily: 'Outfit', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)', marginBottom: '10px', borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '4px' }}>
+                      Derniers matchs de {selectedMatchDetails.away_team} (à l'extérieur)
+                    </h4>
+                    {selectedMatchDetails.recent_away_matches && selectedMatchDetails.recent_away_matches.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px', scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
+                        {selectedMatchDetails.recent_away_matches.map((m, idx) => {
+                          const obtained = m.home_team === selectedMatchDetails.away_team ? m.first_half_corners_home : m.first_half_corners_away;
+                          const conceded = m.home_team === selectedMatchDetails.away_team ? m.first_half_corners_away : m.first_half_corners_home;
+                          return (
+                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(255,255,255,0.015)', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '12.5px', alignItems: 'center' }}>
+                              <span style={{ color: 'var(--text-secondary)', fontSize: '11px', width: '70px', flexShrink: 0 }}>{m.date}</span>
+                              
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexGrow: 1, justifyContent: 'center', padding: '0 8px' }}>
+                                {m.home_logo ? (
+                                  <img src={m.home_logo} alt="" style={{ width: '14px', height: '14px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
+                                ) : (
+                                  <div style={{ width: '14px', height: '14px', borderRadius: '50%', background: 'var(--bg-tertiary)', flexShrink: 0 }} />
+                                )}
+                                <span style={{ color: 'var(--text-primary)', fontWeight: 500, maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>{m.home_team}</span>
+                                
+                                <strong style={{ color: 'var(--text-muted)', margin: '0 4px', background: 'rgba(255,255,255,0.04)', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', flexShrink: 0 }}>{m.score}</strong>
+                                
+                                <span style={{ color: 'var(--text-primary)', fontWeight: 500, maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>{m.away_team}</span>
+                                {m.away_logo ? (
+                                  <img src={m.away_logo} alt="" style={{ width: '14px', height: '14px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
+                                ) : (
+                                  <div style={{ width: '14px', height: '14px', borderRadius: '50%', background: 'var(--bg-tertiary)', flexShrink: 0 }} />
+                                )}
+                              </div>
+                              
+                              <span style={{ fontWeight: 600, color: 'var(--color-accent-solid)', background: 'rgba(9, 132, 227, 0.08)', padding: '3px 8px', borderRadius: '4px', fontSize: '11px', marginLeft: '12px', flexShrink: 0 }} title="Corners obtenus / concédés en 1ère mi-temps">
+                                Corners: {obtained} - {conceded}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic', margin: 0 }}>Aucun match récent en cache.</p>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div style={{ borderTop: '1px solid var(--border-color)', marginTop: '24px', paddingTop: '16px', display: 'flex', justifyContent: 'flex-end' }}>
                 <button className="btn btn-secondary" onClick={() => setSelectedMatchDetails(null)}>

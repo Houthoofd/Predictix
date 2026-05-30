@@ -120,6 +120,7 @@ function initDb() {
         odds_corners TEXT,
         home_logo TEXT,
         away_logo TEXT,
+        historical_links TEXT,
         scraped_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -151,6 +152,12 @@ function initDb() {
 
     db.run(`
       ALTER TABLE scraped_predictions ADD COLUMN away_logo TEXT
+    `, (err) => {
+      // Ignore error if column already exists
+    });
+
+    db.run(`
+      ALTER TABLE scraped_predictions ADD COLUMN historical_links TEXT
     `, (err) => {
       // Ignore error if column already exists
     });
