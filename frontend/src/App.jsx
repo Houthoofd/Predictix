@@ -501,6 +501,7 @@ export default function App() {
           </div>
         </header>
 
+        <div className="page-body">
         {/* ========================================================================
            TAB PAGE INTRODUCTION
            ======================================================================== */}
@@ -1307,6 +1308,7 @@ export default function App() {
             )}
           </>
         )}
+        </div>
 
         {/* ========================================================================
            MODAL: ADD MANUAL OR PREFILLED BET

@@ -178,13 +178,18 @@ h1, h2, h3, h4, h5, h6 {
   padding: 0 32px 32px 32px;
   margin-left: var(--sidebar-width);
   transition: margin-left var(--transition-normal), padding var(--transition-normal), width var(--transition-normal);
-  max-width: 1500px;
   width: calc(100% - var(--sidebar-width));
 }
 
 .main-content.expanded {
   margin-left: 72px;
   width: calc(100% - 72px);
+}
+
+.page-body {
+  max-width: 1500px;
+  width: 100%;
+  margin: 0;
 }
 
 @media (max-width: 1024px) {
