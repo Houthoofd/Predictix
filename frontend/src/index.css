@@ -1,0 +1,749 @@
+/* ========================================================================
+   PREDICTIX - Premium Design System (Vanilla CSS)
+   ======================================================================== */
+
+:root {
+  /* Google Fonts */
+  --font-brand: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+  /* Accent Gradients (Directly from Logos) */
+  --grad-left: linear-gradient(135deg, #0062ff 0%, #00d2ff 50%, #00f5a0 100%);
+  --grad-right: linear-gradient(135deg, #7f00ff 0%, #0082ff 60%, #00f5d4 100%);
+  --grad-brand: linear-gradient(135deg, #0062ff 0%, #7f00ff 100%);
+  
+  /* Functional Colors */
+  --color-success: #10b981;
+  --color-success-bg: rgba(16, 185, 129, 0.05);
+  --color-danger: #f43f5e;
+  --color-danger-bg: rgba(244, 63, 94, 0.05);
+  --color-pending: #0ea5e9;
+  --color-pending-bg: rgba(14, 165, 233, 0.05);
+  --color-refunded: #64748b;
+  --color-refunded-bg: rgba(100, 116, 139, 0.05);
+
+  /* Common UI Variables - Sobres et Légères */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  --shadow-premium: 0 4px 20px rgba(0, 0, 0, 0.15);
+  --sidebar-width: 240px;
+}
+
+/* ========================================================================
+   THEMES SYSTEM - 3 Themes: Moderne (Blue-Green), Tech (Blue-Purple), Light (Grey)
+   ======================================================================== */
+
+/* Theme 1 (Default): Sombre Moderne (Logo Gauche Accent) */
+:root, [data-theme='modern'] {
+  --bg-primary: #060b15;
+  --bg-secondary: #0b1120;
+  --bg-tertiary: #131b2e;
+  --bg-glass: rgba(11, 17, 32, 0.7);
+  --bg-glass-hover: rgba(19, 27, 46, 0.9);
+  
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #5a6b82;
+  
+  --border-color: rgba(255, 255, 255, 0.04);
+  --border-glow: rgba(0, 98, 255, 0.08);
+  --border-glow-active: rgba(0, 245, 160, 0.15);
+  
+  --card-shadow: 0 4px 25px rgba(0, 0, 0, 0.25);
+  --chart-grid: rgba(255, 255, 255, 0.02);
+  --scrollbar-thumb: #1e293b;
+  --scrollbar-track: #060b15;
+  --grad-accent: var(--grad-left);
+}
+
+/* Theme 2: Sombre Technologique (Logo Droite Accent) */
+[data-theme='tech'] {
+  --bg-primary: #04060f;
+  --bg-secondary: #080d1a;
+  --bg-tertiary: #0f172b;
+  --bg-glass: rgba(8, 13, 26, 0.7);
+  --bg-glass-hover: rgba(15, 23, 43, 0.9);
+  
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #576475;
+  
+  --border-color: rgba(255, 255, 255, 0.04);
+  --border-glow: rgba(127, 0, 255, 0.08);
+  --border-glow-active: rgba(127, 0, 255, 0.15);
+  
+  --card-shadow: 0 4px 25px rgba(0, 0, 0, 0.3);
+  --chart-grid: rgba(255, 255, 255, 0.02);
+  --scrollbar-thumb: #1e293b;
+  --scrollbar-track: #04060f;
+  --grad-accent: var(--grad-right);
+}
+
+/* Theme 3: Clair Minimaliste (Sobre & Léger) */
+[data-theme='light'] {
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f1f5f9;
+  --bg-glass: rgba(255, 255, 255, 0.85);
+  --bg-glass-hover: rgba(248, 250, 252, 0.95);
+  
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  
+  --border-color: rgba(15, 23, 42, 0.04);
+  --border-glow: rgba(0, 98, 255, 0.04);
+  --border-glow-active: rgba(0, 98, 255, 0.1);
+  
+  --card-shadow: 0 4px 20px rgba(15, 23, 42, 0.015);
+  --chart-grid: rgba(15, 23, 42, 0.015);
+  --scrollbar-thumb: #cbd5e1;
+  --scrollbar-track: #f1f5f9;
+  --grad-accent: linear-gradient(135deg, #0062ff 0%, #0099ff 100%);
+}
+
+/* ========================================================================
+   Base Styles
+   ======================================================================== */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-x: hidden;
+  transition: background-color var(--transition-normal), color var(--transition-normal);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-brand);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* ========================================================================
+   Layout & Framework
+   ======================================================================== */
+
+.app-container {
+  display: flex;
+  min-height: 100vh;
+  position: relative;
+}
+
+.main-content {
+  flex-grow: 1;
+  padding: 24px 32px;
+  margin-left: var(--sidebar-width);
+  transition: margin-left var(--transition-normal), padding var(--transition-normal);
+  max-width: 1500px;
+  width: calc(100% - var(--sidebar-width));
+}
+
+@media (max-width: 1024px) {
+  .main-content {
+    padding: 20px;
+  }
+}
+
+/* ========================================================================
+   Utility Classes & Components
+   ======================================================================== */
+
+/* Text Gradients */
+.text-gradient-left {
+  background: var(--grad-left);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.text-gradient-right {
+  background: var(--grad-right);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.text-gradient-brand {
+  background: var(--grad-brand);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Premium Sober Cards */
+.glass-card {
+  background: var(--bg-glass);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  box-shadow: var(--card-shadow);
+  transition: transform var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast), background-color var(--transition-normal);
+}
+
+.glass-card:hover {
+  border-color: var(--border-glow);
+  box-shadow: 0 8px 30px rgba(0, 98, 255, 0.04);
+}
+
+.glass-card.interactive {
+  cursor: pointer;
+}
+
+.glass-card.interactive:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-glow-active);
+  box-shadow: 0 10px 30px rgba(127, 0, 255, 0.05);
+}
+
+/* Card Header Accent Line */
+.glass-card.accent-left::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 3px;
+  background: var(--grad-left);
+  border-top-left-radius: var(--radius-md);
+  border-bottom-left-radius: var(--radius-md);
+}
+
+.glass-card.accent-right::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 3px;
+  background: var(--grad-right);
+  border-top-left-radius: var(--radius-md);
+  border-bottom-left-radius: var(--radius-md);
+}
+
+.glass-card.accent-left, .glass-card.accent-right {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Grid Systems */
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+}
+
+@media (max-width: 1200px) {
+  .grid-4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .grid-2, .grid-3, .grid-4 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ========================================================================
+   Buttons & Inputs - Plus Sobre & Léger
+   ======================================================================== */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--font-brand);
+  font-weight: 600;
+  font-size: 13px;
+  padding: 10px 20px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  cursor: pointer;
+  outline: none;
+  transition: transform var(--transition-fast), filter var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.btn:active {
+  transform: scale(0.98);
+}
+
+.btn-primary {
+  background: var(--grad-brand);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 98, 255, 0.15);
+}
+
+.btn-primary:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 4px 12px rgba(0, 98, 255, 0.25);
+}
+
+.btn-secondary {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.btn-secondary:hover {
+  background: var(--bg-glass-hover);
+  border-color: var(--text-muted);
+}
+
+.btn-accent {
+  background: var(--grad-left);
+  color: #050a15;
+}
+
+.btn-accent:hover {
+  filter: brightness(1.05);
+}
+
+.btn-danger {
+  background: var(--color-danger);
+  color: #ffffff;
+}
+
+.btn-danger:hover {
+  filter: brightness(1.08);
+}
+
+/* Form Controls - Sobres et Compactes */
+.form-group {
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-label {
+  font-family: var(--font-brand);
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.form-control {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 13px;
+  padding: 10px 14px;
+  outline: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  width: 100%;
+}
+
+.form-control:focus {
+  border-color: var(--border-glow-active);
+}
+
+.form-control::placeholder {
+  color: var(--text-muted);
+}
+
+select.form-control {
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 14px;
+  padding-right: 36px;
+}
+
+/* ========================================================================
+   Sidebar - Plus Compacte & Sobre
+   ======================================================================== */
+
+.sidebar {
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
+  height: 100vh;
+  width: var(--sidebar-width);
+  padding: 24px 16px;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: width var(--transition-normal);
+}
+
+.sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px;
+  margin-bottom: 32px;
+}
+
+.logo-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  background: var(--grad-accent);
+  color: #ffffff;
+  font-family: var(--font-brand);
+  font-weight: 800;
+  font-size: 17px;
+  box-shadow: 0 2px 8px rgba(0, 98, 255, 0.15);
+}
+
+[data-theme='light'] .logo-icon {
+  color: #ffffff;
+}
+
+.logo-text {
+  font-family: var(--font-brand);
+  font-weight: 700;
+  font-size: 20px;
+  letter-spacing: 0.03em;
+  color: var(--text-primary);
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-grow: 1;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-family: var(--font-brand);
+  font-weight: 600;
+  font-size: 14px;
+  padding: 11px 14px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.nav-item:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.nav-item.active {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-left: 3px solid #0062ff;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.sidebar-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border-top: 1px solid var(--border-color);
+  padding-top: 16px;
+}
+
+.theme-toggle-container {
+  padding: 4px 8px;
+}
+
+.theme-toggle-label {
+  font-size: 11px;
+  font-family: var(--font-brand);
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ========================================================================
+   Status Badges & Table Compactness
+   ======================================================================== */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-brand);
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: 12px;
+  letter-spacing: 0.02em;
+}
+
+.badge-won {
+  background-color: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.badge-lost {
+  background-color: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.badge-pending {
+  background-color: var(--color-pending-bg);
+  color: var(--color-pending);
+}
+
+.badge-refunded {
+  background-color: var(--color-refunded-bg);
+  color: var(--color-refunded);
+}
+
+/* Probabilities levels */
+.prob-high {
+  color: var(--color-success);
+  font-weight: 700;
+}
+
+.prob-medium {
+  color: #e2a100;
+  font-weight: 700;
+}
+
+.prob-low {
+  color: #ef4444;
+  font-weight: 500;
+}
+
+/* ========================================================================
+   Sober Monospace Log Terminal
+   ======================================================================== */
+
+.scraper-console {
+  background: #090e1a;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-family: 'Courier New', Courier, monospace;
+  padding: 14px;
+  height: 200px;
+  overflow-y: auto;
+  box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.4);
+  margin-top: 12px;
+}
+
+.console-line {
+  font-size: 12px;
+  color: #38bdf8;
+  margin-bottom: 4px;
+  line-height: 1.3;
+}
+
+.console-line.success { color: #4ade80; }
+.console-line.error { color: #f87171; }
+.console-line.warn { color: #fbbf24; }
+.console-line.system { color: #c084fc; }
+
+/* ========================================================================
+   Modals & Popups
+   ======================================================================== */
+
+.modal-overlay {
+  background: rgba(2, 6, 23, 0.7);
+  backdrop-filter: blur(4px);
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-content {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-premium);
+  max-width: 500px;
+  width: 90%;
+  max-height: 85vh;
+  overflow-y: auto;
+  position: relative;
+}
+
+.modal-header {
+  border-bottom: 1px solid var(--border-color);
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal-title {
+  font-size: 18px;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 18px;
+  transition: color var(--transition-fast);
+}
+
+.modal-close:hover {
+  color: var(--text-primary);
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.modal-footer {
+  border-top: 1px solid var(--border-color);
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* ========================================================================
+   Tables - Lighter & More Compact (Très Sobre !)
+   ======================================================================== */
+
+.table-container {
+  overflow-x: auto;
+  margin-top: 10px;
+  width: 100%;
+}
+
+.premium-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-family: var(--font-body);
+}
+
+.premium-table th {
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-family: var(--font-brand);
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 12px 16px;
+}
+
+.premium-table td {
+  border-bottom: 1px solid var(--border-color);
+  padding: 12px 16px;
+  vertical-align: middle;
+  font-size: 13.5px;
+}
+
+.premium-table tr {
+  transition: background-color var(--transition-fast);
+}
+
+.premium-table tbody tr:hover {
+  background-color: var(--bg-tertiary);
+}
+
+/* ========================================================================
+   Header Section
+   ======================================================================== */
+
+.header-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.header-title-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.header-subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.page-title {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* ========================================================================
+   SVG Charts grids lines styling
+   ======================================================================== */
+
+.chart-svg-container {
+  width: 100%;
+  height: 250px;
+  position: relative;
+}
