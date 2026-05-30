@@ -873,9 +873,14 @@ export default function App() {
                         onClick={() => setPredStatusFilter(tab)}
                       >
                         {tab === 'all' && 'Tous'}
-                        {tab === 'live' && '🔴 En Direct'}
-                        {tab === 'planned' && '📅 À venir'}
-                        {tab === 'finished' && '🏁 Terminés'}
+                        {tab === 'live' && (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span className="live-dot" style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ef4444', display: 'inline-block' }}></span>
+                            En Direct
+                          </span>
+                        )}
+                        {tab === 'planned' && 'À venir'}
+                        {tab === 'finished' && 'Terminés'}
                       </button>
                     ))}
                   </div>
@@ -956,9 +961,17 @@ export default function App() {
                               </div>
                             )}
 
-                            <div style={{ display: 'flex', gap: '16px', fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
-                              <span>🕒 {pred.time}</span>
-                              {pred.date && <span>📅 {pred.date}</span>}
+                            <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px', alignItems: 'center' }}>
+                              {pred.date && (
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <Calendar size={12} style={{ opacity: 0.6 }} />
+                                  {pred.date}
+                                </span>
+                              )}
+                              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--text-muted)', display: 'inline-block', opacity: 0.4 }}></span>
+                                {pred.time}
+                              </span>
                             </div>
                           </div>
 

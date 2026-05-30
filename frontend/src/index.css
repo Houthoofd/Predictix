@@ -175,7 +175,7 @@ h1, h2, h3, h4, h5, h6 {
 
 .main-content {
   flex-grow: 1;
-  padding: 24px 32px;
+  padding: 0 32px 32px 32px;
   margin-left: var(--sidebar-width);
   transition: margin-left var(--transition-normal), padding var(--transition-normal), width var(--transition-normal);
   max-width: 1500px;
@@ -320,7 +320,7 @@ h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-brand);
   font-weight: 600;
   font-size: 13px;
-  padding: 10px 20px;
+  padding: 7px 15px;
   border-radius: var(--radius-sm);
   border: 1px solid transparent;
   cursor: pointer;
@@ -753,9 +753,13 @@ select.form-control {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 0 20px 0;
+  padding: 14px 32px;
+  background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
+  margin-left: -32px;
+  margin-right: -32px;
   margin-bottom: 24px;
+  transition: background-color var(--transition-normal), border-color var(--transition-normal);
 }
 
 .sidebar-toggle-btn {
