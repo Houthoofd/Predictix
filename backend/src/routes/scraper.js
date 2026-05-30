@@ -198,6 +198,11 @@ async function scrapeSingleMatch(scraperPath, link, skipOdds = false) {
     // Spawn Go scraper with -url and -tor options
     const child = spawn(exePath, args);
     
+    child.on('error', (err) => {
+      console.error('[Predictix Scraper] Failed to spawn single match scraper:', err.message);
+      resolve(null);
+    });
+    
     child.on('close', async (code) => {
       if (code === 0 && fs.existsSync(tmpOutFile)) {
         try {
@@ -252,6 +257,12 @@ router.post('/predictions/scrape/discover', (req, res) => {
   let logOutput = '';
   child.stdout.on('data', (data) => logOutput += data.toString());
   child.stderr.on('data', (data) => logOutput += data.toString());
+
+  child.on('error', (err) => {
+    activeScraperProcess = null;
+    console.error('[Predictix Discovery] Failed to spawn discovery process:', err);
+    return res.status(500).json({ success: false, error: { message: `Impossible de démarrer le processus : ${err.message}` } });
+  });
 
   child.on('close', async (code) => {
     activeScraperProcess = null;
