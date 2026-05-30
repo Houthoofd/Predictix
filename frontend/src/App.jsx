@@ -762,7 +762,7 @@ export default function App() {
                 <div className="glass-card">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                     <h3 style={{ fontSize: '16px', fontFamily: 'Outfit' }}>Derniers Paris Résolus</h3>
-                    <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={() => setActiveTab('tracker')}>
+                    <button className="btn btn-secondary" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => setActiveTab('tracker')}>
                       Voir tout
                     </button>
                   </div>
@@ -869,7 +869,7 @@ export default function App() {
                       <button
                         key={tab}
                         className={`btn ${predStatusFilter === tab ? 'btn-primary' : 'btn-secondary'}`}
-                        style={{ padding: '8px 16px', fontSize: '13px' }}
+                        style={{ padding: '5px 12px', fontSize: '12.5px' }}
                         onClick={() => setPredStatusFilter(tab)}
                       >
                         {tab === 'all' && 'Tous'}
@@ -1078,7 +1078,7 @@ export default function App() {
                               <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
                                 <button 
                                   className="btn btn-accent" 
-                                  style={{ padding: '6px 12px', fontSize: '12px', background: 'var(--color-success)', color: 'white' }}
+                                  style={{ padding: '4px 10px', fontSize: '12px', background: 'var(--color-success)', color: 'white' }}
                                   onClick={() => handleSettleBet(bet.id, 'WON')}
                                   title="Marquer comme GAGNÉ"
                                 >
@@ -1087,7 +1087,7 @@ export default function App() {
                                 </button>
                                 <button 
                                   className="btn btn-danger" 
-                                  style={{ padding: '6px 12px', fontSize: '12px' }}
+                                  style={{ padding: '4px 10px', fontSize: '12px' }}
                                   onClick={() => handleSettleBet(bet.id, 'LOST')}
                                   title="Marquer comme PERDU"
                                 >
@@ -1096,7 +1096,7 @@ export default function App() {
                                 </button>
                                 <button 
                                   className="btn btn-secondary" 
-                                  style={{ padding: '6px 8px', fontSize: '11px' }}
+                                  style={{ padding: '4px 6px', fontSize: '11px' }}
                                   onClick={() => handleSettleBet(bet.id, 'REFUNDED')}
                                   title="Annulé/Remboursé"
                                 >
@@ -1104,7 +1104,7 @@ export default function App() {
                                 </button>
                                 <button 
                                   className="btn btn-secondary" 
-                                  style={{ padding: '6px 8px', color: 'var(--color-danger)' }}
+                                  style={{ padding: '4px 6px', color: 'var(--color-danger)' }}
                                   onClick={() => handleDeleteBet(bet.id)}
                                   title="Supprimer"
                                 >
@@ -1177,7 +1177,7 @@ export default function App() {
                               <td>
                                 <button 
                                   className="btn btn-secondary" 
-                                  style={{ padding: '6px 8px', color: 'var(--color-danger)', border: 'none' }}
+                                  style={{ padding: '4px 6px', color: 'var(--color-danger)', border: 'none' }}
                                   onClick={() => handleDeleteBet(bet.id)}
                                 >
                                   <Trash2 size={14} />

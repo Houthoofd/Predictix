@@ -23,10 +23,10 @@
   --color-refunded-bg: rgba(100, 116, 139, 0.05);
 
   /* Common UI Variables - Sobres et Légères */
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
+  --radius-sm: 5px;
+  --radius-md: 8px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
   --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   --shadow-premium: 0 4px 20px rgba(0, 0, 0, 0.15);
@@ -49,9 +49,9 @@
   --text-secondary: #94a3b8;
   --text-muted: #5a6b82;
   
-  --border-color: rgba(255, 255, 255, 0.04);
-  --border-glow: rgba(0, 98, 255, 0.08);
-  --border-glow-active: rgba(0, 245, 160, 0.15);
+  --border-color: rgba(255, 255, 255, 0.025);
+  --border-glow: rgba(0, 98, 255, 0.06);
+  --border-glow-active: rgba(0, 245, 160, 0.12);
   
   --card-shadow: 0 4px 25px rgba(0, 0, 0, 0.25);
   --chart-grid: rgba(255, 255, 255, 0.02);
@@ -76,9 +76,9 @@
   --text-secondary: #94a3b8;
   --text-muted: #576475;
   
-  --border-color: rgba(255, 255, 255, 0.04);
-  --border-glow: rgba(127, 0, 255, 0.08);
-  --border-glow-active: rgba(127, 0, 255, 0.15);
+  --border-color: rgba(255, 255, 255, 0.025);
+  --border-glow: rgba(127, 0, 255, 0.06);
+  --border-glow-active: rgba(127, 0, 255, 0.12);
   
   --card-shadow: 0 4px 25px rgba(0, 0, 0, 0.3);
   --chart-grid: rgba(255, 255, 255, 0.02);
@@ -103,9 +103,9 @@
   --text-secondary: #475569;
   --text-muted: #94a3b8;
   
-  --border-color: rgba(15, 23, 42, 0.04);
-  --border-glow: rgba(0, 98, 255, 0.04);
-  --border-glow-active: rgba(0, 98, 255, 0.1);
+  --border-color: rgba(15, 23, 42, 0.025);
+  --border-glow: rgba(0, 98, 255, 0.03);
+  --border-glow-active: rgba(0, 98, 255, 0.08);
   
   --card-shadow: 0 4px 20px rgba(15, 23, 42, 0.015);
   --chart-grid: rgba(15, 23, 42, 0.015);
@@ -316,11 +316,11 @@ h1, h2, h3, h4, h5, h6 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
   font-family: var(--font-brand);
   font-weight: 600;
-  font-size: 13px;
-  padding: 7px 15px;
+  font-size: 12.5px;
+  padding: 5px 12px;
   border-radius: var(--radius-sm);
   border: 1px solid transparent;
   cursor: pointer;
@@ -395,8 +395,8 @@ h1, h2, h3, h4, h5, h6 {
   border-radius: var(--radius-sm);
   color: var(--text-primary);
   font-family: var(--font-body);
-  font-size: 13px;
-  padding: 10px 14px;
+  font-size: 12.5px;
+  padding: 7px 12px;
   outline: none;
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
   width: 100%;
@@ -429,7 +429,6 @@ select.form-control {
   border-right: 1px solid var(--border-color);
   height: 100vh;
   width: var(--sidebar-width);
-  padding: 24px 16px;
   position: fixed;
   top: 0;
   left: 0;
@@ -437,21 +436,24 @@ select.form-control {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  transition: width var(--transition-normal), padding var(--transition-normal);
+  transition: width var(--transition-normal);
+  padding: 0 0 24px 0;
 }
 
 .sidebar.collapsed {
   width: 72px;
-  padding: 24px 10px;
 }
 
 .sidebar-logo {
+  height: 56px;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 8px;
-  margin-bottom: 32px;
-  transition: justify-content var(--transition-normal);
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 20px;
+  box-sizing: border-box;
+  transition: justify-content var(--transition-normal), padding var(--transition-normal);
 }
 
 .sidebar.collapsed .sidebar-logo {
@@ -492,6 +494,7 @@ select.form-control {
   flex-direction: column;
   gap: 6px;
   flex-grow: 1;
+  padding: 0 14px;
 }
 
 .nav-item {
@@ -538,7 +541,7 @@ select.form-control {
   flex-direction: column;
   gap: 14px;
   border-top: 1px solid var(--border-color);
-  padding-top: 16px;
+  padding: 16px 14px 0 14px;
 }
 
 .theme-toggle-container {
@@ -750,15 +753,17 @@ select.form-control {
    ======================================================================== */
 
 .app-header {
+  height: 56px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 32px;
+  padding: 0 32px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   margin-left: -32px;
   margin-right: -32px;
   margin-bottom: 24px;
+  box-sizing: border-box;
   transition: background-color var(--transition-normal), border-color var(--transition-normal);
 }
 
