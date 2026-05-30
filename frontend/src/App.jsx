@@ -14,6 +14,7 @@ import {
   Trash2, 
   Search, 
   ChevronRight, 
+  ChevronLeft,
   Terminal, 
   BookOpen, 
   Wallet, 
@@ -27,6 +28,7 @@ export default function App() {
   // Theme & Navigation
   const [theme, setTheme] = useState('modern');
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   
   // Data State
   const [bankroll, setBankroll] = useState({ balance: 1000, initial_balance: 1000, currency: '€' });
@@ -353,58 +355,113 @@ export default function App() {
   return (
     <div className="app-container">
       {/* ========================================================================
-         SIDEBAR NAVIGATION
+         SIDEBAR NAVIGATION - EXPAND/COLLAPSE COMPACT
          ======================================================================== */}
-      <aside className="sidebar">
+      <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <div>
           <div className="sidebar-logo">
             <div className="logo-icon">P</div>
-            <div className="logo-text">PREDICTIX</div>
+            {!sidebarCollapsed && <div className="logo-text">PREDICTIX</div>}
           </div>
           
           <nav className="sidebar-nav">
             <button 
               className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`}
               onClick={() => setActiveTab('dashboard')}
+              title={sidebarCollapsed ? "Tableau de Bord" : ""}
             >
               <LayoutDashboard size={20} />
-              <span>Tableau de Bord</span>
+              {!sidebarCollapsed && <span>Tableau de Bord</span>}
             </button>
             <button 
               className={`nav-item ${activeTab === 'scraper' ? 'active' : ''}`}
               onClick={() => setActiveTab('scraper')}
+              title={sidebarCollapsed ? "RatingBet Predictions" : ""}
             >
               <Database size={20} />
-              <span>RatingBet Predictions</span>
+              {!sidebarCollapsed && <span>RatingBet Predictions</span>}
             </button>
             <button 
               className={`nav-item ${activeTab === 'tracker' ? 'active' : ''}`}
               onClick={() => setActiveTab('tracker')}
+              title={sidebarCollapsed ? "Suivi des Paris" : ""}
             >
               <TrendingUp size={20} />
-              <span>Suivi des Paris</span>
+              {!sidebarCollapsed && <span>Suivi des Paris</span>}
             </button>
             <button 
               className={`nav-item ${activeTab === 'strategies' ? 'active' : ''}`}
               onClick={() => setActiveTab('strategies')}
+              title={sidebarCollapsed ? "Stratégies" : ""}
             >
               <Award size={20} />
-              <span>Stratégies</span>
+              {!sidebarCollapsed && <span>Stratégies</span>}
             </button>
           </nav>
         </div>
 
         <div className="sidebar-footer">
-          <div className="theme-toggle-container" style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-start' }}>
-            <span className="theme-toggle-label">Style / Thème</span>
-            <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
+          {!sidebarCollapsed ? (
+            <button 
+              className="btn btn-secondary" 
+              style={{ width: '100%', fontSize: '12px', padding: '8px 12px' }}
+              onClick={() => setShowResetBankrollModal(true)}
+            >
+              Réinitialiser Capital
+            </button>
+          ) : (
+            <button 
+              className="btn btn-secondary"
+              style={{ width: '32px', height: '32px', padding: '0', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}
+              onClick={() => setShowResetBankrollModal(true)}
+              title="Réinitialiser Capital"
+            >
+              <RefreshCcw size={14} />
+            </button>
+          )}
+        </div>
+      </aside>
+
+      {/* ========================================================================
+         MAIN INTERFACE CONTENT
+         ======================================================================== */}
+      <main className={`main-content ${sidebarCollapsed ? 'expanded' : ''}`}>
+        
+        {/* ========================================================================
+           GLOBAL SaaS TOP HEADER BAR
+           ======================================================================== */}
+        <header className="app-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <button 
+              className="sidebar-toggle-btn"
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              title={sidebarCollapsed ? "Agrandir le menu" : "Réduire le menu"}
+            >
+              {sidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+            </button>
+            
+            <div className="breadcrumbs">
+              <span className="crumb-brand text-gradient-accent">PREDICTIX</span>
+              <ChevronRight size={12} className="crumb-separator" />
+              <span className="crumb-active">
+                {activeTab === 'dashboard' && 'Tableau de Bord'}
+                {activeTab === 'scraper' && 'Predictions RatingBet'}
+                {activeTab === 'tracker' && 'Tracker de Paris'}
+                {activeTab === 'strategies' && 'Stratégies de Cartons'}
+              </span>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            {/* Theme switcher moved to Top Header for extremely premium feel */}
+            <div className="header-theme-dots">
               <button 
                 className={`theme-dot ${theme === 'modern' ? 'active' : ''}`}
                 style={{ 
-                  width: '26px', height: '26px', borderRadius: '50%', border: '2px solid transparent', 
+                  width: '18px', height: '18px', borderRadius: '50%', border: '1.5px solid transparent', 
                   background: 'linear-gradient(135deg, #0062ff, #00f5a0)', cursor: 'pointer',
-                  boxShadow: theme === 'modern' ? '0 0 10px rgba(0, 245, 160, 0.5)' : 'none',
-                  outline: theme === 'modern' ? '2px solid var(--text-primary)' : 'none'
+                  outline: theme === 'modern' ? '1.5px solid var(--text-primary)' : 'none',
+                  outlineOffset: '2px'
                 }}
                 onClick={() => setTheme('modern')}
                 title="Sombre Moderne (Vert)"
@@ -412,10 +469,10 @@ export default function App() {
               <button 
                 className={`theme-dot ${theme === 'tech' ? 'active' : ''}`}
                 style={{ 
-                  width: '26px', height: '26px', borderRadius: '50%', border: '2px solid transparent', 
+                  width: '18px', height: '18px', borderRadius: '50%', border: '1.5px solid transparent', 
                   background: 'linear-gradient(135deg, #7f00ff, #00f5d4)', cursor: 'pointer',
-                  boxShadow: theme === 'tech' ? '0 0 10px rgba(127, 0, 255, 0.5)' : 'none',
-                  outline: theme === 'tech' ? '2px solid var(--text-primary)' : 'none'
+                  outline: theme === 'tech' ? '1.5px solid var(--text-primary)' : 'none',
+                  outlineOffset: '2px'
                 }}
                 onClick={() => setTheme('tech')}
                 title="Sombre Technologique (Violet)"
@@ -423,43 +480,38 @@ export default function App() {
               <button 
                 className={`theme-dot ${theme === 'light' ? 'active' : ''}`}
                 style={{ 
-                  width: '26px', height: '26px', borderRadius: '50%', 
-                  background: '#f1f5f9', border: '1px solid #cbd5e1', cursor: 'pointer',
-                  boxShadow: theme === 'light' ? '0 0 10px rgba(0, 0, 0, 0.1)' : 'none',
-                  outline: theme === 'light' ? '2px solid var(--text-primary)' : 'none'
+                  width: '18px', height: '18px', borderRadius: '50%', 
+                  background: '#cbd5e1', border: '1px solid #94a3b8', cursor: 'pointer',
+                  outline: theme === 'light' ? '1.5px solid var(--text-primary)' : 'none',
+                  outlineOffset: '2px'
                 }}
                 onClick={() => setTheme('light')}
                 title="Mode Clair"
               />
             </div>
-          </div>
-          
-          <button 
-            className="btn btn-secondary" 
-            style={{ width: '100%', fontSize: '13px' }}
-            onClick={() => setShowResetBankrollModal(true)}
-          >
-            Réinitialiser Bankroll
-          </button>
-        </div>
-      </aside>
 
-      {/* ========================================================================
-         MAIN INTERFACE CONTENT
-         ======================================================================== */}
-      <main className="main-content">
-        
+            <div className="header-wallet-pill">
+              <Wallet size={13} className="wallet-pill-icon text-gradient-accent" />
+              <span>{bankroll.balance?.toFixed(2)} {bankroll.currency}</span>
+            </div>
+
+            <div className="header-profile-avatar" title="Benoit (Propriétaire)">
+              B
+            </div>
+          </div>
+        </header>
+
         {/* ========================================================================
-           HEADER SECTION
+           TAB PAGE INTRODUCTION
            ======================================================================== */}
-        <header className="header-container">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
           <div className="header-title-section">
-            <h1 className="page-title text-gradient-accent">
+            <h2 className="page-title">
               {activeTab === 'dashboard' && 'Tableau de Bord'}
               {activeTab === 'scraper' && 'Predictions RatingBet'}
               {activeTab === 'tracker' && 'Tracker de Paris'}
               {activeTab === 'strategies' && 'Stratégies de Cartons'}
-            </h1>
+            </h2>
             <p className="header-subtitle">
               {activeTab === 'dashboard' && 'Statistiques de bankroll en temps réel et performances.'}
               {activeTab === 'scraper' && 'Gérez et exécutez le scraper de cartons football en temps réel.'}
@@ -467,23 +519,15 @@ export default function App() {
               {activeTab === 'strategies' && 'Analyse des cibles de paris à forte espérance mathématique.'}
             </p>
           </div>
-
           <div className="header-actions">
             {activeTab === 'tracker' && (
               <button className="btn btn-primary" onClick={() => { setPrefilledBet(null); setShowAddBetModal(true); }}>
-                <Plus size={18} />
+                <Plus size={16} />
                 <span>Nouveau Pari</span>
               </button>
             )}
-            
-            <div className="glass-card" style={{ padding: '10px 20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <Wallet size={16} className="text-gradient-accent" />
-              <span style={{ fontWeight: 700, fontFamily: 'Outfit' }}>
-                Bankroll: {bankroll.balance?.toFixed(2)} {bankroll.currency}
-              </span>
-            </div>
           </div>
-        </header>
+        </div>
 
         {loading ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '50vh', gap: '16px' }}>
