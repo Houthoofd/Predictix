@@ -404,7 +404,7 @@ export default function App() {
           {!sidebarCollapsed ? (
             <button 
               className="btn btn-secondary" 
-              style={{ width: '100%', fontSize: '12px', padding: '8px 12px' }}
+              style={{ width: '100%', fontSize: '12px', padding: '6px 12px' }}
               onClick={() => setShowResetBankrollModal(true)}
             >
               Réinitialiser Capital

@@ -500,21 +500,26 @@ select.form-control {
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   color: var(--text-secondary);
   font-family: var(--font-brand);
   font-weight: 600;
-  font-size: 14px;
-  padding: 11px 14px;
+  font-size: 13px;
+  padding: 8px 12px;
   border-radius: var(--radius-sm);
   cursor: pointer;
+  background: transparent;
+  border: none;
+  outline: none;
   text-decoration: none;
   transition: background-color var(--transition-fast), color var(--transition-fast), justify-content var(--transition-normal);
+  width: 100%;
+  text-align: left;
 }
 
 .sidebar.collapsed .nav-item {
   justify-content: center;
-  padding: 12px;
+  padding: 8px;
 }
 
 .nav-item:hover {
@@ -525,7 +530,7 @@ select.form-control {
 .nav-item.active {
   background: var(--bg-tertiary);
   color: var(--text-primary);
-  border-left: 3px solid #0062ff;
+  border-left: 2.5px solid var(--color-accent-solid);
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
 }
