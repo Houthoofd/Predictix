@@ -19,6 +19,7 @@ const db = new sqlite3Verbose.Database(dbPath, (err) => {
     console.error('Error opening database:', err);
   } else {
     console.log('Connected to SQLite database at:', dbPath);
+    db.configure("busyTimeout", 30000);
     initDb();
   }
 });
@@ -121,6 +122,7 @@ function initDb() {
         home_logo TEXT,
         away_logo TEXT,
         historical_links TEXT,
+        is_historical INTEGER DEFAULT 0,
         scraped_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -160,6 +162,14 @@ function initDb() {
       ALTER TABLE scraped_predictions ADD COLUMN historical_links TEXT
     `, (err) => {
       // Ignore error if column already exists
+    });
+
+    db.run(`
+      ALTER TABLE scraped_predictions ADD COLUMN is_historical INTEGER DEFAULT 0
+    `, (err) => {
+      // Ignore error if column already exists
+      // In any case, migrate existing data to set is_historical = 1 for historical rows
+      db.run("UPDATE scraped_predictions SET is_historical = 1 WHERE match_id LIKE '%/%' OR match_id LIKE 'http%'");
     });
     
     console.log("Database tables initialized successfully");

@@ -92,6 +92,46 @@ export default function App() {
     }
   }, [scraperLogs]);
 
+  // Background polling for matches currently being crawled (Method 2)
+  useEffect(() => {
+    if (!selectedMatchDetails?.isCrawling) {
+      return;
+    }
+
+    // Set crawl loading to true just in case we opened a match that is already crawling
+    setCrawlLoading(true);
+
+    let isActive = true;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/predictions?t=${Date.now()}`);
+        const json = await res.json();
+        if (json.success && isActive) {
+          setPredictions(json.data);
+          const updated = json.data.find(p => p.match_id === selectedMatchDetails.match_id);
+          if (updated) {
+            setSelectedMatchDetails(updated);
+            if (!updated.isCrawling) {
+              clearInterval(interval);
+              setCrawlLoading(false);
+            }
+          } else {
+            clearInterval(interval);
+            setCrawlLoading(false);
+          }
+        }
+      } catch (err) {
+        console.error("Error polling crawl history:", err);
+      }
+    }, 3000);
+
+    return () => {
+      isActive = false;
+      clearInterval(interval);
+      setCrawlLoading(false);
+    };
+  }, [selectedMatchDetails?.match_id, selectedMatchDetails?.isCrawling]);
+
   const fetchAllData = async () => {
     setLoading(true);
     try {
@@ -108,20 +148,33 @@ export default function App() {
     }
   };
 
+  const refreshAllDataSilent = async () => {
+    try {
+      await Promise.all([
+        fetchBankroll(),
+        fetchBets(),
+        fetchPredictions(),
+        fetchStats()
+      ]);
+    } catch (error) {
+      console.error("Error refreshing data silently:", error);
+    }
+  };
+
   const fetchBankroll = async () => {
-    const res = await fetch('/api/bankroll');
+    const res = await fetch(`/api/bankroll?t=${Date.now()}`);
     const json = await res.json();
     if (json.success) setBankroll(json.data);
   };
 
   const fetchBets = async () => {
-    const res = await fetch('/api/bets');
+    const res = await fetch(`/api/bets?t=${Date.now()}`);
     const json = await res.json();
     if (json.success) setBets(json.data);
   };
 
   const fetchPredictions = async () => {
-    const res = await fetch('/api/predictions');
+    const res = await fetch(`/api/predictions?t=${Date.now()}`);
     const json = await res.json();
     if (json.success) setPredictions(json.data);
   };
@@ -134,12 +187,11 @@ export default function App() {
       });
       const json = await res.json();
       if (json.success) {
-        // Re-fetch all predictions to get updated stats
-        const predRes = await fetch('/api/predictions');
+        // Re-fetch all predictions immediately to get updated "isCrawling" flag
+        const predRes = await fetch(`/api/predictions?t=${Date.now()}`);
         const predJson = await predRes.json();
         if (predJson.success) {
           setPredictions(predJson.data);
-          // Find the updated match details
           const updatedMatch = predJson.data.find(p => p.match_id === matchId);
           if (updatedMatch) {
             setSelectedMatchDetails(updatedMatch);
@@ -147,16 +199,16 @@ export default function App() {
         }
       } else {
         alert("Erreur lors de la récupération de l'historique : " + (json.error?.message || "Erreur inconnue"));
+        setCrawlLoading(false);
       }
     } catch (err) {
       alert("Erreur réseau : " + err.message);
-    } finally {
       setCrawlLoading(false);
     }
   };
 
   const fetchStats = async () => {
-    const res = await fetch('/api/bankroll/stats');
+    const res = await fetch(`/api/bankroll/stats?t=${Date.now()}`);
     const json = await res.json();
     if (json.success) setStats(json.data);
   };
@@ -437,6 +489,7 @@ export default function App() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder("utf-8");
       let finished = false;
+      let buffer = '';
 
       while (!finished) {
         const { done, value } = await reader.read();
@@ -445,10 +498,14 @@ export default function App() {
           break;
         }
 
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n\n');
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
         
-        for (const line of lines) {
+        // Keep the last incomplete line in the buffer
+        buffer = lines.pop() || '';
+        
+        for (let line of lines) {
+          line = line.trim();
           if (line.startsWith('data: ')) {
             try {
               const eventData = JSON.parse(line.substring(6));
@@ -537,7 +594,7 @@ export default function App() {
                 setScrapeProgress(100);
                 setMatchesRemaining(0);
                 setScrapeTimeRemaining("Terminé");
-                fetchAllData();
+                refreshAllDataSilent();
               }
             } catch (err) {
               // Ignore invalid JSON fragments
@@ -565,6 +622,7 @@ export default function App() {
         setScrapeProgress(0);
         setScrapeTimeRemaining("Arrêté");
         setScraperLogs(prev => [...prev, { message: "[Predictix] ✓ Le scraper a été arrêté avec succès.", type: 'warn' }]);
+        refreshAllDataSilent();
       } else {
         alert("Impossible d'arrêter le scraper: " + data.error);
       }

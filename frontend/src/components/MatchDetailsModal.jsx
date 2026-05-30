@@ -19,7 +19,7 @@ export default function MatchDetailsModal({
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '6px', flexWrap: 'wrap' }}>
               {selectedMatchDetails.home_logo ? (
-                <img src={selectedMatchDetails.home_logo} alt="" style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
+                <img src={selectedMatchDetails.home_logo} alt="" referrerPolicy="no-referrer" style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
               ) : (
                 <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--bg-tertiary)', flexShrink: 0 }} />
               )}
@@ -28,7 +28,7 @@ export default function MatchDetailsModal({
               </h3>
               <span style={{ color: 'var(--text-muted)', fontSize: '15px', fontWeight: 600 }}>vs</span>
               {selectedMatchDetails.away_logo ? (
-                <img src={selectedMatchDetails.away_logo} alt="" style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
+                <img src={selectedMatchDetails.away_logo} alt="" referrerPolicy="no-referrer" style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
               ) : (
                 <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--bg-tertiary)', flexShrink: 0 }} />
               )}
@@ -43,7 +43,7 @@ export default function MatchDetailsModal({
         </div>
 
         {/* Stats Summary Grid */}
-        <div className="grid-3" style={{ gap: '12px', marginBottom: '24px' }}>
+        <div className="grid-3" style={{ gap: '12px', marginBottom: '14px' }}>
           <div style={{ background: 'var(--bg-tertiary)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', textAlign: 'center' }}>
             <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Conseil Modèle</span>
             <p style={{ fontSize: '15px', fontWeight: 700, marginTop: '4px', color: 'var(--text-primary)' }}>
@@ -64,8 +64,36 @@ export default function MatchDetailsModal({
           </div>
         </div>
 
+        {/* Corners Averages Grid */}
+        <div className="grid-3" style={{ gap: '12px', marginBottom: '24px' }}>
+          <div style={{ background: 'rgba(9, 132, 227, 0.05)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(9, 132, 227, 0.15)', textAlign: 'center' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Moy. Corners H2H (1MT)</span>
+            <p style={{ fontSize: '17px', fontWeight: 800, marginTop: '4px', color: 'var(--color-accent-solid)' }}>
+              {selectedMatchDetails.h2h_avg_first_half_corners !== null && selectedMatchDetails.h2h_avg_first_half_corners !== undefined
+                ? `${selectedMatchDetails.h2h_avg_first_half_corners} corners`
+                : 'N/A'}
+            </p>
+          </div>
+          <div style={{ background: 'rgba(16, 185, 129, 0.05)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.15)', textAlign: 'center' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Moy. {selectedMatchDetails.home_team} (Dom.)</span>
+            <p style={{ fontSize: '17px', fontWeight: 800, marginTop: '4px', color: 'var(--color-success)' }}>
+              {selectedMatchDetails.home_avg_first_half_corners !== null && selectedMatchDetails.home_avg_first_half_corners !== undefined
+                ? `${selectedMatchDetails.home_avg_first_half_corners} corners`
+                : 'N/A'}
+            </p>
+          </div>
+          <div style={{ background: 'rgba(235, 94, 40, 0.05)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(235, 94, 40, 0.15)', textAlign: 'center' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Moy. {selectedMatchDetails.away_team} (Ext.)</span>
+            <p style={{ fontSize: '17px', fontWeight: 800, marginTop: '4px', color: 'var(--color-danger)' }}>
+              {selectedMatchDetails.away_avg_first_half_corners !== null && selectedMatchDetails.away_avg_first_half_corners !== undefined
+                ? `${selectedMatchDetails.away_avg_first_half_corners} corners`
+                : 'N/A'}
+            </p>
+          </div>
+        </div>
+
         {/* Historical Lists */}
-        {crawlLoading ? (
+        {(crawlLoading || selectedMatchDetails?.isCrawling) ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 20px', background: 'rgba(255,255,255,0.015)', border: '1.5px dashed var(--border-color)', borderRadius: '12px', gap: '16px', margin: '20px 0' }}>
             <div style={{ width: '36px', height: '36px', border: '3.5px solid rgba(255,255,255,0.08)', borderTop: '3.5px solid var(--color-accent-solid)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
             <style>{`
@@ -131,7 +159,7 @@ export default function MatchDetailsModal({
                       
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexGrow: 1, justifyContent: 'center', padding: '0 8px' }}>
                         {m.home_logo ? (
-                          <img src={m.home_logo} alt="" style={{ width: '14px', height: '14px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
+                          <img src={m.home_logo} alt="" referrerPolicy="no-referrer" style={{ width: '14px', height: '14px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
                         ) : (
                           <div style={{ width: '14px', height: '14px', borderRadius: '50%', background: 'var(--bg-tertiary)', flexShrink: 0 }} />
                         )}
@@ -141,7 +169,7 @@ export default function MatchDetailsModal({
                         
                         <span style={{ color: 'var(--text-primary)', fontWeight: 500, maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>{m.away_team}</span>
                         {m.away_logo ? (
-                          <img src={m.away_logo} alt="" style={{ width: '14px', height: '14px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
+                          <img src={m.away_logo} alt="" referrerPolicy="no-referrer" style={{ width: '14px', height: '14px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
                         ) : (
                           <div style={{ width: '14px', height: '14px', borderRadius: '50%', background: 'var(--bg-tertiary)', flexShrink: 0 }} />
                         )}
@@ -174,7 +202,7 @@ export default function MatchDetailsModal({
                         
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexGrow: 1, justifyContent: 'center', padding: '0 8px' }}>
                           {m.home_logo ? (
-                            <img src={m.home_logo} alt="" style={{ width: '14px', height: '14px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
+                            <img src={m.home_logo} alt="" referrerPolicy="no-referrer" style={{ width: '14px', height: '14px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
                           ) : (
                             <div style={{ width: '14px', height: '14px', borderRadius: '50%', background: 'var(--bg-tertiary)', flexShrink: 0 }} />
                           )}
@@ -184,7 +212,7 @@ export default function MatchDetailsModal({
                           
                           <span style={{ color: 'var(--text-primary)', fontWeight: 500, maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>{m.away_team}</span>
                           {m.away_logo ? (
-                            <img src={m.away_logo} alt="" style={{ width: '14px', height: '14px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
+                            <img src={m.away_logo} alt="" referrerPolicy="no-referrer" style={{ width: '14px', height: '14px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
                           ) : (
                             <div style={{ width: '14px', height: '14px', borderRadius: '50%', background: 'var(--bg-tertiary)', flexShrink: 0 }} />
                           )}
@@ -218,7 +246,7 @@ export default function MatchDetailsModal({
                         
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexGrow: 1, justifyContent: 'center', padding: '0 8px' }}>
                           {m.home_logo ? (
-                            <img src={m.home_logo} alt="" style={{ width: '14px', height: '14px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
+                            <img src={m.home_logo} alt="" referrerPolicy="no-referrer" style={{ width: '14px', height: '14px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
                           ) : (
                             <div style={{ width: '14px', height: '14px', borderRadius: '50%', background: 'var(--bg-tertiary)', flexShrink: 0 }} />
                           )}
@@ -228,7 +256,7 @@ export default function MatchDetailsModal({
                           
                           <span style={{ color: 'var(--text-primary)', fontWeight: 500, maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>{m.away_team}</span>
                           {m.away_logo ? (
-                            <img src={m.away_logo} alt="" style={{ width: '14px', height: '14px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
+                            <img src={m.away_logo} alt="" referrerPolicy="no-referrer" style={{ width: '14px', height: '14px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
                           ) : (
                             <div style={{ width: '14px', height: '14px', borderRadius: '50%', background: 'var(--bg-tertiary)', flexShrink: 0 }} />
                           )}

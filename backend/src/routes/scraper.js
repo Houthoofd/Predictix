@@ -8,6 +8,7 @@ const router = express.Router();
 
 let activeScraperProcess = null;
 let stopScraperRequested = false;
+const activeCrawlHistoryMatches = new Set();
 
 // Helper: Poisson distribution probability of exactly k events with expected lambda
 function poissonProbability(lambda, k) {
@@ -39,7 +40,7 @@ function poissonUnder(lambda, line) {
 // Get cached predictions from database and compute predictive stats + Value Bets
 router.get('/predictions', async (req, res) => {
   try {
-    const rows = await dbQuery('SELECT * FROM scraped_predictions ORDER BY scraped_at DESC, time ASC');
+    const rows = await dbQuery('SELECT * FROM scraped_predictions WHERE is_historical = 0 ORDER BY scraped_at DESC, time ASC');
     
     const enrichedRows = [];
     
@@ -153,7 +154,8 @@ router.get('/predictions', async (req, res) => {
         odds_corners: enrichedOdds,
         recent_home_matches: homeMatches,
         recent_away_matches: awayMatches,
-        recent_h2h_matches: h2hMatches
+        recent_h2h_matches: h2hMatches,
+        isCrawling: activeCrawlHistoryMatches.has(row.match_id)
       });
     }
 
@@ -537,8 +539,8 @@ router.post('/predictions/scrape', (req, res) => {
                       match_id, time, date, tournament, home_team, away_team, score,
                       over_odds, under_odds, card_line, probability, best_tip, win_rate, status,
                       is_live, is_finished, first_half_corners_home, first_half_corners_away, odds_corners,
-                      home_logo, away_logo, scraped_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                      home_logo, away_logo, is_historical, scraped_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                   `;
 
                   const hashSeed = homeClean + awayClean;
@@ -562,7 +564,8 @@ router.post('/predictions/scrape', (req, res) => {
                     histMatch.first_half_corners_away,
                     null,
                     histMatch.home_logo || null,
-                    histMatch.away_logo || null
+                    histMatch.away_logo || null,
+                    1
                   ]);
 
                   console.log(`[Predictix Background] ✓ Imported H2H: ${homeClean} vs ${awayClean} (${histMatch.first_half_corners_home} - ${histMatch.first_half_corners_away})`);
@@ -627,81 +630,172 @@ router.post('/predictions/:matchId/crawl-history', async (req, res) => {
       }
     } catch (e) {}
 
-    if (links.length === 0) {
-      return res.json({ success: true, message: "Aucun lien d'historique disponible pour ce match.", count: 0 });
-    }
-
-    console.log(`[Predictix On-Demand] Crawling history for ${match.home_team} vs ${match.away_team} (${links.length} links)...`);
-
-    const uncachedLinks = [];
-    for (const link of links) {
-      const cached = await dbQuery('SELECT match_id FROM scraped_predictions WHERE match_id = ?', [link]);
-      if (cached.length === 0) {
-        uncachedLinks.push(link);
-      }
-    }
-
-    console.log(`[Predictix On-Demand] ${links.length - uncachedLinks.length} confrontations déjà en cache, ${uncachedLinks.length} nouvelles à crawler.`);
-
     const scraperPath = process.env.SCRAPER_PATH || 'E:\\Developpement\\scrapper-v3';
-    let importedCount = 0;
-    
-    // We crawl up to 12 matches (10 needed + 2 safety margin)
-    const linksToScrape = uncachedLinks.slice(0, 12);
-    
-    for (const link of linksToScrape) {
-      console.log(`[Predictix On-Demand] Crawling link: ${link}`);
-      const histMatch = await scrapeSingleMatch(scraperPath, link, true); // skipOdds = true for speed!
 
-      if (histMatch && histMatch.home_team && histMatch.away_team) {
-        const homeClean = histMatch.home_team.replace(/[▲▼]/g, '').trim();
-        const awayClean = histMatch.away_team.replace(/[▲▼]/g, '').trim();
-
-        const sqlHist = `
-          INSERT OR REPLACE INTO scraped_predictions (
-            match_id, time, date, tournament, home_team, away_team, score,
-            over_odds, under_odds, card_line, probability, best_tip, win_rate, status,
-            is_live, is_finished, first_half_corners_home, first_half_corners_away, odds_corners,
-            home_logo, away_logo, scraped_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        `;
-
-        const hashSeed = homeClean + awayClean;
-        let charSum = 0;
-        for (let i = 0; i < hashSeed.length; i++) charSum += hashSeed.charCodeAt(i);
-        const stableProb = 55 + (charSum % 25);
-        const cardLine = histMatch.card_line || (charSum % 2 === 0 ? '4.5' : '5.5');
-        const bestTip = histMatch.best_tip || (stableProb >= 66 ? 'Plus de' : 'Moins de');
-
-        await dbRun(sqlHist, [
-          link,
-          'Finished',
-          histMatch.date || new Date().toISOString().substring(0, 10),
-          histMatch.tournament || 'Football',
-          homeClean,
-          awayClean,
-          histMatch.score || '',
-          '1.85', '1.90', cardLine, `${stableProb}%`, bestTip, '60%', 'Finished',
-          0, 1,
-          histMatch.first_half_corners_home,
-          histMatch.first_half_corners_away,
-          null,
-          histMatch.home_logo || null,
-          histMatch.away_logo || null
-        ]);
-
-        importedCount++;
-        console.log(`[Predictix On-Demand] ✓ Imported: ${homeClean} vs ${awayClean}`);
-      }
-      
-      // Polite delay
-      await new Promise(r => setTimeout(r, 1000));
+    // Check if the match is already crawling to avoid duplicate crawler spawns
+    if (activeCrawlHistoryMatches.has(matchId)) {
+      return res.json({
+        success: true,
+        message: "Analyse déjà en cours d'exécution pour ce match.",
+        count: links.length
+      });
     }
 
-    res.json({ success: true, message: `Crawled ${importedCount} matches successfully.`, count: importedCount });
+    // Mark the match as crawling
+    activeCrawlHistoryMatches.add(matchId);
+
+    // Send instant success response to the client
+    res.json({
+      success: true,
+      message: "Analyse lancée en arrière-plan.",
+      count: links.length
+    });
+
+    // Run the crawling logic in the background
+    (async () => {
+      try {
+        let activeLinks = [...links];
+
+        // Phase A: If the match was skipped (so links has only 1 primary URL),
+        // we crawl it to enrich the primary match itself.
+        if (activeLinks.length === 1 && activeLinks[0].startsWith('/live-score/')) {
+          let targetLink = activeLinks[0];
+          // If the match is not started yet (time is Planned or not Finished),
+          // H2H past matches are located on the '?p=face-a-face' tab.
+          if (match.is_finished === 0 || match.time === 'Planned' || !match.score || match.score === '-' || match.score === '') {
+            if (!targetLink.includes('?p=')) {
+              targetLink += '?p=face-a-face';
+            }
+          }
+
+          console.log(`[Predictix On-Demand Background] Crawling primary match page: ${targetLink}`);
+          const primaryDetails = await scrapeSingleMatch(scraperPath, targetLink, true); // skipOdds = true for maximum speed and robustness over SOCKS5 Tor proxy!
+
+          if (primaryDetails) {
+            const homeClean = primaryDetails.home_team.replace(/[▲▼]/g, '').trim();
+            const awayClean = primaryDetails.away_team.replace(/[▲▼]/g, '').trim();
+            const hashSeed = homeClean + awayClean;
+            let charSum = 0;
+            for (let k = 0; k < hashSeed.length; k++) charSum += hashSeed.charCodeAt(k);
+            const stableProb = 55 + (charSum % 25);
+            const cardLine = primaryDetails.card_line || (charSum % 2 === 0 ? '4.5' : '5.5');
+            const bestTip = primaryDetails.best_tip || (stableProb >= 66 ? 'Plus de' : 'Moins de');
+
+            await dbRun(`
+              UPDATE scraped_predictions SET
+                first_half_corners_home = ?,
+                first_half_corners_away = ?,
+                home_logo = ?,
+                away_logo = ?,
+                historical_links = ?,
+                odds_corners = ?,
+                card_line = ?,
+                best_tip = ?,
+                probability = ?
+              WHERE match_id = ?
+            `, [
+              primaryDetails.first_half_corners_home,
+              primaryDetails.first_half_corners_away,
+              primaryDetails.home_logo || null,
+              primaryDetails.away_logo || null,
+              primaryDetails.historical_links ? JSON.stringify(primaryDetails.historical_links) : null,
+              primaryDetails.odds_corners ? JSON.stringify(primaryDetails.odds_corners) : null,
+              cardLine,
+              bestTip,
+              `${stableProb}%`,
+              matchId
+            ]);
+
+            console.log(`[Predictix On-Demand Background] ✓ Successfully enriched primary match ${matchId}!`);
+            activeLinks = primaryDetails.historical_links || [];
+          }
+        }
+
+        if (activeLinks.length > 0) {
+          console.log(`[Predictix On-Demand Background] Starting background H2H deep crawl for ${activeLinks.length} past matches...`);
+          const uncachedLinks = [];
+          for (const link of activeLinks) {
+            const cached = await dbQuery('SELECT match_id FROM scraped_predictions WHERE match_id = ?', [link]);
+            if (cached.length === 0) {
+              uncachedLinks.push(link);
+            }
+          }
+
+          console.log(`[Predictix On-Demand Background] ${activeLinks.length - uncachedLinks.length} cached, ${uncachedLinks.length} new to crawl.`);
+          
+          const linksToScrape = uncachedLinks.slice(0, 12);
+          const concurrency = 4;
+          let importedCount = 0;
+
+          for (let i = 0; i < linksToScrape.length; i += concurrency) {
+            const chunk = linksToScrape.slice(i, i + concurrency);
+            
+            await Promise.all(chunk.map(async (link) => {
+              console.log(`[Predictix On-Demand Background] Parallel crawling H2H link: ${link}`);
+              const histMatch = await scrapeSingleMatch(scraperPath, link, true); // skipOdds = true for speed!
+
+              if (histMatch && histMatch.home_team && histMatch.away_team) {
+                const homeClean = histMatch.home_team.replace(/[▲▼]/g, '').trim();
+                const awayClean = histMatch.away_team.replace(/[▲▼]/g, '').trim();
+
+                const sqlHist = `
+                  INSERT OR REPLACE INTO scraped_predictions (
+                    match_id, time, date, tournament, home_team, away_team, score,
+                    over_odds, under_odds, card_line, probability, best_tip, win_rate, status,
+                    is_live, is_finished, first_half_corners_home, first_half_corners_away, odds_corners,
+                    home_logo, away_logo, is_historical, scraped_at
+                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                `;
+
+                const hashSeed = homeClean + awayClean;
+                let charSum = 0;
+                for (let k = 0; k < hashSeed.length; k++) charSum += hashSeed.charCodeAt(k);
+                const stableProb = 55 + (charSum % 25);
+                const cardLine = histMatch.card_line || (charSum % 2 === 0 ? '4.5' : '5.5');
+                const bestTip = histMatch.best_tip || (stableProb >= 66 ? 'Plus de' : 'Moins de');
+
+                await dbRun(sqlHist, [
+                  link,
+                  'Finished',
+                  histMatch.date || new Date().toISOString().substring(0, 10),
+                  histMatch.tournament || 'Football',
+                  homeClean,
+                  awayClean,
+                  histMatch.score || '',
+                  '1.85', '1.90', cardLine, `${stableProb}%`, bestTip, '60%', 'Finished',
+                  0, 1,
+                  histMatch.first_half_corners_home,
+                  histMatch.first_half_corners_away,
+                  null,
+                  histMatch.home_logo || null,
+                  histMatch.away_logo || null,
+                  1 // is_historical = 1
+                ]);
+
+                importedCount++;
+                console.log(`[Predictix On-Demand Background] ✓ Parallel H2H imported: ${homeClean} vs ${awayClean}`);
+              }
+            }));
+
+            // Polite delay between H2H batches
+            if (i + concurrency < linksToScrape.length) {
+              await new Promise(r => setTimeout(r, 1200));
+            }
+          }
+        }
+        console.log(`[Predictix On-Demand Background] ✓ Finished background crawl of H2H matches for primary match ${matchId}!`);
+      } catch (err) {
+        console.error('[Predictix On-Demand Background Error]', err.message);
+      } finally {
+        // Ensure the match ID is removed from active crawling list
+        activeCrawlHistoryMatches.delete(matchId);
+      }
+    })();
   } catch (error) {
     console.error('[Predictix On-Demand Error]', error);
-    res.status(500).json({ success: false, error: { message: error.message } });
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, error: { message: error.message } });
+    }
   }
 });
 
