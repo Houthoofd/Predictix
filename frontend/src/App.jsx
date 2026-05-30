@@ -43,6 +43,9 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [scraping, setScraping] = useState(false);
   const [scraperLogs, setScraperLogs] = useState([]);
+  const [scrapeProgress, setScrapeProgress] = useState(0); 
+  const [scrapeTimeRemaining, setScrapeTimeRemaining] = useState(''); 
+  const [scrapePhase, setScrapePhase] = useState('idle'); 
   
   // Modals state
   const [showAddBetModal, setShowAddBetModal] = useState(false);
@@ -335,8 +338,17 @@ export default function App() {
   const handleTriggerScraping = async () => {
     if (scraping) return;
     setScraping(true);
+    setScrapeProgress(5);
+    setScrapePhase('discovering');
+    setScrapeTimeRemaining('Calcul en cours...');
     setScraperLogs([{ message: "[Predictix] Lancement du scraper...", type: 'system' }]);
     
+    let totalPrimary = 15; // default guess
+    let currentPrimary = 0;
+    let totalDeep = 6; // default guess
+    let currentDeep = 0;
+    let inDeepCrawl = false;
+
     try {
       const response = await fetch('/api/predictions/scrape', { method: 'POST' });
       if (!response.body) {
@@ -373,16 +385,78 @@ export default function App() {
                 else if (msg.includes('Attente') || msg.includes('Recherche')) logType = 'warn';
 
                 setScraperLogs(prev => [...prev, { message: msg, type: logType }]);
+
+                // PROGRESS & PHASE DYNAMIC PARSING
+                if (msg.includes("Discovered") && msg.includes("homepage")) {
+                  const matchDiscover = msg.match(/Discovered (\d+) matches/);
+                  if (matchDiscover) {
+                    totalPrimary = Math.min(parseInt(matchDiscover[1], 10), 20); // cap at limit (default 20)
+                  }
+                }
+                
+                // 1. Primary phase step: [X/Y] Scraping details for...
+                const primaryMatch = msg.match(/\[(\d+)\/(\d+)\] Scraping details for/);
+                if (primaryMatch) {
+                  currentPrimary = parseInt(primaryMatch[1], 10);
+                  totalPrimary = parseInt(primaryMatch[2], 10);
+                  setScrapePhase('scraping_primary');
+                  const progressVal = Math.round((currentPrimary / totalPrimary) * 75);
+                  setScrapeProgress(progressVal);
+
+                  const remainingSec = Math.max(0, ((totalPrimary - currentPrimary) + totalDeep) * 8);
+                  const mins = Math.floor(remainingSec / 60);
+                  const secs = remainingSec % 60;
+                  setScrapeTimeRemaining(mins > 0 ? `${mins} min ${secs}s` : `${secs}s`);
+                }
+
+                // 2. Deep crawl phase start: X H2H/derniers matchs déjà en cache, Y nouveaux à scrapper.
+                if (msg.includes("nouveaux à scrapper")) {
+                  const deepMatch = msg.match(/(\d+) nouveaux à scrapper/);
+                  if (deepMatch) {
+                    totalDeep = Math.min(parseInt(deepMatch[1], 10), 12); // backend caps uncached links at 12
+                    inDeepCrawl = true;
+                    setScrapePhase('scraping_history');
+                  }
+                }
+
+                // 3. Deep crawl phase step: Scraping de l'historique sur Tor :
+                if (msg.includes("Scraping de l'historique sur Tor") && inDeepCrawl) {
+                  currentDeep++;
+                  const progressVal = Math.round(75 + (Math.min(currentDeep, totalDeep) / totalDeep) * 20); // Capped at 95%
+                  setScrapeProgress(progressVal);
+
+                  const remainingSec = Math.max(0, (totalDeep - currentDeep) * 8);
+                  const mins = Math.floor(remainingSec / 60);
+                  const secs = remainingSec % 60;
+                  setScrapeTimeRemaining(mins > 0 ? `${mins} min ${secs}s` : `${secs}s`);
+                }
+
+                // 4. Analysis/import phase: Analyse et importation des données...
+                if (msg.includes("Analyse et importation") || msg.includes("Enregistrement dans SQLite")) {
+                  setScrapePhase('importing');
+                  setScrapeProgress(96);
+                  setScrapeTimeRemaining("Importation en cours...");
+                }
+
+                // 5. User canceled log catch
+                if (msg.includes("Scraping annulé par l'utilisateur")) {
+                  setScrapePhase('stopped');
+                  setScrapeProgress(0);
+                  setScrapeTimeRemaining("Annulé");
+                }
               } else if (eventData.type === 'error') {
                 setScraperLogs(prev => [...prev, { message: `[ERREUR CRITIQUE] ${eventData.message}`, type: 'error' }]);
                 alert(`Erreur de scraping: ${eventData.message}`);
               } else if (eventData.type === 'complete') {
                 setScraperLogs(prev => [...prev, { message: `[Predictix] Scraping terminé avec succès ! ${eventData.count} prédictions synchronisées.`, type: 'success' }]);
+                setScrapePhase('completed');
+                setScrapeProgress(100);
+                setScrapeTimeRemaining("Terminé");
                 fetchPredictions();
                 fetchStats();
               }
             } catch (err) {
-              // Ignore invalid JSON parsing of empty line fragments
+              // Ignore invalid JSON fragments
             }
           }
         }
@@ -392,6 +466,26 @@ export default function App() {
       alert("Erreur lors de la communication avec le serveur de scraping : " + error.message);
     } finally {
       setScraping(false);
+    }
+  };
+
+  // Stop active Scraper run
+  const handleStopScraping = async () => {
+    try {
+      setScraperLogs(prev => [...prev, { message: "[Predictix] Demande d'arrêt envoyée au serveur...", type: 'system' }]);
+      const response = await fetch('/api/predictions/scrape/stop', { method: 'POST' });
+      const data = await response.json();
+      
+      if (data.success) {
+        setScrapePhase('stopped');
+        setScrapeProgress(0);
+        setScrapeTimeRemaining("Arrêté");
+        setScraperLogs(prev => [...prev, { message: "[Predictix] ✓ Le scraper a été arrêté avec succès.", type: 'warn' }]);
+      } else {
+        alert("Impossible d'arrêter le scraper: " + data.error);
+      }
+    } catch (err) {
+      alert("Erreur lors de la communication de fin de tâche: " + err.message);
     }
   };
 
@@ -958,10 +1052,10 @@ export default function App() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
                 
                 {/* Scraper Action Console Card */}
-                <div className="glass-card accent-right">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
+                <div className="glass-card accent-right" style={{ padding: '24px 30px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px', borderBottom: scraping ? '1px solid var(--border-color)' : 'none', paddingBottom: scraping ? '16px' : '0', transition: 'all 0.3s ease' }}>
                     <div>
-                      <h3 style={{ fontSize: '18px', fontFamily: 'Outfit' }}>
+                      <h3 style={{ fontSize: '18px', fontFamily: 'Outfit', fontWeight: 700 }}>
                         Lancer le Scraper Go (MatchEnDirect.fr)
                       </h3>
                       <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
@@ -969,15 +1063,79 @@ export default function App() {
                       </p>
                     </div>
                     
-                    <button 
-                      className={`btn btn-primary ${scraping ? 'loading' : ''}`}
-                      onClick={handleTriggerScraping}
-                      disabled={scraping}
-                    >
-                      <RefreshCcw size={18} className={scraping ? 'animate-spin' : ''} />
-                      <span>{scraping ? 'Scraping en cours...' : 'Démarrer le Scraping'}</span>
-                    </button>
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                      {scraping && (
+                        <button 
+                          className="btn btn-danger"
+                          onClick={handleStopScraping}
+                          style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '36px', fontSize: '13px', padding: '6px 14px', borderRadius: '6px' }}
+                        >
+                          <X size={15} />
+                          <span>Arrêter</span>
+                        </button>
+                      )}
+                      
+                      <button 
+                        className={`btn ${scraping ? 'btn-scraping-active' : 'btn-primary'}`}
+                        onClick={handleTriggerScraping}
+                        disabled={scraping}
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '36px', fontSize: '13px', padding: '6px 14px', borderRadius: '6px' }}
+                      >
+                        <RefreshCcw size={15} className={scraping ? 'animate-spin-slow' : ''} />
+                        <span>{scraping ? 'Scraping en cours...' : 'Démarrer le Scraping'}</span>
+                      </button>
+                    </div>
                   </div>
+
+                  {/* Real-time Progress Bar */}
+                  {scraping && (
+                    <div style={{ width: '100%', marginTop: '16px', padding: '16px', background: 'rgba(255,255,255,0.015)', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', fontSize: '12.5px' }}>
+                        <span style={{ fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ 
+                            width: '8px', 
+                            height: '8px', 
+                            borderRadius: '50%', 
+                            background: scrapePhase === 'importing' || scrapePhase === 'completed' ? 'var(--color-success)' : 'var(--color-accent-solid)',
+                            display: 'inline-block',
+                            boxShadow: scrapePhase === 'importing' || scrapePhase === 'completed' ? '0 0 8px var(--color-success)' : '0 0 8px var(--color-accent-solid)',
+                            animation: 'pulse 1.5s infinite',
+                            flexShrink: 0
+                          }}></span>
+                          <span>
+                            {scrapePhase === 'discovering' && "Découverte des matchs de la journée..."}
+                            {scrapePhase === 'scraping_primary' && "Scraping approfondi des détails (Tor headless)..."}
+                            {scrapePhase === 'scraping_history' && "Récupération de l'historique H2H/Formes (Tor SOCKS)..."}
+                            {scrapePhase === 'importing' && "Analyse & synchronisation SQLite..."}
+                            {scrapePhase === 'completed' && "Scraping terminé avec succès !"}
+                            {scrapePhase === 'stopped' && "Scraping arrêté."}
+                          </span>
+                        </span>
+                        <span style={{ fontFamily: 'Outfit', fontWeight: 700, color: 'var(--color-accent-solid)' }}>
+                          {scrapeProgress}%
+                        </span>
+                      </div>
+                      
+                      {/* Track progress */}
+                      <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.04)', borderRadius: '10px', overflow: 'hidden' }}>
+                        <div style={{ 
+                          width: `${scrapeProgress}%`, 
+                          height: '100%', 
+                          background: 'linear-gradient(90deg, var(--color-accent-solid), #00b894)', 
+                          borderRadius: '10px',
+                          transition: 'width 0.4s cubic-bezier(0.4, 0, 0.2, 1)' 
+                        }} />
+                      </div>
+
+                      {/* Time Remaining */}
+                      {scrapeTimeRemaining && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                          <span>Temps restant estimé :</span>
+                          <span style={{ fontWeight: 700, color: 'var(--text-secondary)' }}>{scrapeTimeRemaining}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Scraper Monospace Log Output Terminal */}
                   {(scraping || scraperLogs.length > 0) && (

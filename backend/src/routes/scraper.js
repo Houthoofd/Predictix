@@ -1,10 +1,13 @@
 import express from 'express';
-import { spawn } from 'child_process';
+import { spawn, exec } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { dbQuery, dbRun } from '../db/database.js';
 
 const router = express.Router();
+
+let activeScraperProcess = null;
+let stopScraperRequested = false;
 
 // Helper: Poisson distribution probability of exactly k events with expected lambda
 function poissonProbability(lambda, k) {
@@ -214,6 +217,7 @@ async function scrapeSingleMatch(scraperPath, link) {
 
 // Trigger scraper execution and stream progress via Server-Sent Events (SSE)
 router.post('/predictions/scrape', (req, res) => {
+  stopScraperRequested = false;
   // Set headers for Server-Sent Events (SSE)
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -255,6 +259,7 @@ router.post('/predictions/scrape', (req, res) => {
     cwd: scraperPath,
     env: { ...process.env, FORCE_COLOR: '1' }
   });
+  activeScraperProcess = child;
 
   let logBuffer = '';
 
@@ -281,6 +286,13 @@ router.post('/predictions/scrape', (req, res) => {
   });
 
   child.on('close', async (code) => {
+    activeScraperProcess = null;
+    
+    if (stopScraperRequested) {
+      sendEvent('log', { message: `[Predictix] Scraping annulé par l'utilisateur.` });
+      return res.end();
+    }
+
     // Process remaining buffer
     if (logBuffer.trim()) {
       sendEvent('log', { message: logBuffer.trim() });
@@ -394,6 +406,10 @@ router.post('/predictions/scrape', (req, res) => {
           
           const linksToScrape = uncachedLinks.slice(0, 12);
           for (const link of linksToScrape) {
+            if (stopScraperRequested) {
+              sendEvent('log', { message: `[Predictix] Scraping de l'historique annulé par l'utilisateur.` });
+              break;
+            }
             sendEvent('log', { message: `[Predictix] Scraping de l'historique sur Tor : ${link}` });
             const histMatch = await scrapeSingleMatch(scraperPath, link);
             
@@ -441,6 +457,31 @@ router.post('/predictions/scrape', (req, res) => {
       res.end();
     }
   });
+});
+
+// Stop active scraper run
+router.post('/predictions/scrape/stop', (req, res) => {
+  stopScraperRequested = true;
+  
+  if (activeScraperProcess) {
+    try {
+      const pid = activeScraperProcess.pid;
+      console.log(`[Predictix] Stopping scraper process tree PID: ${pid}`);
+      // Kill the whole process tree on Windows using taskkill
+      exec(`taskkill /pid ${pid} /T /F`, (err) => {
+        if (err) {
+          console.warn(`[Predictix] taskkill failed, fallback to process kill: ${err.message}`);
+          activeScraperProcess.kill();
+        }
+      });
+      activeScraperProcess = null;
+      return res.json({ success: true, message: "Scraper arrêté avec succès." });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  } else {
+    return res.json({ success: true, message: "Demande d'arrêt prise en compte." });
+  }
 });
 
 export default router;
