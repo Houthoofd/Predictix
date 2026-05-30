@@ -36,6 +36,7 @@ export default function ScraperTab({
   setSelectedMatchDetails,
   handleStopScraping,
   handleTriggerScraping,
+  handleStartDetailedScraping,
   handleQuickPlaceBet,
   consoleEndRef,
   stats
@@ -109,108 +110,187 @@ export default function ScraperTab({
         {/* Real-time Progress Bar */}
         {scraping && (
           <div style={{ width: '100%', marginTop: '16px', padding: '16px', background: 'rgba(255,255,255,0.015)', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', fontSize: '12.5px' }}>
-              <span style={{ fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ 
-                  width: '8px', 
-                  height: '8px', 
-                  borderRadius: '50%', 
-                  background: scrapePhase === 'importing' || scrapePhase === 'completed' ? 'var(--color-success)' : 'var(--color-accent-solid)',
-                  display: 'inline-block',
-                  boxShadow: scrapePhase === 'importing' || scrapePhase === 'completed' ? '0 0 8px var(--color-success)' : '0 0 8px var(--color-accent-solid)',
-                  animation: 'pulse 1.5s infinite',
-                  flexShrink: 0
-                }}></span>
-                <span>
-                  {scrapePhase === 'discovering' && "Découverte des matchs de la journée..."}
-                  {scrapePhase === 'scraping_primary' && "Scraping approfondi des détails (Tor headless)..."}
-                  {scrapePhase === 'scraping_history' && "Récupération de l'historique H2H/Formes (Tor SOCKS)..."}
-                  {scrapePhase === 'importing' && "Analyse & synchronisation SQLite..."}
-                  {scrapePhase === 'completed' && "Scraping terminé avec succès !"}
-                  {scrapePhase === 'stopped' && "Scraping arrêté."}
-                </span>
-              </span>
-              
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                {matchesRemaining > 0 && (
-                  <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '2px 8px' }}>
-                    {matchesRemaining} match{matchesRemaining > 1 ? 's' : ''} restant{matchesRemaining > 1 ? 's' : ''}
+            {scrapePhase === 'discovered_waiting' ? (
+              <div style={{ padding: '4px 8px' }}>
+                <h4 style={{ fontFamily: 'Outfit', fontSize: '15px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: 'var(--text-primary)' }}>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-success)', display: 'inline-block', boxShadow: '0 0 8px var(--color-success)' }}></span>
+                  <span>Découverte Terminée : {totalPrimary} matchs programmés</span>
+                </h4>
+                <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginBottom: '14px', lineHeight: '1.4' }}>
+                  {totalPrimary} matchs de football ont été découverts sur Match en Direct. Choisissez le nombre de matchs à analyser aujourd'hui. Les informations de base de tous les matchs seront récupérées, tandis que les matchs sélectionnés feront l'objet d'une analyse statistique de corners et de cotes approfondie en tâche de fond sur Tor.
+                </p>
+                
+                <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap', marginBottom: '16px', background: 'rgba(255, 255, 255, 0.01)', border: '1px solid rgba(255, 255, 255, 0.03)', borderRadius: '8px', padding: '12px 16px' }}>
+                  <div style={{ flex: 1, minWidth: '200px' }}>
+                    <input 
+                      type="range" 
+                      min="1" 
+                      max={totalPrimary} 
+                      value={scrapeLimit} 
+                      onChange={(e) => setScrapeLimit(parseInt(e.target.value, 10))}
+                      style={{ width: '100%', accentColor: 'var(--color-accent-solid)', cursor: 'pointer', height: '6px', borderRadius: '3px' }}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px', fontWeight: 500 }}>
+                      <span>1 match</span>
+                      <span>{Math.round(totalPrimary / 2)} matchs</span>
+                      <span>{totalPrimary} matchs (Complet)</span>
+                    </div>
+                  </div>
+                  
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <button 
+                      className="btn" 
+                      onClick={() => setScrapeLimit(Math.min(15, totalPrimary))}
+                      style={{ fontSize: '11.5px', padding: '6px 12px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', borderRadius: '4px' }}
+                    >
+                      Rapide (15)
+                    </button>
+                    <button 
+                      className="btn" 
+                      onClick={() => setScrapeLimit(Math.min(30, totalPrimary))}
+                      style={{ fontSize: '11.5px', padding: '6px 12px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', borderRadius: '4px' }}
+                    >
+                      Recommandé (30)
+                    </button>
+                    <button 
+                      className="btn" 
+                      onClick={() => setScrapeLimit(totalPrimary)}
+                      style={{ fontSize: '11.5px', padding: '6px 12px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', borderRadius: '4px' }}
+                    >
+                      Tous ({totalPrimary})
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    Limite configurée : <span style={{ color: 'var(--color-accent-solid)', fontFamily: 'Outfit', fontSize: '15px', fontWeight: 700 }}>{scrapeLimit} matchs</span> à analyser
+                  </div>
+                  
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button 
+                      className="btn btn-secondary"
+                      onClick={handleStopScraping}
+                      style={{ fontSize: '12px', padding: '6px 14px', borderRadius: '6px', height: '34px' }}
+                    >
+                      Annuler
+                    </button>
+                    <button 
+                      className="btn btn-primary"
+                      onClick={() => handleStartDetailedScraping(scrapeLimit)}
+                      style={{ fontSize: '12.2px', padding: '6px 16px', borderRadius: '6px', height: '34px', background: 'linear-gradient(135deg, #00b894, #00cec9)', border: 'none', fontWeight: 700 }}
+                    >
+                      Lancer l'Analyse détaillée
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', fontSize: '12.5px' }}>
+                  <span style={{ fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ 
+                      width: '8px', 
+                      height: '8px', 
+                      borderRadius: '50%', 
+                      background: scrapePhase === 'importing' || scrapePhase === 'completed' ? 'var(--color-success)' : 'var(--color-accent-solid)',
+                      display: 'inline-block',
+                      boxShadow: scrapePhase === 'importing' || scrapePhase === 'completed' ? '0 0 8px var(--color-success)' : '0 0 8px var(--color-accent-solid)',
+                      animation: 'pulse 1.5s infinite',
+                      flexShrink: 0
+                    }}></span>
+                    <span>
+                      {scrapePhase === 'discovering' && "Découverte des matchs de la journée..."}
+                      {scrapePhase === 'scraping_primary' && "Scraping approfondi des détails (Tor headless)..."}
+                      {scrapePhase === 'scraping_history' && "Récupération de l'historique H2H/Formes (Tor SOCKS)..."}
+                      {scrapePhase === 'importing' && "Analyse & synchronisation SQLite..."}
+                      {scrapePhase === 'completed' && "Scraping terminé avec succès !"}
+                      {scrapePhase === 'stopped' && "Scraping arrêté."}
+                    </span>
                   </span>
-                )}
-                <span style={{ fontFamily: 'Outfit', fontWeight: 700, color: 'var(--color-accent-solid)' }}>
-                  {scrapeProgress}%
-                </span>
-              </div>
-            </div>
-            
-            {/* Track progress */}
-            <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.04)', borderRadius: '10px', overflow: 'hidden' }}>
-              <div style={{ 
-                width: `${scrapeProgress}%`, 
-                height: '100%', 
-                background: 'linear-gradient(90deg, var(--color-accent-solid), #00b894)', 
-                borderRadius: '10px',
-                transition: 'width 0.4s cubic-bezier(0.4, 0, 0.2, 1)' 
-              }} />
-            </div>
+                  
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    {matchesRemaining > 0 && (
+                      <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '2px 8px' }}>
+                        {matchesRemaining} match{matchesRemaining > 1 ? 's' : ''} restant{matchesRemaining > 1 ? 's' : ''}
+                      </span>
+                    )}
+                    <span style={{ fontFamily: 'Outfit', fontWeight: 700, color: 'var(--color-accent-solid)' }}>
+                      {scrapeProgress}%
+                    </span>
+                  </div>
+                </div>
+                
+                {/* Track progress */}
+                <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.04)', borderRadius: '10px', overflow: 'hidden' }}>
+                  <div style={{ 
+                    width: `${scrapeProgress}%`, 
+                    height: '100%', 
+                    background: 'linear-gradient(90deg, var(--color-accent-solid), #00b894)', 
+                    borderRadius: '10px',
+                    transition: 'width 0.4s cubic-bezier(0.4, 0, 0.2, 1)' 
+                  }} />
+                </div>
 
-            {/* Detailed Scraper Info Dashboard Panel */}
-            <div style={{ 
-              display: 'grid', 
-              gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', 
-              gap: '12px', 
-              marginTop: '16px', 
-              paddingTop: '16px', 
-              borderTop: '1px solid rgba(255,255,255,0.05)' 
-            }}>
-              {/* Time Remaining Box */}
-              <div style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: '6px', padding: '10px' }}>
-                <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px', fontWeight: 600 }}>
-                  Temps Restant
-                </div>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'Outfit' }}>
-                  {scrapeTimeRemaining || "Calcul..."}
-                </div>
-              </div>
+                {/* Detailed Scraper Info Dashboard Panel */}
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', 
+                  gap: '12px', 
+                  marginTop: '16px', 
+                  paddingTop: '16px', 
+                  borderTop: '1px solid rgba(255,255,255,0.05)' 
+                }}>
+                  {/* Time Remaining Box */}
+                  <div style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: '6px', padding: '10px' }}>
+                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px', fontWeight: 600 }}>
+                      Temps Restant
+                    </div>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'Outfit' }}>
+                      {scrapeTimeRemaining || "Calcul..."}
+                    </div>
+                  </div>
 
-              {/* Scraped Matches Progress Box */}
-              <div style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: '6px', padding: '10px' }}>
-                <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px', fontWeight: 600 }}>
-                  Matchs Principaux
-                </div>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'Outfit' }}>
-                  {currentPrimary} / {totalPrimary || scrapeLimit}
-                </div>
-              </div>
+                  {/* Scraped Matches Progress Box */}
+                  <div style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: '6px', padding: '10px' }}>
+                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px', fontWeight: 600 }}>
+                      Matchs Principaux
+                    </div>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'Outfit' }}>
+                      {currentPrimary} / {totalPrimary || scrapeLimit}
+                    </div>
+                  </div>
 
-              {/* Deep H2H Crawl Progress Box */}
-              <div style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: '6px', padding: '10px' }}>
-                <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px', fontWeight: 600 }}>
-                  Profondeur H2H
-                </div>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'Outfit' }}>
-                  {scrapePhase === 'scraping_history' ? `${currentDeep} / ${totalDeep}` : (totalDeep > 0 ? `${currentDeep} / ${totalDeep}` : 'En attente...')}
-                </div>
-              </div>
+                  {/* Deep H2H Crawl Progress Box */}
+                  <div style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: '6px', padding: '10px' }}>
+                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px', fontWeight: 600 }}>
+                      Profondeur H2H
+                    </div>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'Outfit' }}>
+                      {scrapePhase === 'scraping_history' ? `${currentDeep} / ${totalDeep}` : (totalDeep > 0 ? `${currentDeep} / ${totalDeep}` : 'En attente...')}
+                    </div>
+                  </div>
 
-              {/* Tor Anonymous Routing proxy status */}
-              <div style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: '6px', padding: '10px' }}>
-                <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px', fontWeight: 600 }}>
-                  Réseau Proxy
+                  {/* Tor Anonymous Routing proxy status */}
+                  <div style={{ background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', borderRadius: '6px', padding: '10px' }}>
+                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px', fontWeight: 600 }}>
+                      Réseau Proxy
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', fontWeight: 700, color: 'var(--color-success)', fontFamily: 'Outfit' }}>
+                      <span style={{ 
+                        width: '6px', 
+                        height: '6px', 
+                        borderRadius: '50%', 
+                        background: 'var(--color-success)',
+                        boxShadow: '0 0 6px var(--color-success)',
+                        display: 'inline-block'
+                      }}></span>
+                      <span>Tor SOCKS5 Actif</span>
+                    </div>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', fontWeight: 700, color: 'var(--color-success)', fontFamily: 'Outfit' }}>
-                  <span style={{ 
-                    width: '6px', 
-                    height: '6px', 
-                    borderRadius: '50%', 
-                    background: 'var(--color-success)',
-                    boxShadow: '0 0 6px var(--color-success)',
-                    display: 'inline-block'
-                  }}></span>
-                  <span>Tor SOCKS5 Actif</span>
-                </div>
-              </div>
-            </div>
+              </>
+            )}
           </div>
         )}
 

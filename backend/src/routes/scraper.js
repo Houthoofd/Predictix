@@ -220,6 +220,84 @@ async function scrapeSingleMatch(scraperPath, link, skipOdds = false) {
   });
 }
 
+// Discover matches on homepage listing
+router.post('/predictions/scrape/discover', (req, res) => {
+  if (activeScraperProcess) {
+    return res.status(400).json({ success: false, error: { message: "Un scraping ou une découverte est déjà en cours d'exécution." } });
+  }
+
+  const scraperPath = process.env.SCRAPER_PATH || 'E:\\Developpement\\scrapper-v3';
+  const outputDirs = [
+    path.join(scraperPath, 'data', 'matchendirect'),
+    path.join(scraperPath, 'data')
+  ];
+
+  if (!fs.existsSync(scraperPath)) {
+    return res.status(404).json({ success: false, error: { message: `Dossier du scraper introuvable : ${scraperPath}` } });
+  }
+
+  let scriptName = 'scrape-matchendirect.bat';
+  if (fs.existsSync(path.join(scraperPath, 'scrape-matchendirect.sh'))) {
+    scriptName = 'scrape-matchendirect.sh';
+  }
+
+  console.log(`[Predictix Discovery] Starting discovery in ${scraperPath}...`);
+  
+  const child = spawn('cmd.exe', ['/c', scriptName, 'verbose', '0', 'discover'], {
+    cwd: scraperPath,
+    env: { ...process.env, FORCE_COLOR: '1' }
+  });
+  activeScraperProcess = child;
+
+  let logOutput = '';
+  child.stdout.on('data', (data) => logOutput += data.toString());
+  child.stderr.on('data', (data) => logOutput += data.toString());
+
+  child.on('close', async (code) => {
+    activeScraperProcess = null;
+    console.log(`[Predictix Discovery] Process closed with code: ${code}`);
+
+    if (code !== 0) {
+      return res.status(500).json({ success: false, error: { message: `Le scraper a échoué (Code : ${code})`, logs: logOutput } });
+    }
+
+    try {
+      const newestFile = getNewestScrapedFile(outputDirs);
+      if (!newestFile) {
+        return res.status(404).json({ success: false, error: { message: "Aucun fichier de résultats de découverte trouvé." } });
+      }
+
+      console.log(`[Predictix Discovery] Parsing newest file: ${newestFile}`);
+      const rawData = fs.readFileSync(newestFile, 'utf-8');
+      const parsed = JSON.parse(rawData);
+      const matches = parsed.all_matches || parsed.matches || [];
+
+      // Clean up the temporary discovery file
+      try {
+        if (fs.existsSync(newestFile)) fs.unlinkSync(newestFile);
+      } catch (e) {}
+
+      return res.json({
+        success: true,
+        count: matches.length,
+        matches: matches.map(m => ({
+          match_id: m.match_id,
+          time: m.time,
+          tournament: m.tournament,
+          home_team: m.home_team,
+          away_team: m.away_team,
+          home_logo: m.home_logo,
+          away_logo: m.away_logo,
+          score: m.score,
+          href: m.historical_links?.[0] || '' // retrieve temporarily stored href
+        }))
+      });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: { message: `Erreur lors de la lecture du résultat de découverte : ${err.message}` } });
+    }
+  });
+});
+
 // Trigger scraper execution and stream progress via Server-Sent Events (SSE)
 router.post('/predictions/scrape', (req, res) => {
   stopScraperRequested = false;

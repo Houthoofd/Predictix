@@ -360,21 +360,65 @@ export default function App() {
     }
   };
 
-  // Trigger Scraper SSE stream run
+  // Phase 1: Trigger Homepage discovery first
   const handleTriggerScraping = async () => {
     if (scraping) return;
     setScraping(true);
     setScrapeProgress(5);
     setScrapePhase('discovering');
-    setScrapeTimeRemaining('Calcul en cours...');
+    setScrapeTimeRemaining('Découverte en cours...');
     setMatchesRemaining(0);
     setCurrentPrimary(0);
-    setTotalPrimary(scrapeLimit);
+    setTotalPrimary(0);
     setCurrentDeep(0);
     setTotalDeep(0);
-    setScraperLogs([{ message: "[Predictix] Lancement du scraper...", type: 'system' }]);
+    setScraperLogs([{ message: "[Predictix] Lancement de la découverte des matchs du jour...", type: 'system' }]);
     
-    let totalPrimary = scrapeLimit; // default guess
+    try {
+      const response = await fetch('/api/predictions/scrape/discover', { 
+        method: 'POST'
+      });
+      const json = await response.json();
+      
+      if (json.success) {
+        setScrapePhase('discovered_waiting');
+        setTotalPrimary(json.count);
+        setMatchesRemaining(json.count);
+        setScrapeLimit(Math.min(30, json.count)); // Default suggested limit
+        setScrapeProgress(25);
+        setScraperLogs(prev => [
+          ...prev, 
+          { message: `[Predictix] ✓ Découverte réussie : ${json.count} matchs programmés ou en direct aujourd'hui.`, type: 'success' },
+          { message: "[Predictix] En attente de votre configuration pour démarrer l'analyse détaillée...", type: 'warn' }
+        ]);
+      } else {
+        alert("Erreur lors de la découverte : " + (json.error?.message || "Erreur inconnue"));
+        setScraping(false);
+        setScrapePhase('idle');
+      }
+    } catch (error) {
+      setScraperLogs(prev => [...prev, { message: `[ERREUR CONTEXTE] ${error.message}`, type: 'error' }]);
+      alert("Erreur lors de la communication avec le serveur de scraping : " + error.message);
+      setScraping(false);
+      setScrapePhase('idle');
+    }
+  };
+
+  // Phase 2: Start detailed scraping for the selected limit of matches
+  const handleStartDetailedScraping = async (selectedLimit) => {
+    setScrapeProgress(30);
+    setScrapePhase('scraping_primary');
+    setScrapeTimeRemaining('Calcul en cours...');
+    setCurrentPrimary(0);
+    setTotalPrimary(selectedLimit);
+    setCurrentDeep(0);
+    setTotalDeep(0);
+    setScraperLogs(prev => [
+      ...prev, 
+      { message: `[Predictix] Lancement de l'analyse détaillée pour ${selectedLimit} matchs...`, type: 'system' }
+    ]);
+    
+    let totalPrimary = selectedLimit;
     let currentPrimary = 0;
     let totalDeep = 6; // default guess
     let currentDeep = 0;
@@ -384,7 +428,7 @@ export default function App() {
       const response = await fetch('/api/predictions/scrape', { 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ limit: scrapeLimit })
+        body: JSON.stringify({ limit: selectedLimit })
       });
       if (!response.body) {
         throw new Error("Le serveur n'a pas renvoyé de flux de données.");
@@ -420,16 +464,6 @@ export default function App() {
 
                 setScraperLogs(prev => [...prev, { message: msg, type: logType }]);
 
-                // PROGRESS & PHASE DYNAMIC PARSING
-                if (msg.includes("Discovered") && msg.includes("homepage")) {
-                  const matchDiscover = msg.match(/Discovered (\d+) matches/);
-                  if (matchDiscover) {
-                    totalPrimary = Math.min(parseInt(matchDiscover[1], 10), scrapeLimit);
-                    setMatchesRemaining(totalPrimary);
-                    setTotalPrimary(totalPrimary);
-                  }
-                }
-                
                 // 1. Primary phase step: [X/Y] Scraping details for...
                 const primaryMatch = msg.match(/\[(\d+)\/(\d+)\] Scraping details for/);
                 if (primaryMatch) {
@@ -503,8 +537,7 @@ export default function App() {
                 setScrapeProgress(100);
                 setMatchesRemaining(0);
                 setScrapeTimeRemaining("Terminé");
-                fetchPredictions();
-                fetchStats();
+                fetchAllData();
               }
             } catch (err) {
               // Ignore invalid JSON fragments
@@ -693,6 +726,7 @@ export default function App() {
                   setSelectedMatchDetails={setSelectedMatchDetails}
                   handleStopScraping={handleStopScraping}
                   handleTriggerScraping={handleTriggerScraping}
+                  handleStartDetailedScraping={handleStartDetailedScraping}
                   handleQuickPlaceBet={handleQuickPlaceBet}
                   consoleEndRef={consoleEndRef}
                   stats={stats}
