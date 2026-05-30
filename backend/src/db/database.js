@@ -115,9 +115,31 @@ function initDb() {
         status TEXT,
         is_live INTEGER DEFAULT 0,
         is_finished INTEGER DEFAULT 0,
+        first_half_corners_home INTEGER,
+        first_half_corners_away INTEGER,
+        odds_corners TEXT,
         scraped_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Safe schema migrations for existing databases
+    db.run(`
+      ALTER TABLE scraped_predictions ADD COLUMN first_half_corners_home INTEGER
+    `, (err) => {
+      // Ignore error if column already exists
+    });
+
+    db.run(`
+      ALTER TABLE scraped_predictions ADD COLUMN first_half_corners_away INTEGER
+    `, (err) => {
+      // Ignore error if column already exists
+    });
+    
+    db.run(`
+      ALTER TABLE scraped_predictions ADD COLUMN odds_corners TEXT
+    `, (err) => {
+      // Ignore error if column already exists
+    });
     
     console.log("Database tables initialized successfully");
   });

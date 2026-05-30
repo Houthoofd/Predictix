@@ -48,6 +48,14 @@ export default function App() {
   const [showAddBetModal, setShowAddBetModal] = useState(false);
   const [showResetBankrollModal, setShowResetBankrollModal] = useState(false);
   const [prefilledBet, setPrefilledBet] = useState(null); // Used to place bet from prediction
+  const [selectedMatchDetails, setSelectedMatchDetails] = useState(null); // Track selected match for detailed stats view
+  const [selectedPredIds, setSelectedPredIds] = useState([]); // Track list of selected prediction IDs
+  const [showBatchBetModal, setShowBatchBetModal] = useState(false); // Toggle batch placement modal
+  const [batchBetsForm, setBatchBetsForm] = useState([]); // Form list of bets to place in batch
+  const [batchGlobalStake, setBatchGlobalStake] = useState(''); // Global stake input
+  const [batchGlobalBookmaker, setBatchGlobalBookmaker] = useState('Unibet'); // Global bookmaker input
+  const [batchLoading, setBatchLoading] = useState(false); // Loading state for batch registering
+  const [batchProgress, setBatchProgress] = useState(0); // Count of successfully placed batch bets
   
   // Form States
   const [newBetForm, setNewBetForm] = useState({
@@ -60,6 +68,7 @@ export default function App() {
   // Predictions Filter States
   const [predSearch, setPredSearch] = useState('');
   const [predHighProbOnly, setPredHighProbOnly] = useState(false);
+  const [predValueBetsOnly, setPredValueBetsOnly] = useState(false);
   const [predStatusFilter, setPredStatusFilter] = useState('all'); // all, live, planned, finished
 
   const consoleEndRef = useRef(null);
@@ -230,6 +239,98 @@ export default function App() {
     setShowAddBetModal(true);
   };
 
+  // Pre-fill and open batch placement modal for selected predictions
+  const handleOpenBatchPlacement = () => {
+    if (selectedPredIds.length === 0) return;
+    const selectedPreds = predictions.filter(pred => selectedPredIds.includes(pred.match_id));
+    
+    const defaultBets = selectedPreds.map(pred => {
+      const probNum = parseInt(pred.probability.replace('%', ''));
+      const lineNum = parseFloat(pred.card_line);
+      const oddsNum = pred.best_tip.toLowerCase() === 'over' ? parseFloat(pred.over_odds) : parseFloat(pred.under_odds);
+      
+      const now = new Date();
+      const defaultDate = pred.date || now.toISOString().substring(0, 10);
+      
+      return {
+        match_id: pred.match_id,
+        date: defaultDate,
+        time: pred.time || '20:00',
+        league: pred.tournament || 'Football',
+        home_team: pred.home_team,
+        away_team: pred.away_team,
+        best_tip: pred.best_tip || 'Over',
+        card_line: isNaN(lineNum) ? 4.5 : lineNum,
+        odds: isNaN(oddsNum) ? 1.85 : oddsNum,
+        stake: Math.round(bankroll.balance * 0.05) || 50, // Default to 5% of bankroll
+        probability: isNaN(probNum) ? '' : probNum,
+        bookmaker: 'Unibet',
+        status: 'PENDING',
+        notes: `Placé en lot depuis Predictix (Probabilité: ${pred.probability}, Taux de réussite: ${pred.win_rate || 'N/A'})`
+      };
+    });
+    
+    setBatchBetsForm(defaultBets);
+    setBatchGlobalStake(Math.round(bankroll.balance * 0.05) || 50);
+    setBatchGlobalBookmaker('Unibet');
+    setShowBatchBetModal(true);
+  };
+
+  // Apply a single stake value to all bets in the batch form
+  const handleApplyGlobalStake = () => {
+    const amount = parseFloat(batchGlobalStake);
+    if (isNaN(amount) || amount <= 0) {
+      alert("Veuillez saisir un montant de mise valide.");
+      return;
+    }
+    setBatchBetsForm(prev => prev.map(b => ({ ...b, stake: amount })));
+  };
+
+  // Apply a single bookmaker name to all bets in the batch form
+  const handleApplyGlobalBookmaker = () => {
+    if (!batchGlobalBookmaker.trim()) {
+      alert("Veuillez saisir un nom de bookmaker.");
+      return;
+    }
+    setBatchBetsForm(prev => prev.map(b => ({ ...b, bookmaker: batchGlobalBookmaker })));
+  };
+
+  // Asynchronously save all bets in the batch sequence
+  const handleConfirmBatchBets = async (e) => {
+    e.preventDefault();
+    if (batchBetsForm.length === 0) return;
+    
+    setBatchLoading(true);
+    setBatchProgress(0);
+    
+    try {
+      let count = 0;
+      for (const bet of batchBetsForm) {
+        const res = await fetch('/api/bets', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(bet)
+        });
+        const json = await res.json();
+        if (json.success) {
+          count++;
+          setBatchProgress(count);
+        } else {
+          console.error("Échec du placement du pari en lot:", json.error?.message);
+        }
+      }
+      
+      setSelectedPredIds([]);
+      setShowBatchBetModal(false);
+      fetchAllData();
+      alert(`${count} paris ont été enregistrés avec succès !`);
+    } catch (err) {
+      alert("Erreur lors de l'enregistrement du lot: " + err.message);
+    } finally {
+      setBatchLoading(false);
+    }
+  };
+
   // Trigger Scraper SSE stream run
   const handleTriggerScraping = async () => {
     if (scraping) return;
@@ -337,7 +438,42 @@ export default function App() {
       if (isNaN(probValue) || probValue < 60) return false;
     }
 
-    // 3. Status tab filter
+    // 3. Value Bets Only
+    if (predValueBetsOnly) {
+      let hasValueBet = false;
+      try {
+        // A. Check Oddschecker corners odds
+        if (pred.odds_corners && pred.odds_corners.length > 0) {
+          hasValueBet = pred.odds_corners.some(o => o.over_value_bet || o.under_value_bet);
+        }
+        
+        // B. Check model-based Value Bet using card's own stats
+        if (!hasValueBet) {
+          let rawProb = pred.win_rate || pred.probability || '';
+          let cleanProb = String(rawProb).replace('%', '').trim();
+          let probPct = parseInt(cleanProb, 10);
+          
+          let rawOdds = '';
+          const tipLower = String(pred.best_tip).toLowerCase();
+          if (tipLower.includes('plus') || tipLower.includes('over')) {
+            rawOdds = pred.over_odds;
+          } else if (tipLower.includes('moins') || tipLower.includes('under')) {
+            rawOdds = pred.under_odds;
+          }
+          let oddsVal = parseFloat(String(rawOdds).trim());
+          
+          if (!isNaN(probPct) && !isNaN(oddsVal) && probPct > 0 && oddsVal > 0) {
+            const ev = (probPct / 100) * oddsVal;
+            if (ev >= 1.05) {
+              hasValueBet = true;
+            }
+          }
+        }
+      } catch (e) {}
+      if (!hasValueBet) return false;
+    }
+
+    // 4. Status tab filter
     const statusLower = String(pred.status).toLowerCase();
     if (predStatusFilter === 'live') {
       return pred.is_live === 1 || statusLower === 'live';
@@ -887,6 +1023,19 @@ export default function App() {
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
+                    {/* Toggle Value Bets Only */}
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: 600 }}>
+                      <input 
+                        type="checkbox" 
+                        checked={predValueBetsOnly}
+                        onChange={(e) => setPredValueBetsOnly(e.target.checked)}
+                        style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                      />
+                      <span style={{ color: 'var(--color-success)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        Value Bets uniquement
+                      </span>
+                    </label>
+
                     {/* Toggle High Prob */}
                     <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: 600 }}>
                       <input 
@@ -920,31 +1069,108 @@ export default function App() {
                       const probVal = parseInt(pred.probability.replace('%', ''));
                       const isHighProb = !isNaN(probVal) && probVal >= 60;
                       
-                      return (
-                        <div 
-                          key={pred.match_id} 
-                          className={`glass-card ${isHighProb ? 'accent-left' : ''}`}
-                          style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '20px' }}
-                        >
-                          {/* Card Header Info */}
-                          <div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                              <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                {pred.tournament || 'Football'}
-                              </span>
+                      // Calculate if this prediction itself is a Model-based Value Bet
+                      let isModelValueBet = false;
+                      let modelValueEdge = 0;
+                      let parsedProb = 0;
+                      let parsedOdds = 0;
+                      
+                      try {
+                        let rawProb = pred.win_rate || pred.probability || '';
+                        let cleanProb = String(rawProb).replace('%', '').trim();
+                        parsedProb = parseInt(cleanProb, 10);
+                        
+                        let rawOdds = '';
+                        const tipLower = String(pred.best_tip).toLowerCase();
+                        if (tipLower.includes('plus') || tipLower.includes('over')) {
+                          rawOdds = pred.over_odds;
+                        } else if (tipLower.includes('moins') || tipLower.includes('under')) {
+                          rawOdds = pred.under_odds;
+                        }
+                        parsedOdds = parseFloat(String(rawOdds).trim());
+                        
+                        if (!isNaN(parsedProb) && !isNaN(parsedOdds) && parsedProb > 0 && parsedOdds > 0) {
+                          const ev = (parsedProb / 100) * parsedOdds;
+                          if (ev >= 1.05) {
+                            isModelValueBet = true;
+                            modelValueEdge = Math.round((ev - 1) * 100);
+                          }
+                        }
+                      } catch (e) {}
+                      
+                        const isSelected = selectedPredIds.includes(pred.match_id);
+
+                        return (
+                          <div 
+                            key={pred.match_id} 
+                            className={`glass-card ${isHighProb ? 'accent-left' : ''}`}
+                            onClick={() => setSelectedMatchDetails(pred)}
+                            style={{ 
+                              display: 'flex', 
+                              flexDirection: 'column', 
+                              justifyContent: 'space-between', 
+                              gap: '20px',
+                              border: isSelected 
+                                ? '1.5px solid var(--color-accent-solid)' 
+                                : isModelValueBet 
+                                  ? '1px dashed rgba(16, 185, 129, 0.4)' 
+                                  : '1px solid var(--border-color)',
+                              boxShadow: isSelected
+                                ? '0 0 15px rgba(0, 98, 255, 0.15)'
+                                : isModelValueBet 
+                                  ? '0 0 15px rgba(16, 185, 129, 0.08)' 
+                                  : 'none',
+                              cursor: 'pointer',
+                              transform: isSelected ? 'scale(1.008)' : 'none',
+                              transition: 'all 0.15s ease'
+                            }}
+                          >
+                            {/* Card Header Info */}
+                            <div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }} onClick={(e) => e.stopPropagation()}>
+                                  <input 
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => {
+                                      if (isSelected) {
+                                        setSelectedPredIds(prev => prev.filter(id => id !== pred.match_id));
+                                      } else {
+                                        setSelectedPredIds(prev => [...prev, pred.match_id]);
+                                      }
+                                    }}
+                                    style={{ 
+                                      width: '16px', 
+                                      height: '16px', 
+                                      cursor: 'pointer',
+                                      accentColor: 'var(--color-accent-solid)'
+                                    }}
+                                  />
+                                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                    {pred.tournament || 'Football'}
+                                  </span>
+                                </div>
                               
-                              {/* Status Badge */}
-                              <span className={`badge ${
-                                pred.is_live === 1 || String(pred.status).toLowerCase() === 'live'
-                                  ? 'badge-pending'
-                                  : pred.is_finished === 1 || String(pred.status).toLowerCase() === 'finished'
-                                  ? 'badge-won'
-                                  : 'badge-refunded'
-                              }`}>
-                                {pred.is_live === 1 || String(pred.status).toLowerCase() === 'live' ? 'En Direct' : ''}
-                                {pred.is_finished === 1 || String(pred.status).toLowerCase() === 'finished' ? 'Terminé' : ''}
-                                {!(pred.is_live === 1 || String(pred.status).toLowerCase() === 'live') && !(pred.is_finished === 1 || String(pred.status).toLowerCase() === 'finished') ? 'À venir' : ''}
-                              </span>
+                              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                {isModelValueBet && (
+                                  <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', color: 'var(--color-success)', fontWeight: 700, fontSize: '10.5px', display: 'flex', alignItems: 'center', gap: '3px' }} title={`Value Bet Modèle détecté ! (Probabilité: ${parsedProb}%, Cote: ${parsedOdds})`}>
+                                    Value Bet +{modelValueEdge}%
+                                  </span>
+                                )}
+                                
+                                {/* Status Badge */}
+                                <span className={`badge ${
+                                  pred.is_live === 1 || String(pred.status).toLowerCase() === 'live'
+                                    ? 'badge-pending'
+                                    : pred.is_finished === 1 || String(pred.status).toLowerCase() === 'finished'
+                                    ? 'badge-won'
+                                    : 'badge-refunded'
+                                }`}>
+                                  {pred.is_live === 1 || String(pred.status).toLowerCase() === 'live' ? 'En Direct' : ''}
+                                  {pred.is_finished === 1 || String(pred.status).toLowerCase() === 'finished' ? 'Terminé' : ''}
+                                  {!(pred.is_live === 1 || String(pred.status).toLowerCase() === 'live') && !(pred.is_finished === 1 || String(pred.status).toLowerCase() === 'finished') ? 'À venir' : ''}
+                                </span>
+                              </div>
                             </div>
 
                             {/* Teams and score */}
@@ -955,10 +1181,115 @@ export default function App() {
                               {pred.away_team}
                             </h4>
 
-                            {/* Score displaying if live or finished */}
-                            {pred.score && (
-                              <div style={{ background: 'var(--bg-tertiary)', padding: '6px 12px', borderRadius: '4px', display: 'inline-block', fontSize: '13px', fontWeight: 700, margin: '8px 0' }}>
-                                Score: {pred.score}
+                            {/* Score & Corners displaying if live or finished */}
+                            {(pred.score || (pred.first_half_corners_home !== null && pred.first_half_corners_away !== null)) && (
+                              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', margin: '8px 0', flexWrap: 'wrap' }}>
+                                {pred.score && (
+                                  <div style={{ background: 'var(--bg-tertiary)', padding: '6px 12px', borderRadius: '4px', fontSize: '13px', fontWeight: 700 }}>
+                                    Score: {pred.score}
+                                  </div>
+                                )}
+                                {pred.first_half_corners_home !== null && pred.first_half_corners_away !== null && (
+                                  <div style={{ 
+                                    background: 'rgba(16, 185, 129, 0.08)', 
+                                    border: '1px solid rgba(16, 185, 129, 0.2)', 
+                                    padding: '6px 12px', 
+                                    borderRadius: '4px', 
+                                    fontSize: '12px', 
+                                    fontWeight: 700, 
+                                    color: 'var(--color-success)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '4px'
+                                  }}>
+                                    <span style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 500 }}>Corners 1MT:</span>
+                                    {pred.first_half_corners_home} - {pred.first_half_corners_away}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Team historical and H2H corner averages */}
+                            {((pred.home_avg_first_half_corners !== undefined && pred.home_avg_first_half_corners !== null) || 
+                              (pred.away_avg_first_half_corners !== undefined && pred.away_avg_first_half_corners !== null) ||
+                              (pred.h2h_avg_first_half_corners !== undefined && pred.h2h_avg_first_half_corners !== null)) && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', margin: '8px 0 14px 0', padding: '10px 12px', background: 'rgba(255, 255, 255, 0.015)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                                <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '2px' }}>
+                                  Statistiques Corners 1MT
+                                </div>
+                                
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', alignItems: 'center' }}>
+                                  <span style={{ color: 'var(--text-secondary)' }}>Moyennes Dom. / Ext. :</span>
+                                  <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                                    <strong style={{ color: 'var(--color-accent-solid)' }}>{pred.home_avg_first_half_corners !== null ? pred.home_avg_first_half_corners : '-'}</strong>
+                                    <span style={{ color: 'var(--text-muted)', margin: '0 4px' }}>/</span>
+                                    <strong style={{ color: 'var(--color-accent-solid)' }}>{pred.away_avg_first_half_corners !== null ? pred.away_avg_first_half_corners : '-'}</strong>
+                                  </span>
+                                </div>
+
+                                {pred.h2h_avg_first_half_corners !== null && pred.h2h_avg_first_half_corners !== undefined && (
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.02)', paddingTop: '4px' }}>
+                                    <span style={{ color: 'var(--text-secondary)' }}>Confrontations H2H (Moyenne) :</span>
+                                    <span style={{ fontWeight: 700, color: 'var(--color-success)' }}>
+                                      {pred.h2h_avg_first_half_corners}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Oddschecker & Value Bets Widget */}
+                            {pred.odds_corners && pred.odds_corners.length > 0 && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', margin: '8px 0 14px 0', padding: '10px 12px', background: 'rgba(255, 255, 255, 0.015)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                                <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '2px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <span>Cotes & Value Bets Corners</span>
+                                  <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>Oddschecker</span>
+                                </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                                  {pred.odds_corners.map((o, idx) => {
+                                    const hasOverValue = o.over_value_bet;
+                                    const hasUnderValue = o.under_value_bet;
+                                    
+                                    if (!o.over_decimal && !o.under_decimal) return null;
+                                    
+                                    return (
+                                      <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '3px', borderTop: idx > 0 ? '1px solid rgba(255,255,255,0.03)' : 'none', paddingTop: idx > 0 ? '5px' : '0' }}>
+                                        {o.over_decimal && (
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', padding: '2px 6px', borderRadius: '4px', background: hasOverValue ? 'rgba(16, 185, 129, 0.06)' : 'transparent', border: hasOverValue ? '1px dashed rgba(16, 185, 129, 0.2)' : 'none' }}>
+                                            <span style={{ color: hasOverValue ? 'var(--color-success)' : 'var(--text-secondary)', fontWeight: hasOverValue ? 700 : 500 }}>
+                                              Plus de {o.line} {o.market_type === '1st_half' ? '(1MT)' : '(Fin)'}
+                                            </span>
+                                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                              <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{o.over_decimal}</span>
+                                              {hasOverValue && (
+                                                <span style={{ color: 'var(--color-success)', fontWeight: 700, fontSize: '10px' }} title={`Cote Juste : ${o.over_fair_odds} (${o.over_probability})`}>
+                                                  +{o.over_value_edge}%
+                                                </span>
+                                              )}
+                                            </div>
+                                          </div>
+                                        )}
+
+                                        {o.under_decimal && (
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', padding: '2px 6px', borderRadius: '4px', background: hasUnderValue ? 'rgba(16, 185, 129, 0.06)' : 'transparent', border: hasUnderValue ? '1px dashed rgba(16, 185, 129, 0.2)' : 'none' }}>
+                                            <span style={{ color: hasUnderValue ? 'var(--color-success)' : 'var(--text-secondary)', fontWeight: hasUnderValue ? 700 : 500 }}>
+                                              Moins de {o.line} {o.market_type === '1st_half' ? '(1MT)' : '(Fin)'}
+                                            </span>
+                                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                              <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{o.under_decimal}</span>
+                                              {hasUnderValue && (
+                                                <span style={{ color: 'var(--color-success)', fontWeight: 700, fontSize: '10px' }} title={`Cote Juste : ${o.under_fair_odds} (${o.under_probability})`}>
+                                                  +{o.under_value_edge}%
+                                                </span>
+                                              )}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
                               </div>
                             )}
 
@@ -1013,7 +1344,7 @@ export default function App() {
                           <button 
                             className="btn btn-primary" 
                             style={{ width: '100%' }}
-                            onClick={() => handleQuickPlaceBet(pred)}
+                            onClick={(e) => { e.stopPropagation(); handleQuickPlaceBet(pred); }}
                             disabled={pred.is_finished === 1}
                           >
                             <Plus size={16} />
@@ -1527,6 +1858,392 @@ export default function App() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================
+           MODAL: MATCH STATISTICS DETAILS (EXPANDED stats ledger)
+           ======================================================================== */}
+        {selectedMatchDetails && (
+          <div className="modal-overlay" onClick={() => setSelectedMatchDetails(null)}>
+            <div className="modal-content glass-card" style={{ maxWidth: '650px', width: '90%', padding: '24px 30px', maxHeight: '85vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', borderBottom: '1px solid var(--border-color)', paddingBottom: '14px' }}>
+                <div>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    {selectedMatchDetails.tournament || 'Football'}
+                  </span>
+                  <h3 style={{ fontSize: '20px', fontFamily: 'Outfit', color: 'var(--text-primary)', marginTop: '4px' }}>
+                    {selectedMatchDetails.home_team} vs {selectedMatchDetails.away_team}
+                  </h3>
+                </div>
+                <button className="modal-close" onClick={() => setSelectedMatchDetails(null)}>
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Stats Summary Grid */}
+              <div className="grid-3" style={{ gap: '12px', marginBottom: '24px' }}>
+                <div style={{ background: 'var(--bg-tertiary)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', textAlign: 'center' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Conseil Modèle</span>
+                  <p style={{ fontSize: '15px', fontWeight: 700, marginTop: '4px', color: 'var(--text-primary)' }}>
+                    {selectedMatchDetails.best_tip} {selectedMatchDetails.card_line}
+                  </p>
+                </div>
+                <div style={{ background: 'var(--bg-tertiary)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', textAlign: 'center' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Confiance / Win Rate</span>
+                  <p style={{ fontSize: '15px', fontWeight: 700, marginTop: '4px', color: 'var(--color-accent-solid)' }}>
+                    {selectedMatchDetails.win_rate || selectedMatchDetails.probability || 'N/A'}
+                  </p>
+                </div>
+                <div style={{ background: 'var(--bg-tertiary)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', textAlign: 'center' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Cotes de Base (O/U)</span>
+                  <p style={{ fontSize: '15px', fontWeight: 700, marginTop: '4px', color: 'var(--text-primary)' }}>
+                    {selectedMatchDetails.over_odds} / {selectedMatchDetails.under_odds}
+                  </p>
+                </div>
+              </div>
+
+              {/* Historical Lists */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {/* Section 1: H2H */}
+                <div>
+                  <h4 style={{ fontSize: '14px', fontFamily: 'Outfit', color: 'var(--text-primary)', marginBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '4px' }}>
+                    Confrontations Directes (H2H)
+                  </h4>
+                  {selectedMatchDetails.recent_h2h_matches && selectedMatchDetails.recent_h2h_matches.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {selectedMatchDetails.recent_h2h_matches.map((m, idx) => (
+                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', background: 'rgba(255,255,255,0.01)', borderRadius: '6px', fontSize: '12.5px', alignItems: 'center' }}>
+                          <span style={{ color: 'var(--text-secondary)', fontSize: '11.5px' }}>{m.date}</span>
+                          <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>
+                            {m.home_team} <strong style={{ color: 'var(--text-muted)' }}>{m.score}</strong> {m.away_team}
+                          </span>
+                          <span style={{ fontWeight: 700, color: 'var(--color-success)', background: 'rgba(16, 185, 129, 0.08)', padding: '2px 6px', borderRadius: '4px', fontSize: '11.5px' }}>
+                            Corners 1MT: {m.first_half_corners_home} - {m.first_half_corners_away}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic' }}>Aucune confrontation H2H en cache dans l'historique.</p>
+                  )}
+                </div>
+
+                {/* Section 2: Recent Home */}
+                <div>
+                  <h4 style={{ fontSize: '14px', fontFamily: 'Outfit', color: 'var(--text-primary)', marginBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '4px' }}>
+                    Derniers matchs de {selectedMatchDetails.home_team}
+                  </h4>
+                  {selectedMatchDetails.recent_home_matches && selectedMatchDetails.recent_home_matches.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {selectedMatchDetails.recent_home_matches.map((m, idx) => {
+                        const obtained = m.home_team === selectedMatchDetails.home_team ? m.first_half_corners_home : m.first_half_corners_away;
+                        const conceded = m.home_team === selectedMatchDetails.home_team ? m.first_half_corners_away : m.first_half_corners_home;
+                        return (
+                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', background: 'rgba(255,255,255,0.01)', borderRadius: '6px', fontSize: '12.5px', alignItems: 'center' }}>
+                            <span style={{ color: 'var(--text-secondary)', fontSize: '11.5px' }}>{m.date}</span>
+                            <span style={{ color: 'var(--text-primary)' }}>
+                              {m.home_team} <strong style={{ color: 'var(--text-muted)' }}>{m.score}</strong> {m.away_team}
+                            </span>
+                            <span style={{ fontWeight: 600, color: 'var(--color-accent-solid)' }}>
+                              Corners : {obtained} obtenues / {conceded} concédés (1MT)
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic' }}>Aucun match récent en cache.</p>
+                  )}
+                </div>
+
+                {/* Section 3: Recent Away */}
+                <div>
+                  <h4 style={{ fontSize: '14px', fontFamily: 'Outfit', color: 'var(--text-primary)', marginBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '4px' }}>
+                    Derniers matchs de {selectedMatchDetails.away_team}
+                  </h4>
+                  {selectedMatchDetails.recent_away_matches && selectedMatchDetails.recent_away_matches.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {selectedMatchDetails.recent_away_matches.map((m, idx) => {
+                        const obtained = m.home_team === selectedMatchDetails.away_team ? m.first_half_corners_home : m.first_half_corners_away;
+                        const conceded = m.home_team === selectedMatchDetails.away_team ? m.first_half_corners_away : m.first_half_corners_home;
+                        return (
+                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', background: 'rgba(255,255,255,0.01)', borderRadius: '6px', fontSize: '12.5px', alignItems: 'center' }}>
+                            <span style={{ color: 'var(--text-secondary)', fontSize: '11.5px' }}>{m.date}</span>
+                            <span style={{ color: 'var(--text-primary)' }}>
+                              {m.home_team} <strong style={{ color: 'var(--text-muted)' }}>{m.score}</strong> {m.away_team}
+                            </span>
+                            <span style={{ fontWeight: 600, color: 'var(--color-accent-solid)' }}>
+                              Corners : {obtained} obtenues / {conceded} concédés (1MT)
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic' }}>Aucun match récent en cache.</p>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ borderTop: '1px solid var(--border-color)', marginTop: '24px', paddingTop: '16px', display: 'flex', justifyContent: 'flex-end' }}>
+                <button className="btn btn-secondary" onClick={() => setSelectedMatchDetails(null)}>
+                  Fermer
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================
+           BATCH SELECTION FLOAT ACTION BAR
+           ======================================================================== */}
+        {selectedPredIds.length > 0 && (
+          <div 
+            style={{
+              position: 'fixed',
+              bottom: '24px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              background: 'rgba(15, 23, 42, 0.85)',
+              backdropFilter: 'blur(12px)',
+              border: '1.5px solid var(--color-accent-solid)',
+              borderRadius: '16px',
+              padding: '12px 24px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '30px',
+              boxShadow: '0 10px 30px rgba(0, 0, 0, 0.5), 0 0 20px rgba(0, 98, 255, 0.2)',
+              zIndex: 900,
+              width: 'max-content',
+              maxWidth: '90%'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-accent-solid)' }}></span>
+              <span style={{ fontSize: '14px', fontWeight: 600, fontFamily: 'Outfit', color: '#ffffff' }}>
+                {selectedPredIds.length} match{selectedPredIds.length > 1 ? 's' : ''} sélectionné{selectedPredIds.length > 1 ? 's' : ''}
+              </span>
+            </div>
+            
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button 
+                className="btn btn-secondary" 
+                style={{ padding: '6px 14px', fontSize: '12.5px', background: 'rgba(255,255,255,0.05)', color: '#cccccc', border: '1px solid rgba(255,255,255,0.1)' }}
+                onClick={() => setSelectedPredIds([])}
+              >
+                Tout désélectionner
+              </button>
+              <button 
+                className="btn btn-primary" 
+                style={{ padding: '6px 16px', fontSize: '12.5px' }}
+                onClick={handleOpenBatchPlacement}
+              >
+                <Plus size={14} style={{ marginRight: '4px' }} />
+                Placer ces Paris
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================
+           MODAL: BATCH BETS PLACEMENT
+           ======================================================================== */}
+        {showBatchBetModal && (
+          <div className="modal-overlay">
+            <div className="modal-content glass-card" style={{ maxWidth: '850px', width: '95%', padding: '24px 30px', maxHeight: '88vh', overflowY: 'auto' }}>
+              <div className="modal-header" style={{ padding: '0 0 16px 0', marginBottom: '20px' }}>
+                <h3 className="modal-title" style={{ fontFamily: 'Outfit', fontSize: '20px' }}>
+                  Placer {batchBetsForm.length} Paris en Lot
+                </h3>
+                <button className="modal-close" onClick={() => setShowBatchBetModal(false)} disabled={batchLoading}>
+                  <X size={20} />
+                </button>
+              </div>
+
+              {batchLoading ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '250px', gap: '16px' }}>
+                  <RefreshCcw size={40} className="console-line system animate-spin" />
+                  <p style={{ fontFamily: 'Outfit', fontWeight: 600 }}>Enregistrement des paris en lot en cours...</p>
+                  <div style={{ width: '200px', height: '6px', background: 'var(--bg-tertiary)', borderRadius: '3px', overflow: 'hidden', marginTop: '8px' }}>
+                    <div style={{ width: `${(batchProgress / batchBetsForm.length) * 100}%`, height: '100%', background: 'var(--grad-accent)', transition: 'width 0.3s ease' }}></div>
+                  </div>
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{batchProgress} / {batchBetsForm.length} paris finalisés</span>
+                </div>
+              ) : (
+                <form onSubmit={handleConfirmBatchBets}>
+                  <div className="modal-body" style={{ padding: 0, display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    
+                    {/* Batch Global settings Bar */}
+                    <div style={{ background: 'var(--bg-tertiary)', padding: '14px 20px', borderRadius: '10px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Outils Uniformes :</span>
+                      </div>
+                      
+                      <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        {/* Global Stake Input */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <input 
+                            type="number" 
+                            className="form-control" 
+                            style={{ width: '80px', padding: '5px 8px', fontSize: '12.5px' }}
+                            placeholder="Mise €"
+                            value={batchGlobalStake}
+                            onChange={(e) => setBatchGlobalStake(e.target.value)}
+                          />
+                          <button 
+                            type="button" 
+                            className="btn btn-secondary" 
+                            style={{ padding: '5px 10px', fontSize: '11.5px' }}
+                            onClick={handleApplyGlobalStake}
+                          >
+                            Mise Globale
+                          </button>
+                        </div>
+
+                        {/* Global Bookmaker Input */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <input 
+                            type="text" 
+                            className="form-control" 
+                            style={{ width: '100px', padding: '5px 8px', fontSize: '12.5px' }}
+                            placeholder="Bookmaker"
+                            value={batchGlobalBookmaker}
+                            onChange={(e) => setBatchGlobalBookmaker(e.target.value)}
+                          />
+                          <button 
+                            type="button" 
+                            className="btn btn-secondary" 
+                            style={{ padding: '5px 10px', fontSize: '11.5px' }}
+                            onClick={handleApplyGlobalBookmaker}
+                          >
+                            Bookmaker Global
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Bets List Table */}
+                    <div style={{ maxHeight: '42vh', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '10px' }}>
+                      <table className="premium-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                        <thead>
+                          <tr style={{ background: 'var(--bg-tertiary)', borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>
+                            <th style={{ padding: '12px 14px' }}>Match / Ligne</th>
+                            <th style={{ padding: '12px 14px', width: '110px' }}>Cote</th>
+                            <th style={{ padding: '12px 14px', width: '110px' }}>Mise ({bankroll.currency})</th>
+                            <th style={{ padding: '12px 14px', width: '130px' }}>Bookmaker</th>
+                            <th style={{ padding: '12px 14px', width: '50px' }}></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {batchBetsForm.map((bet, idx) => (
+                            <tr key={idx} style={{ borderBottom: idx < batchBetsForm.length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none', background: 'transparent' }}>
+                              {/* Match & Tip info */}
+                              <td style={{ padding: '12px 14px' }}>
+                                <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', textTransform: 'uppercase' }}>{bet.league}</span>
+                                <span style={{ fontWeight: 600, color: 'var(--text-primary)', display: 'block', marginTop: '2px' }}>{bet.home_team} vs {bet.away_team}</span>
+                                <span style={{ fontSize: '12px', color: 'var(--color-accent-solid)', fontWeight: 700, display: 'inline-block', marginTop: '4px', background: 'rgba(0, 98, 255, 0.08)', padding: '2px 6px', borderRadius: '4px' }}>
+                                  {bet.best_tip} {bet.card_line}
+                                </span>
+                              </td>
+                              
+                              {/* Individual Odds */}
+                              <td style={{ padding: '12px 14px' }}>
+                                <input 
+                                  type="number" 
+                                  step="0.01"
+                                  className="form-control" 
+                                  style={{ padding: '5px 8px', fontSize: '12.5px' }}
+                                  required
+                                  value={bet.odds}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value);
+                                    setBatchBetsForm(prev => prev.map((b, i) => i === idx ? { ...b, odds: isNaN(val) ? '' : val } : b));
+                                  }}
+                                />
+                              </td>
+                              
+                              {/* Individual Stake */}
+                              <td style={{ padding: '12px 14px' }}>
+                                <input 
+                                  type="number" 
+                                  className="form-control" 
+                                  style={{ padding: '5px 8px', fontSize: '12.5px' }}
+                                  required
+                                  value={bet.stake}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value);
+                                    setBatchBetsForm(prev => prev.map((b, i) => i === idx ? { ...b, stake: isNaN(val) ? '' : val } : b));
+                                  }}
+                                />
+                              </td>
+
+                              {/* Individual Bookmaker */}
+                              <td style={{ padding: '12px 14px' }}>
+                                <input 
+                                  type="text" 
+                                  className="form-control" 
+                                  style={{ padding: '5px 8px', fontSize: '12.5px' }}
+                                  required
+                                  value={bet.bookmaker}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setBatchBetsForm(prev => prev.map((b, i) => i === idx ? { ...b, bookmaker: val } : b));
+                                  }}
+                                />
+                              </td>
+
+                              {/* Remove single item button */}
+                              <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                                <button 
+                                  type="button" 
+                                  style={{ background: 'none', border: 'none', color: 'var(--color-danger)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                  onClick={() => {
+                                    setBatchBetsForm(prev => prev.filter((_, i) => i !== idx));
+                                    // Remove from selected Pred IDs as well
+                                    setSelectedPredIds(prev => prev.filter(id => id !== bet.match_id));
+                                  }}
+                                  title="Retirer ce pari du lot"
+                                >
+                                  <X size={16} />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                          {batchBetsForm.length === 0 && (
+                            <tr>
+                              <td colSpan="5" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '24px 0' }}>
+                                Aucun pari dans le lot.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div style={{ background: 'rgba(255, 255, 255, 0.01)', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '12px 18px', display: 'flex', justifyContent: 'space-between', fontSize: '13.5px' }}>
+                      <span style={{ color: 'var(--text-secondary)' }}>
+                        Mise totale estimée :
+                      </span>
+                      <strong style={{ color: 'var(--text-primary)' }}>
+                        {batchBetsForm.reduce((acc, b) => acc + (parseFloat(b.stake) || 0), 0).toFixed(2)} {bankroll.currency}
+                      </strong>
+                    </div>
+
+                  </div>
+
+                  <div className="modal-footer" style={{ padding: '20px 0 0 0', marginTop: '20px', borderTop: '1px solid var(--border-color)' }}>
+                    <button type="button" className="btn btn-secondary" onClick={() => setShowBatchBetModal(false)} disabled={batchLoading}>
+                      Annuler
+                    </button>
+                    <button type="submit" className="btn btn-primary" disabled={batchLoading || batchBetsForm.length === 0}>
+                      Valider et Enregistrer ces {batchBetsForm.length} Paris
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           </div>
         )}
