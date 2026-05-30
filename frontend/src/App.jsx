@@ -454,7 +454,7 @@ export default function App() {
            ======================================================================== */}
         <header className="header-container">
           <div className="header-title-section">
-            <h1 className="page-title text-gradient-left">
+            <h1 className="page-title text-gradient-accent">
               {activeTab === 'dashboard' && 'Tableau de Bord'}
               {activeTab === 'scraper' && 'Predictions RatingBet'}
               {activeTab === 'tracker' && 'Tracker de Paris'}
@@ -477,7 +477,7 @@ export default function App() {
             )}
             
             <div className="glass-card" style={{ padding: '10px 20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <Wallet size={16} className="text-gradient-right" />
+              <Wallet size={16} className="text-gradient-accent" />
               <span style={{ fontWeight: 700, fontFamily: 'Outfit' }}>
                 Bankroll: {bankroll.balance?.toFixed(2)} {bankroll.currency}
               </span>
@@ -507,7 +507,7 @@ export default function App() {
                           {stats.bankroll?.current?.toFixed(2)} {stats.bankroll?.currency}
                         </h3>
                       </div>
-                      <div className="logo-icon" style={{ background: 'var(--grad-left)' }}><Wallet size={18} style={{ color: '#050a15' }} /></div>
+                      <div className="metric-icon-box"><Wallet size={18} /></div>
                     </div>
                     <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '12px' }}>
                       Départ: {stats.bankroll?.initial?.toFixed(2)} {stats.bankroll?.currency}
@@ -526,7 +526,7 @@ export default function App() {
                           {stats.summary?.total_profit >= 0 ? '+' : ''}{stats.summary?.total_profit?.toFixed(2)} {stats.bankroll?.currency}
                         </h3>
                       </div>
-                      <div className="logo-icon" style={{ background: 'var(--grad-right)' }}><TrendingUp size={18} /></div>
+                      <div className="metric-icon-box"><TrendingUp size={18} /></div>
                     </div>
                     <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '12px' }}>
                       Ce mois-ci : {stats.summary?.current_month_profit >= 0 ? '+' : ''}{stats.summary?.current_month_profit?.toFixed(2)} {stats.bankroll?.currency}
@@ -541,7 +541,7 @@ export default function App() {
                           {stats.summary?.roi?.toFixed(1)} %
                         </h3>
                       </div>
-                      <div className="logo-icon" style={{ background: 'var(--grad-left)' }}><Percent size={18} style={{ color: '#050a15' }} /></div>
+                      <div className="metric-icon-box"><Percent size={18} /></div>
                     </div>
                     <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '12px' }}>
                       Volume de mises : {stats.summary?.total_stake?.toFixed(2)} {stats.bankroll?.currency}
@@ -556,7 +556,7 @@ export default function App() {
                           {stats.summary?.win_rate?.toFixed(1)} %
                         </h3>
                       </div>
-                      <div className="logo-icon" style={{ background: 'var(--grad-right)' }}><Award size={18} /></div>
+                      <div className="metric-icon-box"><Award size={18} /></div>
                     </div>
                     <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '12px' }}>
                       {stats.summary?.counts?.won} Gagnés | {stats.summary?.counts?.lost} Perdus | {stats.summary?.counts?.pending} En cours
@@ -574,13 +574,13 @@ export default function App() {
                         <svg viewBox="0 0 800 230" className="chart-svg-container" style={{ overflow: 'visible', width: '100%', height: 'auto' }}>
                           <defs>
                             <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#0062ff" stopOpacity="0.4"/>
-                              <stop offset="100%" stopColor="#7f00ff" stopOpacity="0.0"/>
+                              <stop offset="0%" stopColor="var(--chart-stop-mid)" stopOpacity="0.2"/>
+                              <stop offset="100%" stopColor="var(--chart-stop-start)" stopOpacity="0.0"/>
                             </linearGradient>
                             <linearGradient id="lineGradient" x1="0" y1="0" x2="1" y2="0">
-                              <stop offset="0%" stopColor="#0062ff"/>
-                              <stop offset="50%" stopColor="#00f5a0"/>
-                              <stop offset="100%" stopColor="#7f00ff"/>
+                              <stop offset="0%" stopColor="var(--chart-stop-start)"/>
+                              <stop offset="50%" stopColor="var(--chart-stop-mid)"/>
+                              <stop offset="100%" stopColor="var(--chart-stop-end)"/>
                             </linearGradient>
                           </defs>
 
@@ -606,8 +606,8 @@ export default function App() {
                                       cx={p.x} 
                                       cy={p.y} 
                                       r="4" 
-                                      fill="#050a15" 
-                                      stroke="#00f5a0" 
+                                      fill="var(--bg-primary)" 
+                                      stroke="var(--color-accent-solid)" 
                                       strokeWidth="2.5" 
                                     />
                                     {/* Hover helper ring */}
@@ -664,7 +664,7 @@ export default function App() {
                               <div style={{ 
                                 width: `${Math.min(100, Math.max(10, (league.won / (league.total || 1)) * 100))}%`, 
                                 height: '100%',
-                                background: league.profit >= 0 ? 'var(--grad-left)' : 'var(--color-danger)'
+                                background: league.profit >= 0 ? 'var(--grad-accent)' : 'var(--color-danger)'
                               }} />
                             </div>
                             <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
@@ -699,7 +699,7 @@ export default function App() {
                               <div style={{ 
                                 width: `${Math.min(100, Math.max(10, (bm.won / (bm.total || 1)) * 100))}%`, 
                                 height: '100%',
-                                background: bm.profit >= 0 ? 'var(--grad-right)' : 'var(--color-danger)'
+                                background: bm.profit >= 0 ? 'var(--grad-accent)' : 'var(--color-danger)'
                               }} />
                             </div>
                             <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
@@ -845,7 +845,7 @@ export default function App() {
                         onChange={(e) => setPredHighProbOnly(e.target.checked)}
                         style={{ width: '18px', height: '18px', cursor: 'pointer' }}
                       />
-                      <span className="text-gradient-left">Forte probabilité (≥60%)</span>
+                      <span className="text-gradient-accent">Forte probabilité (≥60%)</span>
                     </label>
 
                     {/* Search bar */}
@@ -1164,7 +1164,7 @@ export default function App() {
                 <div className="grid-2">
                   <div className="glass-card">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-                      <div className="logo-icon" style={{ background: 'var(--grad-left)' }}>1</div>
+                      <div className="logo-icon">1</div>
                       <h4 style={{ fontSize: '18px', fontFamily: 'Outfit' }}>La Stratégie "Forte Probabilité ≥60%"</h4>
                     </div>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: 1.5, marginBottom: '16px' }}>
@@ -1189,7 +1189,7 @@ export default function App() {
 
                   <div className="glass-card">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-                      <div className="logo-icon" style={{ background: 'var(--grad-right)' }}>2</div>
+                      <div className="logo-icon">2</div>
                       <h4 style={{ fontSize: '18px', fontFamily: 'Outfit' }}>La Stratégie "Value Over 4.5"</h4>
                     </div>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: 1.5, marginBottom: '16px' }}>

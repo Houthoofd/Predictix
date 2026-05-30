@@ -58,6 +58,10 @@
   --scrollbar-thumb: #1e293b;
   --scrollbar-track: #060b15;
   --grad-accent: var(--grad-left);
+  --color-accent-solid: #00f5a0;
+  --chart-stop-start: #0062ff;
+  --chart-stop-mid: #00d2ff;
+  --chart-stop-end: #00f5a0;
 }
 
 /* Theme 2: Sombre Technologique (Logo Droite Accent) */
@@ -81,6 +85,10 @@
   --scrollbar-thumb: #1e293b;
   --scrollbar-track: #04060f;
   --grad-accent: var(--grad-right);
+  --color-accent-solid: #bf5af2;
+  --chart-stop-start: #7f00ff;
+  --chart-stop-mid: #0082ff;
+  --chart-stop-end: #00f5d4;
 }
 
 /* Theme 3: Clair Minimaliste (Sobre & Léger) */
@@ -103,7 +111,11 @@
   --chart-grid: rgba(15, 23, 42, 0.015);
   --scrollbar-thumb: #cbd5e1;
   --scrollbar-track: #f1f5f9;
-  --grad-accent: linear-gradient(135deg, #0062ff 0%, #0099ff 100%);
+  --grad-accent: linear-gradient(135deg, #0052d4 0%, #4364f7 50%, #6fb1fc 100%);
+  --color-accent-solid: #2563eb;
+  --chart-stop-start: #0052d4;
+  --chart-stop-mid: #4364f7;
+  --chart-stop-end: #6fb1fc;
 }
 
 /* ========================================================================
@@ -180,26 +192,27 @@ h1, h2, h3, h4, h5, h6 {
    Utility Classes & Components
    ======================================================================== */
 
-/* Text Gradients */
-.text-gradient-left {
-  background: var(--grad-left);
+/* Dynamic Text Accent Gradient */
+.text-gradient-accent {
+  background: var(--grad-accent);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  display: inline-block;
 }
 
-.text-gradient-right {
-  background: var(--grad-right);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.text-gradient-brand {
-  background: var(--grad-brand);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+/* Metric Card Icon Container - Ultra Premium & Minimalist */
+.metric-icon-box {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--color-accent-solid);
+  transition: color var(--transition-fast), border-color var(--transition-fast);
 }
 
 /* Premium Sober Cards */
