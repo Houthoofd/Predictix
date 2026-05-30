@@ -199,7 +199,7 @@ export default function App() {
     }
   };
 
-  // Place Bet from RatingBet Prediction
+  // Place Bet from Match en Direct Prediction
   const handleQuickPlaceBet = (pred) => {
     // Extract probability number (e.g. "65%" -> 65)
     const probNum = parseInt(pred.probability.replace('%', ''));
@@ -224,7 +224,7 @@ export default function App() {
       probability: isNaN(probNum) ? '' : probNum,
       bookmaker: 'Unibet',
       status: 'PENDING',
-      notes: `Placé depuis la prédiction RatingBet (Probabilité: ${pred.probability}, Taux de réussite historique: ${pred.win_rate})`
+      notes: `Placé depuis la prédiction Match en Direct (Probabilité: ${pred.probability}, Taux de réussite historique: ${pred.win_rate})`
     });
     setPrefilledBet(pred);
     setShowAddBetModal(true);
@@ -376,10 +376,10 @@ export default function App() {
             <button 
               className={`nav-item ${activeTab === 'scraper' ? 'active' : ''}`}
               onClick={() => setActiveTab('scraper')}
-              title={sidebarCollapsed ? "RatingBet Predictions" : ""}
+              title={sidebarCollapsed ? "Match en Direct" : ""}
             >
               <Database size={20} />
-              {!sidebarCollapsed && <span>RatingBet Predictions</span>}
+              {!sidebarCollapsed && <span>Match en Direct</span>}
             </button>
             <button 
               className={`nav-item ${activeTab === 'tracker' ? 'active' : ''}`}
@@ -445,7 +445,7 @@ export default function App() {
               <ChevronRight size={12} className="crumb-separator" />
               <span className="crumb-active">
                 {activeTab === 'dashboard' && 'Tableau de Bord'}
-                {activeTab === 'scraper' && 'Predictions RatingBet'}
+                {activeTab === 'scraper' && 'Match en Direct'}
                 {activeTab === 'tracker' && 'Tracker de Paris'}
                 {activeTab === 'strategies' && 'Stratégies de Cartons'}
               </span>
@@ -509,13 +509,13 @@ export default function App() {
           <div className="header-title-section">
             <h2 className="page-title">
               {activeTab === 'dashboard' && 'Tableau de Bord'}
-              {activeTab === 'scraper' && 'Predictions RatingBet'}
+              {activeTab === 'scraper' && 'Match en Direct'}
               {activeTab === 'tracker' && 'Tracker de Paris'}
               {activeTab === 'strategies' && 'Stratégies de Cartons'}
             </h2>
             <p className="header-subtitle">
               {activeTab === 'dashboard' && 'Statistiques de bankroll en temps réel et performances.'}
-              {activeTab === 'scraper' && 'Gérez et exécutez le scraper de cartons football en temps réel.'}
+              {activeTab === 'scraper' && 'Gérez et exécutez le scraper de match-en-direct.fr en temps réel.'}
               {activeTab === 'tracker' && 'Journalisez vos paris sportifs pour optimiser votre capital.'}
               {activeTab === 'strategies' && 'Analyse des cibles de paris à forte espérance mathématique.'}
             </p>
@@ -826,10 +826,10 @@ export default function App() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
                     <div>
                       <h3 style={{ fontSize: '18px', fontFamily: 'Outfit' }}>
-                        Lancer le Scraper Go (RatingBet.com)
+                        Lancer le Scraper Go (MatchEnDirect.fr)
                       </h3>
                       <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                        Compile et démarre le serveur de workflow, navigue sur RatingBet en direct pour extraire les cotes et probabilités de cartons.
+                        Compile et démarre le serveur de workflow, navigue sur MatchEnDirect en direct pour extraire les statistiques et cotes.
                       </p>
                     </div>
                     
@@ -1027,7 +1027,7 @@ export default function App() {
                   <div className="glass-card" style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
                     <AlertCircle size={36} style={{ marginBottom: '12px' }} />
                     <p>Aucune prédiction de cartons trouvée correspondante aux critères.</p>
-                    <p style={{ fontSize: '13px', marginTop: '8px' }}>Activez le scraper ci-dessus pour récupérer des matchs en direct depuis RatingBet.</p>
+                    <p style={{ fontSize: '13px', marginTop: '8px' }}>Activez le scraper ci-dessus pour récupérer des matchs en direct depuis Match en Direct.</p>
                   </div>
                 )}
               </div>
@@ -1118,7 +1118,7 @@ export default function App() {
                         {bets.filter(b => b.status === 'PENDING').length === 0 && (
                           <tr>
                             <td colSpan="9" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '24px 0' }}>
-                              Aucun pari actif en attente de résultat. Cliquez sur "Nouveau Pari" ou utilisez la section RatingBet pour en rajouter un.
+                              Aucun pari actif en attente de résultat. Cliquez sur "Nouveau Pari" ou utilisez la section Match en Direct pour en rajouter un.
                             </td>
                           </tr>
                         )}
@@ -1214,7 +1214,7 @@ export default function App() {
                     Comment utiliser les statistiques automatiques ?
                   </h3>
                   <p style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                    Les paris sportifs ne sont pas qu'une question de hasard, c'est une question de **value betting** (trouver des cotes mal ajustées). En utilisant le scraper RatingBet football spécialisé sur les **Cartons Jaunes et Rouges Over/Under**, nous ciblons les ligues et les équipes avec un historique d'agressivité élevé et des arbitres sévères.
+                    Les paris sportifs ne sont pas qu'une question de hasard, c'est une question de **value betting** (trouver des cotes mal ajustées). En utilisant le scraper Match en Direct football spécialisé sur les **Cartons Jaunes et Rouges Over/Under**, nous ciblons les ligues et les équipes avec un historique d'agressivité élevé et des arbitres sévères.
                   </p>
                 </div>
 
@@ -1226,7 +1226,7 @@ export default function App() {
                       <h4 style={{ fontSize: '18px', fontFamily: 'Outfit' }}>La Stratégie "Forte Probabilité ≥60%"</h4>
                     </div>
                     <p style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: 1.5, marginBottom: '16px' }}>
-                      Ne pariez **uniquement** que sur les matchs où le modèle prédictif RatingBet affiche un taux de confiance supérieur ou égal à **60%** pour l'Over de cartons.
+                      Ne pariez **uniquement** que sur les matchs où le modèle prédictif Match en Direct affiche un taux de confiance supérieur ou égal à **60%** pour l'Over de cartons.
                     </p>
                     <div style={{ background: 'var(--bg-tertiary)', padding: '16px', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
                       <p style={{ fontWeight: 700, fontSize: '13px', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Simulation de Rentabilité</p>
@@ -1277,7 +1277,7 @@ export default function App() {
                     Analyse des Matchs Récemment Scrapés
                   </h3>
                   <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '20px' }}>
-                    Sur l'ensemble des matchs scrapés terminés en base de données, voici la précision historique des prédictions RatingBet :
+                    Sur l'ensemble des matchs scrapés terminés en base de données, voici la précision historique des prédictions Match en Direct :
                   </p>
                   
                   <div className="grid-3">

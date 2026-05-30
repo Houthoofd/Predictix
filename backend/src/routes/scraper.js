@@ -16,22 +16,25 @@ router.get('/predictions', async (req, res) => {
   }
 });
 
-// Helper: Scan scraper output directory and return path of the newest JSON file
-function getNewestScrapedFile(outputDir) {
-  if (!fs.existsSync(outputDir)) {
-    return null;
+// Helper: Scan scraper output directories and return path of the newest JSON file
+function getNewestScrapedFile(outputDirs) {
+  let allFiles = [];
+  
+  for (const dir of outputDirs) {
+    if (fs.existsSync(dir)) {
+      const files = fs.readdirSync(dir)
+        .filter(file => file.endsWith('.json'))
+        .map(file => {
+          const filePath = path.join(dir, file);
+          const stat = fs.statSync(filePath);
+          return { path: filePath, mtime: stat.mtime };
+        });
+      allFiles = allFiles.concat(files);
+    }
   }
 
-  const files = fs.readdirSync(outputDir)
-    .filter(file => file.startsWith('ratingbet_') && file.endsWith('.json'))
-    .map(file => {
-      const filePath = path.join(outputDir, file);
-      const stat = fs.statSync(filePath);
-      return { path: filePath, mtime: stat.mtime };
-    })
-    .sort((a, b) => b.mtime - a.mtime);
-
-  return files.length > 0 ? files[0].path : null;
+  allFiles.sort((a, b) => b.mtime - a.mtime);
+  return allFiles.length > 0 ? allFiles[0].path : null;
 }
 
 // Trigger scraper execution and stream progress via Server-Sent Events (SSE)
@@ -47,7 +50,11 @@ router.post('/predictions/scrape', (req, res) => {
   };
 
   const scraperPath = process.env.SCRAPER_PATH || 'E:\\Developpement\\scrapper-v3';
-  const outputDir = path.join(scraperPath, 'data', 'ratingbet');
+  const outputDirs = [
+    path.join(scraperPath, 'data', 'matchendirect'),
+    path.join(scraperPath, 'data', 'ratingbet'),
+    path.join(scraperPath, 'data')
+  ];
 
   sendEvent('log', { message: `[Predictix] Initialisation du scraping dans: ${scraperPath}` });
   
@@ -56,8 +63,20 @@ router.post('/predictions/scrape', (req, res) => {
     return res.end();
   }
 
+  // Detect script to spawn (auto-detect scrape-matchendirect.bat, .sh or fallback to ratingbet)
+  let scriptName = process.env.SCRAPER_SCRIPT || 'scrape-ratingbet.bat';
+  if (!process.env.SCRAPER_SCRIPT) {
+    if (fs.existsSync(path.join(scraperPath, 'scrape-matchendirect.bat'))) {
+      scriptName = 'scrape-matchendirect.bat';
+    } else if (fs.existsSync(path.join(scraperPath, 'scrape-matchendirect.sh'))) {
+      scriptName = 'scrape-matchendirect.sh';
+    }
+  }
+
+  sendEvent('log', { message: `[Predictix] Execution du script: ${scriptName}` });
+
   // Spawn the batch file
-  const child = spawn('cmd.exe', ['/c', 'scrape-ratingbet.bat', 'verbose'], {
+  const child = spawn('cmd.exe', ['/c', scriptName, 'verbose'], {
     cwd: scraperPath,
     env: { ...process.env, FORCE_COLOR: '1' }
   });
@@ -102,9 +121,9 @@ router.post('/predictions/scrape', (req, res) => {
     try {
       sendEvent('log', { message: '[Predictix] Analyse et importation des données...' });
       
-      const newestFile = getNewestScrapedFile(outputDir);
+      const newestFile = getNewestScrapedFile(outputDirs);
       if (!newestFile) {
-        sendEvent('error', { message: `Aucun fichier de données scrapées trouvé dans ${outputDir}` });
+        sendEvent('error', { message: `Aucun fichier de données scrapées (.json) trouvé dans les répertoires scannés.` });
         return res.end();
       }
 
