@@ -545,14 +545,21 @@ select.form-control {
 }
 
 .sidebar.collapsed .nav-item.active {
-  border-left: none;
-  background: var(--bg-tertiary);
-  color: var(--color-accent-solid);
-  box-shadow: inset 0 0 0 1px var(--color-accent-solid);
-  border-top-left-radius: 0;
-  border-bottom-left-radius: 0;
-  border-top-right-radius: var(--radius-sm);
-  border-bottom-right-radius: var(--radius-sm);
+  border-left: none !important;
+  background: var(--bg-tertiary) !important;
+  color: var(--color-accent-solid) !important;
+  box-shadow: inset 0 0 0 1px var(--color-accent-solid) !important;
+  border-top-left-radius: 0px !important;
+  border-bottom-left-radius: 0px !important;
+  border-top-right-radius: var(--radius-sm) !important;
+  border-bottom-right-radius: var(--radius-sm) !important;
+}
+
+.sidebar.collapsed .nav-item:hover {
+  border-top-left-radius: 0px !important;
+  border-bottom-left-radius: 0px !important;
+  border-top-right-radius: var(--radius-sm) !important;
+  border-bottom-right-radius: var(--radius-sm) !important;
 }
 
 .sidebar-footer {
