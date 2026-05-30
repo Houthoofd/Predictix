@@ -41,33 +41,32 @@ router.get('/predictions', async (req, res) => {
     const enrichedRows = [];
     
     for (const row of rows) {
-      // Find historical H2H matches between A and B
-      // Find historical H2H matches between A and B
+      // Find historical H2H matches between A and B (up to 10)
       const h2hMatches = await dbQuery(`
-        SELECT first_half_corners_home, first_half_corners_away, home_team, away_team, score, date, tournament
+        SELECT first_half_corners_home, first_half_corners_away, home_team, away_team, home_logo, away_logo, score, date, tournament
         FROM scraped_predictions 
         WHERE is_finished = 1 
           AND ((home_team = ? AND away_team = ?) OR (home_team = ? AND away_team = ?))
-        ORDER BY date DESC LIMIT 5
+        ORDER BY date DESC LIMIT 10
       `, [row.home_team, row.away_team, row.away_team, row.home_team]);
       
-      // Find Team A (Home) recent matches
+      // Find Team A (Home) recent matches played STRICTLY at Domicile (up to 10)
       const homeMatches = await dbQuery(`
-        SELECT first_half_corners_home, first_half_corners_away, home_team, away_team, score, date, tournament
+        SELECT first_half_corners_home, first_half_corners_away, home_team, away_team, home_logo, away_logo, score, date, tournament
         FROM scraped_predictions 
         WHERE is_finished = 1 
-          AND (home_team = ? OR away_team = ?)
-        ORDER BY date DESC LIMIT 5
-      `, [row.home_team, row.home_team]);
+          AND home_team = ?
+        ORDER BY date DESC LIMIT 10
+      `, [row.home_team]);
       
-      // Find Team B (Away) recent matches
+      // Find Team B (Away) recent matches played STRICTLY at Extérieur (up to 10)
       const awayMatches = await dbQuery(`
-        SELECT first_half_corners_home, first_half_corners_away, home_team, away_team, score, date, tournament
+        SELECT first_half_corners_home, first_half_corners_away, home_team, away_team, home_logo, away_logo, score, date, tournament
         FROM scraped_predictions 
         WHERE is_finished = 1 
-          AND (home_team = ? OR away_team = ?)
-        ORDER BY date DESC LIMIT 5
-      `, [row.away_team, row.away_team]);
+          AND away_team = ?
+        ORDER BY date DESC LIMIT 10
+      `, [row.away_team]);
       
       // Calculate H2H corners average (Total match corners in H2H)
       let h2hSum = 0;
@@ -348,8 +347,9 @@ router.post('/predictions/scrape', (req, res) => {
           INSERT OR REPLACE INTO scraped_predictions (
             match_id, time, date, tournament, home_team, away_team, score,
             over_odds, under_odds, card_line, probability, best_tip, win_rate, status,
-            is_live, is_finished, first_half_corners_home, first_half_corners_away, odds_corners, scraped_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            is_live, is_finished, first_half_corners_home, first_half_corners_away, odds_corners,
+            home_logo, away_logo, scraped_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         `;
 
         await dbRun(sql, [
@@ -371,7 +371,9 @@ router.post('/predictions/scrape', (req, res) => {
           isFinished,
           match.first_half_corners_home !== undefined ? match.first_half_corners_home : null,
           match.first_half_corners_away !== undefined ? match.first_half_corners_away : null,
-          match.odds_corners ? JSON.stringify(match.odds_corners) : null
+          match.odds_corners ? JSON.stringify(match.odds_corners) : null,
+          match.home_logo || null,
+          match.away_logo || null
         ]);
 
         importedCount++;
@@ -390,7 +392,7 @@ router.post('/predictions/scrape', (req, res) => {
           
           sendEvent('log', { message: `[Predictix] ${match.historical_links.length - uncachedLinks.length} H2H/derniers matchs déjà en cache, ${uncachedLinks.length} nouveaux à scrapper.` });
           
-          const linksToScrape = uncachedLinks.slice(0, 3);
+          const linksToScrape = uncachedLinks.slice(0, 12);
           for (const link of linksToScrape) {
             sendEvent('log', { message: `[Predictix] Scraping de l'historique sur Tor : ${link}` });
             const histMatch = await scrapeSingleMatch(scraperPath, link);
@@ -400,8 +402,9 @@ router.post('/predictions/scrape', (req, res) => {
                 INSERT OR REPLACE INTO scraped_predictions (
                   match_id, time, date, tournament, home_team, away_team, score,
                   over_odds, under_odds, card_line, probability, best_tip, win_rate, status,
-                  is_live, is_finished, first_half_corners_home, first_half_corners_away, odds_corners, scraped_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                  is_live, is_finished, first_half_corners_home, first_half_corners_away, odds_corners,
+                  home_logo, away_logo, scraped_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
               `;
               
               await dbRun(sqlHist, [
@@ -416,7 +419,9 @@ router.post('/predictions/scrape', (req, res) => {
                 0, 1,
                 histMatch.first_half_corners_home,
                 histMatch.first_half_corners_away,
-                null
+                null,
+                histMatch.home_logo || null,
+                histMatch.away_logo || null
               ]);
               
               sendEvent('log', { message: `[Predictix] ✓ Historique importé : ${histMatch.home_team} vs ${histMatch.away_team} (Corners : ${histMatch.first_half_corners_home} - ${histMatch.first_half_corners_away})` });

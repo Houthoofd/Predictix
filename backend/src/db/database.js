@@ -118,6 +118,8 @@ function initDb() {
         first_half_corners_home INTEGER,
         first_half_corners_away INTEGER,
         odds_corners TEXT,
+        home_logo TEXT,
+        away_logo TEXT,
         scraped_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -137,6 +139,18 @@ function initDb() {
     
     db.run(`
       ALTER TABLE scraped_predictions ADD COLUMN odds_corners TEXT
+    `, (err) => {
+      // Ignore error if column already exists
+    });
+
+    db.run(`
+      ALTER TABLE scraped_predictions ADD COLUMN home_logo TEXT
+    `, (err) => {
+      // Ignore error if column already exists
+    });
+
+    db.run(`
+      ALTER TABLE scraped_predictions ADD COLUMN away_logo TEXT
     `, (err) => {
       // Ignore error if column already exists
     });

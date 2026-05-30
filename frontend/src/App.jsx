@@ -1174,11 +1174,21 @@ export default function App() {
                             </div>
 
                             {/* Teams and score */}
-                            <h4 style={{ fontSize: '16px', fontFamily: 'Outfit', lineHeight: 1.3, marginBottom: '6px' }}>
-                              {pred.home_team}
+                            <h4 style={{ fontSize: '16px', fontFamily: 'Outfit', lineHeight: 1.3, marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              {pred.home_logo ? (
+                                <img src={pred.home_logo} alt="" style={{ width: '18px', height: '18px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
+                              ) : (
+                                <div style={{ width: '18px', height: '18px', borderRadius: '50%', background: 'var(--bg-tertiary)', flexShrink: 0 }} />
+                              )}
+                              <span>{pred.home_team}</span>
                             </h4>
-                            <h4 style={{ fontSize: '16px', fontFamily: 'Outfit', lineHeight: 1.3, marginBottom: '8px' }}>
-                              {pred.away_team}
+                            <h4 style={{ fontSize: '16px', fontFamily: 'Outfit', lineHeight: 1.3, marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              {pred.away_logo ? (
+                                <img src={pred.away_logo} alt="" style={{ width: '18px', height: '18px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
+                              ) : (
+                                <div style={{ width: '18px', height: '18px', borderRadius: '50%', background: 'var(--bg-tertiary)', flexShrink: 0 }} />
+                              )}
+                              <span>{pred.away_team}</span>
                             </h4>
 
                             {/* Score & Corners displaying if live or finished */}
@@ -1873,11 +1883,27 @@ export default function App() {
                   <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                     {selectedMatchDetails.tournament || 'Football'}
                   </span>
-                  <h3 style={{ fontSize: '20px', fontFamily: 'Outfit', color: 'var(--text-primary)', marginTop: '4px' }}>
-                    {selectedMatchDetails.home_team} vs {selectedMatchDetails.away_team}
-                  </h3>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '6px', flexWrap: 'wrap' }}>
+                    {selectedMatchDetails.home_logo ? (
+                      <img src={selectedMatchDetails.home_logo} alt="" style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
+                    ) : (
+                      <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--bg-tertiary)', flexShrink: 0 }} />
+                    )}
+                    <h3 style={{ fontSize: '20px', fontFamily: 'Outfit', color: 'var(--text-primary)', margin: 0, fontWeight: 700 }}>
+                      {selectedMatchDetails.home_team}
+                    </h3>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '15px', fontWeight: 600 }}>vs</span>
+                    {selectedMatchDetails.away_logo ? (
+                      <img src={selectedMatchDetails.away_logo} alt="" style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
+                    ) : (
+                      <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--bg-tertiary)', flexShrink: 0 }} />
+                    )}
+                    <h3 style={{ fontSize: '20px', fontFamily: 'Outfit', color: 'var(--text-primary)', margin: 0, fontWeight: 700 }}>
+                      {selectedMatchDetails.away_team}
+                    </h3>
+                  </div>
                 </div>
-                <button className="modal-close" onClick={() => setSelectedMatchDetails(null)}>
+                <button className="modal-close" onClick={() => setSelectedMatchDetails(null)} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '4px' }}>
                   <X size={18} />
                 </button>
               </div>
@@ -1908,81 +1934,129 @@ export default function App() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 {/* Section 1: H2H */}
                 <div>
-                  <h4 style={{ fontSize: '14px', fontFamily: 'Outfit', color: 'var(--text-primary)', marginBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '4px' }}>
+                  <h4 style={{ fontSize: '13px', fontFamily: 'Outfit', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)', marginBottom: '10px', borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '4px' }}>
                     Confrontations Directes (H2H)
                   </h4>
                   {selectedMatchDetails.recent_h2h_matches && selectedMatchDetails.recent_h2h_matches.length > 0 ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px', scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
                       {selectedMatchDetails.recent_h2h_matches.map((m, idx) => (
-                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', background: 'rgba(255,255,255,0.01)', borderRadius: '6px', fontSize: '12.5px', alignItems: 'center' }}>
-                          <span style={{ color: 'var(--text-secondary)', fontSize: '11.5px' }}>{m.date}</span>
-                          <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>
-                            {m.home_team} <strong style={{ color: 'var(--text-muted)' }}>{m.score}</strong> {m.away_team}
-                          </span>
-                          <span style={{ fontWeight: 700, color: 'var(--color-success)', background: 'rgba(16, 185, 129, 0.08)', padding: '2px 6px', borderRadius: '4px', fontSize: '11.5px' }}>
-                            Corners 1MT: {m.first_half_corners_home} - {m.first_half_corners_away}
+                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(255,255,255,0.015)', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '12.5px', alignItems: 'center' }}>
+                          <span style={{ color: 'var(--text-secondary)', fontSize: '11px', width: '70px', flexShrink: 0 }}>{m.date}</span>
+                          
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexGrow: 1, justifyContent: 'center', padding: '0 8px' }}>
+                            {m.home_logo ? (
+                              <img src={m.home_logo} alt="" style={{ width: '14px', height: '14px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
+                            ) : (
+                              <div style={{ width: '14px', height: '14px', borderRadius: '50%', background: 'var(--bg-tertiary)', flexShrink: 0 }} />
+                            )}
+                            <span style={{ color: 'var(--text-primary)', fontWeight: 500, maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>{m.home_team}</span>
+                            
+                            <strong style={{ color: 'var(--text-muted)', margin: '0 4px', background: 'rgba(255,255,255,0.04)', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', flexShrink: 0 }}>{m.score}</strong>
+                            
+                            <span style={{ color: 'var(--text-primary)', fontWeight: 500, maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>{m.away_team}</span>
+                            {m.away_logo ? (
+                              <img src={m.away_logo} alt="" style={{ width: '14px', height: '14px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
+                            ) : (
+                              <div style={{ width: '14px', height: '14px', borderRadius: '50%', background: 'var(--bg-tertiary)', flexShrink: 0 }} />
+                            )}
+                          </div>
+                          
+                          <span style={{ fontWeight: 700, color: 'var(--color-success)', background: 'rgba(16, 185, 129, 0.08)', padding: '3px 8px', borderRadius: '4px', fontSize: '11px', marginLeft: '12px', flexShrink: 0 }}>
+                            Corners: {m.first_half_corners_home} - {m.first_half_corners_away}
                           </span>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic' }}>Aucune confrontation H2H en cache dans l'historique.</p>
+                    <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic', margin: 0 }}>Aucune confrontation H2H en cache dans l'historique.</p>
                   )}
                 </div>
 
                 {/* Section 2: Recent Home */}
                 <div>
-                  <h4 style={{ fontSize: '14px', fontFamily: 'Outfit', color: 'var(--text-primary)', marginBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '4px' }}>
-                    Derniers matchs de {selectedMatchDetails.home_team}
+                  <h4 style={{ fontSize: '13px', fontFamily: 'Outfit', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)', marginBottom: '10px', borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '4px' }}>
+                    Derniers matchs de {selectedMatchDetails.home_team} (à domicile)
                   </h4>
                   {selectedMatchDetails.recent_home_matches && selectedMatchDetails.recent_home_matches.length > 0 ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px', scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
                       {selectedMatchDetails.recent_home_matches.map((m, idx) => {
                         const obtained = m.home_team === selectedMatchDetails.home_team ? m.first_half_corners_home : m.first_half_corners_away;
                         const conceded = m.home_team === selectedMatchDetails.home_team ? m.first_half_corners_away : m.first_half_corners_home;
                         return (
-                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', background: 'rgba(255,255,255,0.01)', borderRadius: '6px', fontSize: '12.5px', alignItems: 'center' }}>
-                            <span style={{ color: 'var(--text-secondary)', fontSize: '11.5px' }}>{m.date}</span>
-                            <span style={{ color: 'var(--text-primary)' }}>
-                              {m.home_team} <strong style={{ color: 'var(--text-muted)' }}>{m.score}</strong> {m.away_team}
-                            </span>
-                            <span style={{ fontWeight: 600, color: 'var(--color-accent-solid)' }}>
-                              Corners : {obtained} obtenues / {conceded} concédés (1MT)
+                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(255,255,255,0.015)', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '12.5px', alignItems: 'center' }}>
+                            <span style={{ color: 'var(--text-secondary)', fontSize: '11px', width: '70px', flexShrink: 0 }}>{m.date}</span>
+                            
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexGrow: 1, justifyContent: 'center', padding: '0 8px' }}>
+                              {m.home_logo ? (
+                                <img src={m.home_logo} alt="" style={{ width: '14px', height: '14px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
+                              ) : (
+                                <div style={{ width: '14px', height: '14px', borderRadius: '50%', background: 'var(--bg-tertiary)', flexShrink: 0 }} />
+                              )}
+                              <span style={{ color: 'var(--text-primary)', fontWeight: 500, maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>{m.home_team}</span>
+                              
+                              <strong style={{ color: 'var(--text-muted)', margin: '0 4px', background: 'rgba(255,255,255,0.04)', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', flexShrink: 0 }}>{m.score}</strong>
+                              
+                              <span style={{ color: 'var(--text-primary)', fontWeight: 500, maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>{m.away_team}</span>
+                              {m.away_logo ? (
+                                <img src={m.away_logo} alt="" style={{ width: '14px', height: '14px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
+                              ) : (
+                                <div style={{ width: '14px', height: '14px', borderRadius: '50%', background: 'var(--bg-tertiary)', flexShrink: 0 }} />
+                              )}
+                            </div>
+                            
+                            <span style={{ fontWeight: 600, color: 'var(--color-accent-solid)', background: 'rgba(9, 132, 227, 0.08)', padding: '3px 8px', borderRadius: '4px', fontSize: '11px', marginLeft: '12px', flexShrink: 0 }} title="Corners obtenus / concédés en 1ère mi-temps">
+                              Corners: {obtained} - {conceded}
                             </span>
                           </div>
                         );
                       })}
                     </div>
                   ) : (
-                    <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic' }}>Aucun match récent en cache.</p>
+                    <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic', margin: 0 }}>Aucun match récent en cache.</p>
                   )}
                 </div>
 
                 {/* Section 3: Recent Away */}
                 <div>
-                  <h4 style={{ fontSize: '14px', fontFamily: 'Outfit', color: 'var(--text-primary)', marginBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '4px' }}>
-                    Derniers matchs de {selectedMatchDetails.away_team}
+                  <h4 style={{ fontSize: '13px', fontFamily: 'Outfit', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)', marginBottom: '10px', borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '4px' }}>
+                    Derniers matchs de {selectedMatchDetails.away_team} (à l'extérieur)
                   </h4>
                   {selectedMatchDetails.recent_away_matches && selectedMatchDetails.recent_away_matches.length > 0 ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px', scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
                       {selectedMatchDetails.recent_away_matches.map((m, idx) => {
                         const obtained = m.home_team === selectedMatchDetails.away_team ? m.first_half_corners_home : m.first_half_corners_away;
                         const conceded = m.home_team === selectedMatchDetails.away_team ? m.first_half_corners_away : m.first_half_corners_home;
                         return (
-                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', background: 'rgba(255,255,255,0.01)', borderRadius: '6px', fontSize: '12.5px', alignItems: 'center' }}>
-                            <span style={{ color: 'var(--text-secondary)', fontSize: '11.5px' }}>{m.date}</span>
-                            <span style={{ color: 'var(--text-primary)' }}>
-                              {m.home_team} <strong style={{ color: 'var(--text-muted)' }}>{m.score}</strong> {m.away_team}
-                            </span>
-                            <span style={{ fontWeight: 600, color: 'var(--color-accent-solid)' }}>
-                              Corners : {obtained} obtenues / {conceded} concédés (1MT)
+                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(255,255,255,0.015)', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '12.5px', alignItems: 'center' }}>
+                            <span style={{ color: 'var(--text-secondary)', fontSize: '11px', width: '70px', flexShrink: 0 }}>{m.date}</span>
+                            
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexGrow: 1, justifyContent: 'center', padding: '0 8px' }}>
+                              {m.home_logo ? (
+                                <img src={m.home_logo} alt="" style={{ width: '14px', height: '14px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
+                              ) : (
+                                <div style={{ width: '14px', height: '14px', borderRadius: '50%', background: 'var(--bg-tertiary)', flexShrink: 0 }} />
+                              )}
+                              <span style={{ color: 'var(--text-primary)', fontWeight: 500, maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>{m.home_team}</span>
+                              
+                              <strong style={{ color: 'var(--text-muted)', margin: '0 4px', background: 'rgba(255,255,255,0.04)', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', flexShrink: 0 }}>{m.score}</strong>
+                              
+                              <span style={{ color: 'var(--text-primary)', fontWeight: 500, maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>{m.away_team}</span>
+                              {m.away_logo ? (
+                                <img src={m.away_logo} alt="" style={{ width: '14px', height: '14px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
+                              ) : (
+                                <div style={{ width: '14px', height: '14px', borderRadius: '50%', background: 'var(--bg-tertiary)', flexShrink: 0 }} />
+                              )}
+                            </div>
+                            
+                            <span style={{ fontWeight: 600, color: 'var(--color-accent-solid)', background: 'rgba(9, 132, 227, 0.08)', padding: '3px 8px', borderRadius: '4px', fontSize: '11px', marginLeft: '12px', flexShrink: 0 }} title="Corners obtenus / concédés en 1ère mi-temps">
+                              Corners: {obtained} - {conceded}
                             </span>
                           </div>
                         );
                       })}
                     </div>
                   ) : (
-                    <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic' }}>Aucun match récent en cache.</p>
+                    <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic', margin: 0 }}>Aucun match récent en cache.</p>
                   )}
                 </div>
               </div>
