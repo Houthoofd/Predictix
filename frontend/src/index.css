@@ -523,8 +523,14 @@ select.form-control {
 }
 
 .sidebar.collapsed .nav-item {
-  justify-content: center;
-  padding: 8px;
+  width: 32px !important;
+  height: 32px !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 0 auto 8px auto !important;
+  border-radius: var(--radius-sm) !important;
 }
 
 .nav-item:hover {
@@ -536,8 +542,7 @@ select.form-control {
   background: var(--bg-tertiary);
   color: var(--text-primary);
   border-left: 2.5px solid var(--color-accent-solid);
-  border-top-left-radius: 0;
-  border-bottom-left-radius: 0;
+  border-radius: 0px var(--radius-sm) var(--radius-sm) 0px !important;
 }
 
 .nav-item.active svg {
@@ -549,17 +554,11 @@ select.form-control {
   background: var(--bg-tertiary) !important;
   color: var(--color-accent-solid) !important;
   box-shadow: inset 0 0 0 1px var(--color-accent-solid) !important;
-  border-top-left-radius: 0px !important;
-  border-bottom-left-radius: 0px !important;
-  border-top-right-radius: var(--radius-sm) !important;
-  border-bottom-right-radius: var(--radius-sm) !important;
+  border-radius: 0px var(--radius-sm) var(--radius-sm) 0px !important;
 }
 
 .sidebar.collapsed .nav-item:hover {
-  border-top-left-radius: 0px !important;
-  border-bottom-left-radius: 0px !important;
-  border-top-right-radius: var(--radius-sm) !important;
-  border-bottom-right-radius: var(--radius-sm) !important;
+  border-radius: 0px var(--radius-sm) var(--radius-sm) 0px !important;
 }
 
 .sidebar-footer {
