@@ -408,6 +408,7 @@ export default function ScraperTab({
                     </div>
                   </div>
 
+
                   {/* Teams and score */}
                   <h4 style={{ fontSize: '16px', fontFamily: 'Outfit', lineHeight: 1.3, marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     {pred.home_logo ? (
@@ -453,7 +454,7 @@ export default function ScraperTab({
                       )}
                     </div>
                   )}
-                </div>
+
 
                 {/* Team Averages */}
                 {((pred.home_avg_first_half_corners !== undefined && pred.home_avg_first_half_corners !== null) || 
@@ -552,6 +553,7 @@ export default function ScraperTab({
                     {pred.time}
                   </span>
                 </div>
+              </div>
 
 
               {/* Recommendation card bottom */}
