@@ -621,8 +621,13 @@ export default function ScraperTab({
                             <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '3px', borderTop: idx > 0 ? '1px solid rgba(255,255,255,0.03)' : 'none', paddingTop: idx > 0 ? '5px' : '0' }}>
                               {wantOver && o.over_decimal && (
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', padding: '4px 6px', borderRadius: '4px', background: hasOverValue ? 'rgba(16, 185, 129, 0.06)' : 'transparent', border: hasOverValue ? '1px dashed rgba(16, 185, 129, 0.2)' : 'none' }}>
-                                  <span style={{ color: hasOverValue ? 'var(--color-success)' : 'var(--text-secondary)', fontWeight: hasOverValue ? 700 : 500 }}>
+                                  <span style={{ color: hasOverValue ? 'var(--color-success)' : 'var(--text-secondary)', fontWeight: hasOverValue ? 700 : 500, display: 'flex', alignItems: 'center' }}>
                                     Plus de {o.line} {o.market_type === '1st_half' ? '(1MT)' : '(Fin)'}
+                                    {o.is_estimated && (
+                                      <span style={{ fontSize: '9.5px', color: 'var(--color-accent-solid)', marginLeft: '4px', opacity: 0.8, cursor: 'help', textDecoration: 'underline dotted' }} title="Cote estimee via loi de Poisson a partir des cotes Temps Complet d'Oddschecker">
+                                        (est.)
+                                      </span>
+                                    )}
                                   </span>
                                   <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                                     <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{o.over_decimal}</span>
@@ -637,8 +642,13 @@ export default function ScraperTab({
 
                               {wantUnder && o.under_decimal && (
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', padding: '4px 6px', borderRadius: '4px', background: hasUnderValue ? 'rgba(16, 185, 129, 0.06)' : 'transparent', border: hasUnderValue ? '1px dashed rgba(16, 185, 129, 0.2)' : 'none' }}>
-                                  <span style={{ color: hasUnderValue ? 'var(--color-success)' : 'var(--text-secondary)', fontWeight: hasUnderValue ? 700 : 500 }}>
+                                  <span style={{ color: hasUnderValue ? 'var(--color-success)' : 'var(--text-secondary)', fontWeight: hasUnderValue ? 700 : 500, display: 'flex', alignItems: 'center' }}>
                                     Moins de {o.line} {o.market_type === '1st_half' ? '(1MT)' : '(Fin)'}
+                                    {o.is_estimated && (
+                                      <span style={{ fontSize: '9.5px', color: 'var(--color-accent-solid)', marginLeft: '4px', opacity: 0.8, cursor: 'help', textDecoration: 'underline dotted' }} title="Cote estimee via loi de Poisson a partir des cotes Temps Complet d'Oddschecker">
+                                        (est.)
+                                      </span>
+                                    )}
                                   </span>
                                   <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                                     <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{o.under_decimal}</span>

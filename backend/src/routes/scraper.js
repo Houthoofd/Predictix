@@ -37,6 +37,31 @@ function poissonUnder(lambda, line) {
   return sumUnder;
 }
 
+// Helper: Binary search to find expected lambda given target cumulative probability P(X <= k) = targetProb
+function findPoissonMean(k, targetProb) {
+  let low = 0.1;
+  let high = 30.0;
+  let mid = 0.0;
+  for (let iter = 0; iter < 40; iter++) {
+    mid = (low + high) / 2;
+    let sumUnder = 0;
+    let current = 1;
+    for (let i = 0; i <= k; i++) {
+      if (i > 0) {
+        current = current * mid / i;
+      }
+      sumUnder += current;
+    }
+    const prob = sumUnder * Math.exp(-mid);
+    if (prob > targetProb) {
+      low = mid;
+    } else {
+      high = mid;
+    }
+  }
+  return mid;
+}
+
 // Get cached predictions from database and compute predictive stats + Value Bets
 router.get('/predictions', async (req, res) => {
   try {
@@ -138,6 +163,49 @@ router.get('/predictions', async (req, res) => {
           oddsCorners = JSON.parse(row.odds_corners);
         }
       } catch (e) {}
+
+      // Project Full-Time corners odds to First-Half corners odds if First-Half is missing
+      const has1stHalf = oddsCorners.some(o => o.market_type === '1st_half');
+      const hasFullTime = oddsCorners.some(o => o.market_type === 'full_time');
+
+      if (!has1stHalf && hasFullTime) {
+        const ftLine = oddsCorners.find(o => o.market_type === 'full_time' && o.over_decimal && o.under_decimal);
+        if (ftLine) {
+          const pOver = 1 / ftLine.over_decimal;
+          const pUnder = 1 / ftLine.under_decimal;
+          const totalP = pOver + pUnder;
+          
+          if (totalP > 0) {
+            const pUnderNorm = pUnder / totalP;
+            const k = Math.floor(ftLine.line);
+            const derivedLambdaFT = findPoissonMean(k, pUnderNorm);
+            
+            // Expected 1st half corners is 46% of Full Time corners
+            const derivedLambda1MT = 0.46 * derivedLambdaFT;
+            const originalPayout = 1 / totalP;
+            
+            // Generate projected 1st half odds for lines 3.5, 4.5, 5.5
+            const projectedLines = [3.5, 4.5, 5.5];
+            for (const line of projectedLines) {
+              const uProb = poissonUnder(derivedLambda1MT, line);
+              const oProb = 1 - uProb;
+              
+              if (uProb > 0.02 && oProb > 0.02) {
+                const overDec = parseFloat((originalPayout / oProb).toFixed(2));
+                const underDec = parseFloat((originalPayout / uProb).toFixed(2));
+                
+                oddsCorners.push({
+                  line: line,
+                  over_decimal: overDec,
+                  under_decimal: underDec,
+                  market_type: '1st_half',
+                  is_estimated: true
+                });
+              }
+            }
+          }
+        }
+      }
       
       // Run Poisson distribution Value Bet calculations
       const enrichedOdds = oddsCorners.map(o => {
