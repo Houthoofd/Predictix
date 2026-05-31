@@ -418,6 +418,15 @@ export default function ScraperTab({
               }
             } catch (e) {}
             
+            // Find the estimated odds for the card_line (e.g. 4.5)
+            const cardLineVal = parseFloat(pred.card_line);
+            const matchingRow = pred.odds_corners ? pred.odds_corners.find(o => 
+              o.market_type === '1st_half' && parseFloat(o.line) === cardLineVal
+            ) : null;
+            const estimatedOddsVal = matchingRow 
+              ? (isOver ? matchingRow.over_decimal : matchingRow.under_decimal) 
+              : null;
+            
             const isSelected = selectedPredIds.includes(pred.match_id);
 
             return (
@@ -750,24 +759,51 @@ export default function ScraperTab({
                   </span>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Cotes (O/U):</span>
-                  <span style={{ fontSize: '12px', fontWeight: 600 }}>
-                    <span style={{ 
-                      color: isOver && isModelValueBet ? 'var(--color-success)' : 'var(--text-primary)', 
-                      fontWeight: isOver && isModelValueBet ? 800 : 600 
-                    }}>
-                      {pred.over_odds}
+                {/* Highly-visual Cote Bookmaker vs Cote Estimee comparison sub-card for Value Bets */}
+                {isModelValueBet && estimatedOddsVal ? (
+                  <div style={{ 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    gap: '6px', 
+                    padding: '10px 12px', 
+                    background: 'rgba(255, 255, 255, 0.015)', 
+                    borderRadius: '8px', 
+                    border: '1px solid rgba(16, 185, 129, 0.15)', 
+                    margin: '10px 0' 
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Cote Bookmaker :</span>
+                      <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--color-success)' }}>
+                        {isOver ? pred.over_odds : pred.under_odds}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.03)', paddingTop: '5px' }}>
+                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Cote Estimée (Modèle) :</span>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-accent-solid)' }}>
+                        {estimatedOddsVal} <span style={{ fontSize: '9px', opacity: 0.8, fontWeight: 500 }}>(est.)</span>
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Cotes (O/U):</span>
+                    <span style={{ fontSize: '12px', fontWeight: 600 }}>
+                      <span style={{ 
+                        color: isOver && isModelValueBet ? 'var(--color-success)' : 'var(--text-primary)', 
+                        fontWeight: isOver && isModelValueBet ? 800 : 600 
+                      }}>
+                        {pred.over_odds}
+                      </span>
+                      <span style={{ color: 'var(--text-muted)', margin: '0 4px' }}>/</span>
+                      <span style={{ 
+                        color: isUnder && isModelValueBet ? 'var(--color-success)' : 'var(--text-primary)', 
+                        fontWeight: isUnder && isModelValueBet ? 800 : 600 
+                      }}>
+                        {pred.under_odds}
+                      </span>
                     </span>
-                    <span style={{ color: 'var(--text-muted)', margin: '0 4px' }}>/</span>
-                    <span style={{ 
-                      color: isUnder && isModelValueBet ? 'var(--color-success)' : 'var(--text-primary)', 
-                      fontWeight: isUnder && isModelValueBet ? 800 : 600 
-                    }}>
-                      {pred.under_odds}
-                    </span>
-                  </span>
-                </div>
+                  </div>
+                )}
 
                 {pred.win_rate && (
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
