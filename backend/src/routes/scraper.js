@@ -221,6 +221,29 @@ router.get('/predictions', async (req, res) => {
         dynamicProbability = `${Math.round(underProb * 100)}%`;
       }
 
+      // Calculate actual historical corner success rate for the recommended line (dynamicCardLine) in the recent matches of home and away teams
+      const targetLineVal = parseFloat(dynamicCardLine);
+      const isOverTip = dynamicBestTip === "Plus de";
+      
+      let successMatches = 0;
+      let totalMatchesWithCorners = 0;
+      
+      const allRecent = [...homeMatches, ...awayMatches];
+      for (const m of allRecent) {
+        if (m.first_half_corners_home !== null && m.first_half_corners_away !== null) {
+          totalMatchesWithCorners++;
+          const sum = m.first_half_corners_home + m.first_half_corners_away;
+          const isSuccess = isOverTip ? sum > targetLineVal : sum < targetLineVal;
+          if (isSuccess) {
+            successMatches++;
+          }
+        }
+      }
+      
+      const dynamicWinRate = totalMatchesWithCorners > 0 
+        ? `${Math.round((successMatches / totalMatchesWithCorners) * 100)}%` 
+        : (row.win_rate || "50%");
+
       // Parse cached Oddschecker odds
       let oddsCorners = [];
       try {
@@ -340,6 +363,7 @@ router.get('/predictions', async (req, res) => {
         probability: dynamicProbability,
         over_odds: finalOverOdds,
         under_odds: finalUnderOdds,
+        win_rate: dynamicWinRate,
         home_avg_first_half_corners: homeRegressed,
         away_avg_first_half_corners: awayRegressed,
         h2h_avg_first_half_corners: h2hAvg,
