@@ -337,7 +337,7 @@ export default function ScraperTab({
                 const isCollapsed = !!collapsedLeagues[leagueName];
 
                 return (
-                  <div key={lIdx} style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
+                  <div key={lIdx} style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '12px' }}>
                     
                     {/* Collapsible League Header */}
                     <div 
