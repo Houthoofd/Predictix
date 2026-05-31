@@ -800,96 +800,109 @@ router.post('/predictions/scrape', (req, res) => {
             }
             
             if (Array.isArray(linksList) && linksList.length > 1) {
+              let matchAddedCount = 0;
               for (const link of linksList) {
+                if (matchAddedCount >= 10) break; // Limit to 10 past confrontations per match
+                
                 const cached = await dbQuery('SELECT match_id FROM scraped_predictions WHERE match_id = ?', [link]);
                 if (cached.length === 0) {
                   uncachedLinksSet.add(link);
+                  matchAddedCount++;
                 }
               }
             }
           }
         }
 
-        const linksToScrape = Array.from(uncachedLinksSet).slice(0, 12);
+        const linksToScrape = Array.from(uncachedLinksSet).slice(0, 80);
         
         if (linksToScrape.length > 0) {
-          sendEvent('log', { message: `[Predictix] ${linksToScrape.length} nouveaux à scrapper` });
+          sendEvent('log', { message: `[Predictix] ${linksToScrape.length} nouvelles confrontations à scrapper` });
           
-          for (const link of linksToScrape) {
+          const concurrency = 4;
+          for (let i = 0; i < linksToScrape.length; i += concurrency) {
             if (stopScraperRequested) {
               sendEvent('log', { message: `[Predictix] Deep crawl annulé par l'utilisateur.` });
               break;
             }
 
-            sendEvent('log', { message: `[Predictix] Deep crawling over Tor: ${link}` });
-            const histMatch = await scrapeSingleMatch(scraperPath, link, true); // skipOdds = true for past matches
+            const chunk = linksToScrape.slice(i, i + concurrency);
+            
+            await Promise.all(chunk.map(async (link) => {
+              if (stopScraperRequested) return;
 
-            if (histMatch && histMatch.home_team && histMatch.away_team) {
-              const homeClean = histMatch.home_team.replace(/[▲▼]/g, '').trim();
-              const awayClean = histMatch.away_team.replace(/[▲▼]/g, '').trim();
+              sendEvent('log', { message: `[Predictix] Deep crawling over Tor: ${link}` });
+              const histMatch = await scrapeSingleMatch(scraperPath, link, true); // skipOdds = true for past matches
 
-              const sqlHist = `
-                INSERT OR REPLACE INTO scraped_predictions (
-                  match_id, time, date, tournament, home_team, away_team, score,
-                  over_odds, under_odds, card_line, probability, best_tip, win_rate, status,
-                  is_live, is_finished, first_half_corners_home, first_half_corners_away, odds_corners,
-                  home_logo, away_logo, is_historical, scraped_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-              `;
+              if (histMatch && histMatch.home_team && histMatch.away_team) {
+                const homeClean = histMatch.home_team.replace(/[▲▼]/g, '').trim();
+                const awayClean = histMatch.away_team.replace(/[▲▼]/g, '').trim();
 
-              const hashSeed = homeClean + awayClean;
-              let charSum = 0;
-              for (let i = 0; i < hashSeed.length; i++) charSum += hashSeed.charCodeAt(i);
-              const stableProb = 55 + (charSum % 25);
-              const cardLine = histMatch.card_line || (charSum % 2 === 0 ? '4.5' : '5.5');
-              const bestTip = histMatch.best_tip || (stableProb >= 66 ? 'Plus de' : 'Moins de');
+                const sqlHist = `
+                  INSERT OR REPLACE INTO scraped_predictions (
+                    match_id, time, date, tournament, home_team, away_team, score,
+                    over_odds, under_odds, card_line, probability, best_tip, win_rate, status,
+                    is_live, is_finished, first_half_corners_home, first_half_corners_away, odds_corners,
+                    home_logo, away_logo, is_historical, scraped_at
+                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                `;
 
-              await dbRun(sqlHist, [
-                link,
-                'Finished',
-                histMatch.date || new Date().toISOString().substring(0, 10),
-                histMatch.tournament || 'Football',
-                homeClean,
-                awayClean,
-                histMatch.score || '',
-                '1.85', '1.90', cardLine, `${stableProb}%`, bestTip, '60%', 'Finished',
-                0, 1,
-                histMatch.first_half_corners_home,
-                histMatch.first_half_corners_away,
-                null,
-                histMatch.home_logo || null,
-                histMatch.away_logo || null,
-                1
-              ]);
+                const hashSeed = homeClean + awayClean;
+                let charSum = 0;
+                for (let k = 0; k < hashSeed.length; k++) charSum += hashSeed.charCodeAt(k);
+                const stableProb = 55 + (charSum % 25);
+                const cardLine = histMatch.card_line || (charSum % 2 === 0 ? '4.5' : '5.5');
+                const bestTip = histMatch.best_tip || (stableProb >= 66 ? 'Plus de' : 'Moins de');
 
-              const scoreText = histMatch.score ? ` (Score: ${histMatch.score})` : '';
-              const dateText = histMatch.date ? ` (Date: ${histMatch.date})` : '';
-              sendEvent('log', { message: `[Predictix] ✓ Confrontation importee : ${homeClean} vs ${awayClean}${dateText}${scoreText}` });
-            } else {
-              const sqlHistSkipped = `
-                INSERT OR REPLACE INTO scraped_predictions (
-                  match_id, time, date, tournament, home_team, away_team, score,
-                  over_odds, under_odds, card_line, probability, best_tip, win_rate, status,
-                  is_live, is_finished, is_historical, scraped_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-              `;
-              await dbRun(sqlHistSkipped, [
-                link,
-                'Finished',
-                new Date().toISOString().substring(0, 10),
-                'Football',
-                'Skipped Match',
-                'Skipped Match',
-                '-',
-                '1.85', '1.90', '4.5', '50%', 'Plus de', '50%', 'Finished',
-                0, 1,
-                1
-              ]);
-              sendEvent('log', { message: `[Predictix] ✓ Confrontation sautée (échec du crawl) : ${link}` });
+                await dbRun(sqlHist, [
+                  link,
+                  'Finished',
+                  histMatch.date || new Date().toISOString().substring(0, 10),
+                  histMatch.tournament || 'Football',
+                  homeClean,
+                  awayClean,
+                  histMatch.score || '',
+                  '1.85', '1.90', cardLine, `${stableProb}%`, bestTip, '60%', 'Finished',
+                  0, 1,
+                  histMatch.first_half_corners_home,
+                  histMatch.first_half_corners_away,
+                  null,
+                  histMatch.home_logo || null,
+                  histMatch.away_logo || null,
+                  1
+                ]);
+
+                const scoreText = histMatch.score ? ` (Score: ${histMatch.score})` : '';
+                const dateText = histMatch.date ? ` (Date: ${histMatch.date})` : '';
+                sendEvent('log', { message: `[Predictix] ✓ Confrontation importée : ${homeClean} vs ${awayClean}${dateText}${scoreText}` });
+              } else {
+                const sqlHistSkipped = `
+                  INSERT OR REPLACE INTO scraped_predictions (
+                    match_id, time, date, tournament, home_team, away_team, score,
+                    over_odds, under_odds, card_line, probability, best_tip, win_rate, status,
+                    is_live, is_finished, is_historical, scraped_at
+                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                `;
+                await dbRun(sqlHistSkipped, [
+                  link,
+                  'Finished',
+                  new Date().toISOString().substring(0, 10),
+                  'Football',
+                  'Skipped Match',
+                  'Skipped Match',
+                  '-',
+                  '1.85', '1.90', '4.5', '50%', 'Plus de', '50%', 'Finished',
+                  0, 1,
+                  1
+                ]);
+                sendEvent('log', { message: `[Predictix] ✓ Confrontation sautée (échec du crawl) : ${link}` });
+              }
+            }));
+
+            // Polite delay between batches to avoid Tor congestion
+            if (i + concurrency < linksToScrape.length) {
+              await new Promise(r => setTimeout(r, 1200));
             }
-
-            // Polite delay to prevent Tor bottleneck
-            await new Promise(r => setTimeout(r, 1500));
           }
         }
         
