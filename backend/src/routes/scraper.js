@@ -205,6 +205,26 @@ router.get('/predictions', async (req, res) => {
             }
           }
         }
+      } else if (!has1stHalf && !hasFullTime && homeAvg !== null && awayAvg !== null) {
+        const projectedLines = [3.5, 4.5, 5.5];
+        const payout = 0.93;
+        for (const line of projectedLines) {
+          const uProb = poissonUnder(lambda1MT, line);
+          const oProb = 1 - uProb;
+          
+          if (uProb > 0.02 && oProb > 0.02) {
+            const overDec = parseFloat((payout / oProb).toFixed(2));
+            const underDec = parseFloat((payout / uProb).toFixed(2));
+            
+            oddsCorners.push({
+              line: line,
+              over_decimal: overDec,
+              under_decimal: underDec,
+              market_type: '1st_half',
+              is_estimated: true
+            });
+          }
+        }
       }
       
       // Run Poisson distribution Value Bet calculations
