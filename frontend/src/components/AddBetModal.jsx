@@ -9,7 +9,8 @@ export default function AddBetModal({
   newBetForm,
   setNewBetForm,
   handleAddBet,
-  bankroll
+  bankroll,
+  betPlacedSuccess
 }) {
   if (!showAddBetModal) return null;
 
@@ -22,7 +23,46 @@ export default function AddBetModal({
 
   return (
     <div className="modal-overlay">
-      <div className="modal-content">
+      <div className="modal-content" style={{ position: 'relative', overflow: 'hidden' }}>
+        
+        {betPlacedSuccess && (
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            background: 'var(--bg-secondary)',
+            zIndex: 50,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '16px',
+            fontFamily: 'Outfit',
+            animation: 'fadeIn 0.2s ease-out'
+          }}>
+            <div style={{
+              width: '64px',
+              height: '64px',
+              borderRadius: '50%',
+              background: 'rgba(16, 185, 129, 0.1)',
+              border: '2px solid var(--color-success)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 0 20px rgba(16, 185, 129, 0.2)',
+              animation: 'scaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
+            }}>
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="var(--color-success)" strokeWidth="3" style={{ width: '32px', height: '32px' }}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h4 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-primary)' }}>Pari enregistré avec succès !</h4>
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Mise à jour de la bankroll en cours...</p>
+          </div>
+        )}
+
         <div className="modal-header">
           <h3 className="modal-title" style={{ fontFamily: 'Outfit' }}>
             {prefilledBet ? 'Placer Pari depuis Prédiction' : 'Enregistrer un Pari'}
@@ -102,7 +142,7 @@ export default function AddBetModal({
 
             <div className="grid-3" style={{ gap: '12px' }}>
               <div className="form-group">
-                <label className="form-label">Conseil</label>
+                <label className="form-label" style={{ minHeight: '16px', display: 'flex', alignItems: 'center' }}>Conseil</label>
                 <select 
                   className="form-control"
                   value={newBetForm.best_tip}
@@ -113,7 +153,7 @@ export default function AddBetModal({
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label">Ligne Cartons</label>
+                <label className="form-label" style={{ minHeight: '16px', display: 'flex', alignItems: 'center' }}>Ligne Cartons</label>
                 <input 
                   type="number" 
                   step="0.5"
@@ -124,7 +164,7 @@ export default function AddBetModal({
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">Cote Réelle Bookmaker</label>
+                <label className="form-label" style={{ minHeight: '16px', display: 'flex', alignItems: 'center' }}>Cote Réelle</label>
                 <input 
                   type="number" 
                   step="0.01"
@@ -139,7 +179,7 @@ export default function AddBetModal({
 
             <div className="grid-3" style={{ gap: '12px' }}>
               <div className="form-group">
-                <label className="form-label">Mise ({bankroll.currency})</label>
+                <label className="form-label" style={{ minHeight: '16px', display: 'flex', alignItems: 'center' }}>Mise ({bankroll.currency})</label>
                 <input 
                   type="number" 
                   className="form-control" 
@@ -149,7 +189,7 @@ export default function AddBetModal({
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">Probabilité (%)</label>
+                <label className="form-label" style={{ minHeight: '16px', display: 'flex', alignItems: 'center' }}>Probabilité (%)</label>
                 <input 
                   type="number" 
                   className="form-control" 
@@ -159,7 +199,7 @@ export default function AddBetModal({
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">Bookmaker</label>
+                <label className="form-label" style={{ minHeight: '16px', display: 'flex', alignItems: 'center' }}>Bookmaker</label>
                 <input 
                   type="text" 
                   className="form-control" 

@@ -48,6 +48,7 @@ export default function App() {
   
   // Modals state
   const [showAddBetModal, setShowAddBetModal] = useState(false);
+  const [betPlacedSuccess, setBetPlacedSuccess] = useState(false);
   const [showResetBankrollModal, setShowResetBankrollModal] = useState(false);
   const [prefilledBet, setPrefilledBet] = useState(null); // Used to place bet from prediction
   const [selectedMatchDetails, setSelectedMatchDetails] = useState(null); // Track selected match for detailed stats view
@@ -245,15 +246,23 @@ export default function App() {
       });
       const json = await res.json();
       if (json.success) {
-        setShowAddBetModal(false);
-        setPrefilledBet(null);
-        // Reset form
-        setNewBetForm({
-          match_id: '', date: '', time: '', league: '', home_team: '', away_team: '',
-          best_tip: 'Over', card_line: 4.5, odds: 1.85, stake: 50, probability: '',
-          bookmaker: 'Unibet', status: 'PENDING', notes: ''
-        });
-        fetchAllData();
+        setBetPlacedSuccess(true);
+        
+        // Silently refresh the entire bankroll data in the background instantly!
+        await refreshAllDataSilent();
+
+        // Wait 1.5 seconds for the success animation inside the modal, then close and reset
+        setTimeout(() => {
+          setShowAddBetModal(false);
+          setPrefilledBet(null);
+          setBetPlacedSuccess(false);
+          // Reset form
+          setNewBetForm({
+            match_id: '', date: '', time: '', league: '', home_team: '', away_team: '',
+            best_tip: 'Over', card_line: 4.5, odds: 1.85, stake: 50, probability: '',
+            bookmaker: 'Unibet', status: 'PENDING', notes: ''
+          });
+        }, 1500);
       } else {
         alert("Erreur: " + json.error.message);
       }
@@ -851,6 +860,7 @@ export default function App() {
           setNewBetForm={setNewBetForm}
           handleAddBet={handleAddBet}
           bankroll={bankroll}
+          betPlacedSuccess={betPlacedSuccess}
         />
 
         <ResetBankrollModal 
