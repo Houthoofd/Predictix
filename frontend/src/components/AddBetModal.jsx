@@ -12,6 +12,27 @@ export default function AddBetModal({
   bankroll,
   betPlacedSuccess
 }) {
+  // 1. Lock/Unlock body scroll when modal is shown to avoid background scroll chaining
+  React.useEffect(() => {
+    if (showAddBetModal) {
+      const originalStyle = window.getComputedStyle(document.body).overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalStyle;
+      };
+    }
+  }, [showAddBetModal]);
+
+  // 2. Smoothly scroll overlay back to top when success overlay triggers
+  React.useEffect(() => {
+    if (betPlacedSuccess) {
+      const overlay = document.querySelector('.modal-overlay');
+      if (overlay) {
+        overlay.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }
+  }, [betPlacedSuccess]);
+
   if (!showAddBetModal) return null;
 
   // Calculate dynamic Value Bet edge in real-time
@@ -23,7 +44,7 @@ export default function AddBetModal({
 
   return (
     <div className="modal-overlay">
-      <div className="modal-content" style={{ position: 'relative', overflow: 'hidden' }}>
+      <div className="modal-content" style={{ position: 'relative', overflowY: betPlacedSuccess ? 'hidden' : 'visible', maxHeight: 'none', margin: 'auto' }}>
         
         {betPlacedSuccess && (
           <div style={{

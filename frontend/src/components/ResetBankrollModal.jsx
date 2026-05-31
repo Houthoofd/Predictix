@@ -9,6 +9,17 @@ export default function ResetBankrollModal({
   handleResetBankroll,
   bankroll
 }) {
+  // Lock/Unlock body scroll when modal is shown to avoid background scroll chaining
+  React.useEffect(() => {
+    if (showResetBankrollModal) {
+      const originalStyle = window.getComputedStyle(document.body).overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalStyle;
+      };
+    }
+  }, [showResetBankrollModal]);
+
   if (!showResetBankrollModal) return null;
 
   return (

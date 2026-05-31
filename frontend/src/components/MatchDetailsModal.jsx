@@ -7,6 +7,17 @@ export default function MatchDetailsModal({
   crawlLoading,
   handleCrawlHistory
 }) {
+  // Lock/Unlock body scroll when modal is shown to avoid background scroll chaining
+  React.useEffect(() => {
+    if (selectedMatchDetails) {
+      const originalStyle = window.getComputedStyle(document.body).overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalStyle;
+      };
+    }
+  }, [selectedMatchDetails]);
+
   if (!selectedMatchDetails) return null;
 
   return (
@@ -155,7 +166,12 @@ export default function MatchDetailsModal({
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px', scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
                   {selectedMatchDetails.recent_h2h_matches.map((m, idx) => (
                     <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(255,255,255,0.015)', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '12.5px', alignItems: 'center' }}>
-                      <span style={{ color: 'var(--text-secondary)', fontSize: '11px', width: '70px', flexShrink: 0 }}>{m.date}</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', width: '85px', flexShrink: 0 }}>
+                        <span style={{ color: 'var(--text-secondary)', fontSize: '11px', fontWeight: 600 }}>{m.date}</span>
+                        {m.time && m.time !== 'Finished' && (
+                          <span style={{ color: 'var(--text-muted)', fontSize: '9.5px', fontFamily: 'Outfit' }}>{m.time}</span>
+                        )}
+                      </div>
                       
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexGrow: 1, justifyContent: 'center', padding: '0 8px' }}>
                         {m.home_logo ? (
@@ -198,7 +214,12 @@ export default function MatchDetailsModal({
                     const conceded = m.home_team === selectedMatchDetails.home_team ? m.first_half_corners_away : m.first_half_corners_home;
                     return (
                       <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(255,255,255,0.015)', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '12.5px', alignItems: 'center' }}>
-                        <span style={{ color: 'var(--text-secondary)', fontSize: '11px', width: '70px', flexShrink: 0 }}>{m.date}</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', width: '85px', flexShrink: 0 }}>
+                          <span style={{ color: 'var(--text-secondary)', fontSize: '11px', fontWeight: 600 }}>{m.date}</span>
+                          {m.time && m.time !== 'Finished' && (
+                            <span style={{ color: 'var(--text-muted)', fontSize: '9.5px', fontFamily: 'Outfit' }}>{m.time}</span>
+                          )}
+                        </div>
                         
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexGrow: 1, justifyContent: 'center', padding: '0 8px' }}>
                           {m.home_logo ? (
@@ -242,7 +263,12 @@ export default function MatchDetailsModal({
                     const conceded = m.home_team === selectedMatchDetails.away_team ? m.first_half_corners_away : m.first_half_corners_home;
                     return (
                       <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(255,255,255,0.015)', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '12.5px', alignItems: 'center' }}>
-                        <span style={{ color: 'var(--text-secondary)', fontSize: '11px', width: '70px', flexShrink: 0 }}>{m.date}</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', width: '85px', flexShrink: 0 }}>
+                          <span style={{ color: 'var(--text-secondary)', fontSize: '11px', fontWeight: 600 }}>{m.date}</span>
+                          {m.time && m.time !== 'Finished' && (
+                            <span style={{ color: 'var(--text-muted)', fontSize: '9.5px', fontFamily: 'Outfit' }}>{m.time}</span>
+                          )}
+                        </div>
                         
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexGrow: 1, justifyContent: 'center', padding: '0 8px' }}>
                           {m.home_logo ? (

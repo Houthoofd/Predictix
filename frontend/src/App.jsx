@@ -16,6 +16,8 @@ import AddBetModal from './components/AddBetModal';
 import ResetBankrollModal from './components/ResetBankrollModal';
 import MatchDetailsModal from './components/MatchDetailsModal';
 import BatchBetsModal from './components/BatchBetsModal';
+import ScrapeResultModal from './components/ScrapeResultModal';
+import ConfirmModal from './components/ConfirmModal';
 
 export default function App() {
   // Theme & Navigation
@@ -60,14 +62,50 @@ export default function App() {
   const [batchLoading, setBatchLoading] = useState(false); // Loading state for batch registering
   const [batchProgress, setBatchProgress] = useState(0); // Count of successfully placed batch bets
   const [crawlLoading, setCrawlLoading] = useState(false); // Track on-demand crawling loading state
+  const [showScrapeResultModal, setShowScrapeResultModal] = useState(false);
+  const [scrapeResultStats, setScrapeResultStats] = useState(null);
+
+  // Custom Confirmation Dialog State
+  const [confirmDialog, setConfirmDialog] = useState({
+    show: false,
+    title: '',
+    message: '',
+    confirmText: 'Confirmer',
+    cancelText: 'Annuler',
+    isDanger: false,
+    onConfirm: null,
+    onCancel: null
+  });
+
+  const showConfirm = ({ title, message, confirmText, cancelText, isDanger, onConfirm }) => {
+    setConfirmDialog({
+      show: true,
+      title: title || 'Confirmation Requise',
+      message,
+      confirmText: confirmText || 'Confirmer',
+      cancelText: cancelText || 'Annuler',
+      isDanger: !!isDanger,
+      onConfirm: () => {
+        setConfirmDialog(prev => ({ ...prev, show: false }));
+        if (onConfirm) onConfirm();
+      },
+      onCancel: () => {
+        setConfirmDialog(prev => ({ ...prev, show: false }));
+      }
+    });
+  };
   
   // Form States
   const [newBetForm, setNewBetForm] = useState({
     match_id: '', date: '', time: '', league: '', home_team: '', away_team: '',
     best_tip: 'Over', card_line: 4.5, odds: 1.85, stake: 50, probability: '',
-    bookmaker: 'Unibet', status: 'PENDING', notes: ''
+    bookmaker: 'Unibet', status: 'PENDING', notes: '', match_url: ''
   });
   const [resetAmount, setResetAmount] = useState('1000');
+  
+  // Bet Auto-Refresh States
+  const [betRefreshLoading, setBetRefreshLoading] = useState({});
+  const [globalRefreshLoading, setGlobalRefreshLoading] = useState(false);
   
   // Predictions Filter States
   const [predSearch, setPredSearch] = useState('');
@@ -217,7 +255,14 @@ export default function App() {
           const updatedMatch = predJson.data.find(p => p.match_id === matchId);
           if (updatedMatch) {
             setSelectedMatchDetails(updatedMatch);
+            if (!updatedMatch.isCrawling) {
+              setCrawlLoading(false);
+            }
+          } else {
+            setCrawlLoading(false);
           }
+        } else {
+          setCrawlLoading(false);
         }
       } else {
         alert("Erreur lors de la récupération de l'historique : " + (json.error?.message || "Erreur inconnue"));
@@ -260,7 +305,7 @@ export default function App() {
           setNewBetForm({
             match_id: '', date: '', time: '', league: '', home_team: '', away_team: '',
             best_tip: 'Over', card_line: 4.5, odds: 1.85, stake: 50, probability: '',
-            bookmaker: 'Unibet', status: 'PENDING', notes: ''
+            bookmaker: 'Unibet', status: 'PENDING', notes: '', match_url: ''
           });
         }, 1500);
       } else {
@@ -290,16 +335,92 @@ export default function App() {
 
   // Delete Bet
   const handleDeleteBet = async (id) => {
-    if (!window.confirm("Voulez-vous vraiment supprimer ce pari ?")) return;
+    showConfirm({
+      title: "Supprimer le Pari",
+      message: "Voulez-vous vraiment supprimer ce pari ? Cette action est irréversible.",
+      confirmText: "Supprimer",
+      isDanger: true,
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/bets/${id}`, { method: 'DELETE' });
+          const json = await res.json();
+          if (json.success) {
+            fetchAllData();
+          }
+        } catch (err) {
+          console.error("Error deleting bet:", err);
+        }
+      }
+    });
+  };
+
+  // Auto-refresh a single bet outcome by scraping Matchendirect
+  const handleRefreshBet = async (id) => {
+    setBetRefreshLoading(prev => ({ ...prev, [id]: true }));
     try {
-      const res = await fetch(`/api/bets/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/bets/${id}/refresh`, { method: 'POST' });
       const json = await res.json();
       if (json.success) {
         fetchAllData();
+        if (json.data && json.data.bet && json.data.bet.status !== 'PENDING') {
+          setScrapeResultStats({
+            count: 0,
+            settledBets: [json.data.bet]
+          });
+          setShowScrapeResultModal(true);
+        } else {
+          alert(json.message);
+        }
+      } else {
+        alert(json.message || json.error?.message || "Impossible de rafraîchir ce pari.");
       }
     } catch (err) {
-      console.error("Error deleting bet:", err);
+      console.error("Error refreshing bet:", err);
+      alert("Une erreur est survenue lors du rafraîchissement.");
+    } finally {
+      setBetRefreshLoading(prev => ({ ...prev, [id]: false }));
     }
+  };
+
+  // Auto-refresh all active pending bets in parallel
+  const handleRefreshAllBets = async () => {
+    const pendingBets = bets.filter(b => b.status === 'PENDING' && b.match_id);
+    if (pendingBets.length === 0) {
+      alert("Aucun pari actif (placé depuis une prédiction) en attente à rafraîchir.");
+      return;
+    }
+    
+    showConfirm({
+      title: "Rafraîchir les Paris en Cours",
+      message: `Voulez-vous lancer la mise à jour automatique pour les ${pendingBets.length} paris en cours via Tor ? Cette opération peut prendre quelques secondes.`,
+      confirmText: "Lancer la mise à jour",
+      onConfirm: async () => {
+        setGlobalRefreshLoading(true);
+        try {
+          const res = await fetch('/api/bets/refresh-all', { method: 'POST' });
+          const json = await res.json();
+          if (json.success) {
+            fetchAllData();
+            if (json.settledBets && json.settledBets.length > 0) {
+              setScrapeResultStats({
+                count: 0,
+                settledBets: json.settledBets
+              });
+              setShowScrapeResultModal(true);
+            } else {
+              alert(json.message);
+            }
+          } else {
+            alert(json.message || json.error?.message || "Impossible de rafraîchir les paris.");
+          }
+        } catch (err) {
+          console.error("Error refreshing all bets:", err);
+          alert("Une erreur est survenue lors du rafraîchissement global.");
+        } finally {
+          setGlobalRefreshLoading(false);
+        }
+      }
+    });
   };
 
   // Reset Bankroll Initial Amount
@@ -344,7 +465,8 @@ export default function App() {
       probability: isNaN(probNum) ? '' : probNum,
       bookmaker: 'Unibet',
       status: 'PENDING',
-      notes: `Placé depuis la prédiction Match en Direct (Probabilité: ${pred.probability}, Taux de réussite historique: ${pred.win_rate})`
+      notes: `Placé depuis la prédiction Match en Direct (Probabilité: ${pred.probability}, Taux de réussite historique: ${pred.win_rate})`,
+      match_url: pred.match_url || ''
     });
     setPrefilledBet(pred);
     setShowAddBetModal(true);
@@ -377,7 +499,8 @@ export default function App() {
         probability: isNaN(probNum) ? '' : probNum,
         bookmaker: 'Unibet',
         status: 'PENDING',
-        notes: `Placé en lot depuis Predictix (Probabilité: ${pred.probability}, Taux de réussite: ${pred.win_rate || 'N/A'})`
+        notes: `Placé en lot depuis Predictix (Probabilité: ${pred.probability}, Taux de réussite: ${pred.win_rate || 'N/A'})`,
+        match_url: pred.match_url || ''
       };
     });
     
@@ -624,6 +747,11 @@ export default function App() {
                 setScrapeProgress(100);
                 setMatchesRemaining(0);
                 setScrapeTimeRemaining("Terminé");
+                setScrapeResultStats({
+                  count: eventData.count,
+                  settledBets: eventData.settledBets || []
+                });
+                setShowScrapeResultModal(true);
                 refreshAllDataSilent();
               }
             } catch (err) {
@@ -840,6 +968,10 @@ export default function App() {
                   stats={stats} 
                   handleSettleBet={handleSettleBet} 
                   handleDeleteBet={handleDeleteBet} 
+                  handleRefreshBet={handleRefreshBet}
+                  handleRefreshAllBets={handleRefreshAllBets}
+                  betRefreshLoading={betRefreshLoading}
+                  globalRefreshLoading={globalRefreshLoading}
                 />
               )}
 
@@ -897,6 +1029,23 @@ export default function App() {
           handleConfirmBatchBets={handleConfirmBatchBets}
           handleApplyGlobalStake={handleApplyGlobalStake}
           handleApplyGlobalBookmaker={handleApplyGlobalBookmaker}
+        />
+
+        <ScrapeResultModal 
+          show={showScrapeResultModal}
+          onClose={() => setShowScrapeResultModal(false)}
+          stats={scrapeResultStats}
+        />
+
+        <ConfirmModal 
+          show={confirmDialog.show}
+          title={confirmDialog.title}
+          message={confirmDialog.message}
+          confirmText={confirmDialog.confirmText}
+          cancelText={confirmDialog.cancelText}
+          isDanger={confirmDialog.isDanger}
+          onConfirm={confirmDialog.onConfirm}
+          onCancel={confirmDialog.onCancel}
         />
 
       </main>

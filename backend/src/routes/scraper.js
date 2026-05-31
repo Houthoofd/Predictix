@@ -2,6 +2,7 @@ import express from 'express';
 import { spawn, exec } from 'child_process';
 import path from 'path';
 import fs from 'fs';
+import net from 'net';
 import { dbQuery, dbRun, dbGet } from '../db/database.js';
 
 const router = express.Router();
@@ -9,6 +10,29 @@ const router = express.Router();
 let activeScraperProcess = null;
 let stopScraperRequested = false;
 const activeCrawlHistoryMatches = new Set();
+
+// Helper: Check if Tor SOCKS5 proxy port is active
+export function isTorActive() {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    socket.setTimeout(1500);
+    
+    socket.on('connect', () => {
+      socket.destroy();
+      resolve(true);
+    });
+    
+    const onError = () => {
+      socket.destroy();
+      resolve(false);
+    };
+    
+    socket.on('error', onError);
+    socket.on('timeout', onError);
+    
+    socket.connect(9050, '127.0.0.1');
+  });
+}
 
 // Helper: Poisson distribution probability of exactly k events with expected lambda
 function poissonProbability(lambda, k) {
@@ -165,31 +189,47 @@ router.get('/predictions', async (req, res) => {
     
     for (const row of rows) {
       // Find historical H2H matches between A and B (up to 10)
-      const h2hMatches = await dbQuery(`
-        SELECT first_half_corners_home, first_half_corners_away, home_team, away_team, home_logo, away_logo, score, date, tournament
+      const h2hMatchesRaw = await dbQuery(`
+        SELECT first_half_corners_home, first_half_corners_away, home_team, away_team, home_logo, away_logo, score, date, time, tournament
         FROM scraped_predictions 
         WHERE is_finished = 1 
           AND ((home_team = ? AND away_team = ?) OR (home_team = ? AND away_team = ?))
         ORDER BY date DESC LIMIT 10
       `, [row.home_team, row.away_team, row.away_team, row.home_team]);
       
+      const normalizeMatchRow = (m) => {
+        let date = m.date || '';
+        let time = m.time || '';
+        if (date.includes(':')) {
+          time = date;
+          date = row.date || new Date().toISOString().substring(0, 10);
+        }
+        return { ...m, date, time };
+      };
+
+      const h2hMatches = h2hMatchesRaw.map(normalizeMatchRow);
+      
       // Find Team A (Home) recent matches played STRICTLY at Domicile (up to 10)
-      const homeMatches = await dbQuery(`
-        SELECT first_half_corners_home, first_half_corners_away, home_team, away_team, home_logo, away_logo, score, date, tournament
+      const homeMatchesRaw = await dbQuery(`
+        SELECT first_half_corners_home, first_half_corners_away, home_team, away_team, home_logo, away_logo, score, date, time, tournament
         FROM scraped_predictions 
         WHERE is_finished = 1 
           AND home_team = ?
         ORDER BY date DESC LIMIT 10
       `, [row.home_team]);
       
+      const homeMatches = homeMatchesRaw.map(normalizeMatchRow);
+      
       // Find Team B (Away) recent matches played STRICTLY at Extérieur (up to 10)
-      const awayMatches = await dbQuery(`
-        SELECT first_half_corners_home, first_half_corners_away, home_team, away_team, home_logo, away_logo, score, date, tournament
+      const awayMatchesRaw = await dbQuery(`
+        SELECT first_half_corners_home, first_half_corners_away, home_team, away_team, home_logo, away_logo, score, date, time, tournament
         FROM scraped_predictions 
         WHERE is_finished = 1 
           AND away_team = ?
         ORDER BY date DESC LIMIT 10
       `, [row.away_team]);
+
+      const awayMatches = awayMatchesRaw.map(normalizeMatchRow);
       
       // Calculate H2H corners average (Total match corners in H2H)
       let h2hSum = 0;
@@ -445,8 +485,65 @@ function getNewestScrapedFile(outputDirs) {
   return allFiles.length > 0 ? allFiles[0].path : null;
 }
 
-// Helper: Scrape a single match page dynamically over Tor
-async function scrapeSingleMatch(scraperPath, link, skipOdds = false) {
+// Helper: Robustly parse French date string (e.g. "17 mai 2026", "1er juin 2026", "20/05/2026") into YYYY-MM-DD format
+export function parseFrenchDate(dateStr) {
+  if (!dateStr) return null;
+  dateStr = dateStr.trim().toLowerCase();
+  
+  // Try YYYY-MM-DD first
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    return dateStr;
+  }
+  
+  // Try DD/MM/YYYY or D/M/YYYY
+  const dmRef = dateStr.match(/^(\d{1,2})[\/\.-](\d{1,2})[\/\.-](\d{4})$/);
+  if (dmRef) {
+    const day = dmRef[1].padStart(2, '0');
+    const month = dmRef[2].padStart(2, '0');
+    const year = dmRef[3];
+    return `${year}-${month}-${day}`;
+  }
+  
+  // Try French text month, e.g. "17 mai 2026" or "1er juin 2026"
+  const frenchMonths = {
+    'janvier': '01', 'janv.': '01', 'janv': '01',
+    'février': '02', 'févr.': '02', 'févr': '02', 'fevrier': '02',
+    'mars': '03',
+    'avril': '04', 'avr.': '04', 'avr': '04',
+    'mai': '05',
+    'juin': '06',
+    'juillet': '07', 'juil.': '07', 'juil': '07',
+    'août': '08', 'aout': '08',
+    'septembre': '09', 'sept.': '09', 'sept': '09',
+    'octobre': '10', 'oct.': '10', 'oct': '10',
+    'novembre': '11', 'nov.': '11', 'nov': '11',
+    'décembre': '12', 'déc.': '12', 'déc': '12', 'decembre': '12'
+  };
+  
+  // Replace "1er" with "1" to simplify parsing
+  dateStr = dateStr.replace(/^1er\b/, '1');
+  
+  const textMatch = dateStr.match(/^(\d{1,2})\s+([a-zéûûöäêèéàç\.]+)\s+(\d{4})$/);
+  if (textMatch) {
+    const day = textMatch[1].padStart(2, '0');
+    const monthName = textMatch[2];
+    const year = textMatch[3];
+    const month = frenchMonths[monthName];
+    if (month) {
+      return `${year}-${month}-${day}`;
+    }
+  }
+  
+  return null;
+}
+
+export async function scrapeSingleMatch(scraperPath, link, skipOdds = false, onSpawn = null) {
+  const torActive = await isTorActive();
+  if (!torActive) {
+    console.warn(`[Predictix Scraper] Tor is inactive. Skipping scrape for: ${link}`);
+    return null;
+  }
+
   return new Promise((resolve) => {
     let resolved = false;
     const tmpOutFile = path.join(scraperPath, 'data', `tmp_${Date.now()}_${Math.random().toString(36).substring(7)}.json`);
@@ -460,21 +557,32 @@ async function scrapeSingleMatch(scraperPath, link, skipOdds = false) {
     // Spawn Go scraper with -url and -tor options
     const child = spawn(exePath, args);
     
-    // Security timeout guard: 45 seconds max execution
+    if (onSpawn && typeof onSpawn === 'function') {
+      onSpawn(child);
+    }
+    
+    // Security timeout guard: 20 seconds max execution
     const timeout = setTimeout(() => {
       if (resolved) return;
       resolved = true;
-      console.warn(`[Predictix Scraper] Single match scraper timed out (45s) for: ${link}. Terminating process.`);
+      console.warn(`[Predictix Scraper] Single match scraper timed out (20s) for: ${link}. Terminating process.`);
       try {
-        child.kill();
+        if (process.platform === 'win32') {
+          exec(`taskkill /pid ${child.pid} /T /F`, (err) => {
+            if (err) console.error('Failed to taskkill timed-out child process tree:', err.message);
+          });
+        } else {
+          child.kill();
+        }
       } catch (err) {
         console.error('Failed to kill timed-out scraper child process:', err.message);
+        try { child.kill(); } catch (e) {}
       }
       if (fs.existsSync(tmpOutFile)) {
         try { fs.unlinkSync(tmpOutFile); } catch (e) {}
       }
       resolve(null);
-    }, 45000);
+    }, 20000);
     
     child.on('error', (err) => {
       if (resolved) return;
@@ -511,9 +619,17 @@ async function scrapeSingleMatch(scraperPath, link, skipOdds = false) {
 }
 
 // Discover matches on homepage listing
-router.post('/predictions/scrape/discover', (req, res) => {
+router.post('/predictions/scrape/discover', async (req, res) => {
   if (activeScraperProcess) {
     return res.status(400).json({ success: false, error: { message: "Un scraping ou une découverte est déjà en cours d'exécution." } });
+  }
+
+  const torActive = await isTorActive();
+  if (!torActive) {
+    return res.status(400).json({ 
+      success: false, 
+      error: { message: "Le proxy Tor local n'est pas actif sur le port 9050. Veuillez lancer Tor et réessayer." } 
+    });
   }
 
   const scraperPath = process.env.SCRAPER_PATH || 'E:\\Developpement\\scrapper-v3';
@@ -539,22 +655,48 @@ router.post('/predictions/scrape/discover', (req, res) => {
   });
   activeScraperProcess = child;
 
+  // Discovery timeout guard: 50 seconds max execution
+  const timeoutGuard = setTimeout(() => {
+    if (activeScraperProcess && activeScraperProcess.pid === child.pid) {
+      console.warn(`[Predictix Discovery] Process timed out (50s). Killing process tree.`);
+      const pid = child.pid;
+      if (process.platform === 'win32') {
+        exec(`taskkill /pid ${pid} /T /F`, (err) => {
+          if (err) console.error('Failed to taskkill timed-out discovery:', err.message);
+        });
+      } else {
+        child.kill();
+      }
+      activeScraperProcess = null;
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, error: { message: "La découverte a expiré (timeout de 50 secondes)." } });
+      }
+    }
+  }, 50000);
+
   let logOutput = '';
   child.stdout.on('data', (data) => logOutput += data.toString());
   child.stderr.on('data', (data) => logOutput += data.toString());
 
   child.on('error', (err) => {
+    clearTimeout(timeoutGuard);
     activeScraperProcess = null;
     console.error('[Predictix Discovery] Failed to spawn discovery process:', err);
-    return res.status(500).json({ success: false, error: { message: `Impossible de démarrer le processus : ${err.message}` } });
+    if (!res.headersSent) {
+      return res.status(500).json({ success: false, error: { message: `Impossible de démarrer le processus : ${err.message}` } });
+    }
   });
 
   child.on('close', async (code) => {
+    clearTimeout(timeoutGuard);
     activeScraperProcess = null;
     console.log(`[Predictix Discovery] Process closed with code: ${code}`);
 
     if (code !== 0) {
-      return res.status(500).json({ success: false, error: { message: `Le scraper a échoué (Code : ${code})`, logs: logOutput } });
+      if (!res.headersSent) {
+        return res.status(500).json({ success: false, error: { message: `Le scraper a échoué (Code : ${code})`, logs: logOutput } });
+      }
+      return;
     }
 
     try {
@@ -595,7 +737,7 @@ router.post('/predictions/scrape/discover', (req, res) => {
 });
 
 // Trigger scraper execution and stream progress via Server-Sent Events (SSE)
-router.post('/predictions/scrape', (req, res) => {
+router.post('/predictions/scrape', async (req, res) => {
   stopScraperRequested = false;
   
   // Disable Node's default request, response, and socket timeouts for long SSE scraper streams
@@ -634,6 +776,13 @@ router.post('/predictions/scrape', (req, res) => {
     }
   };
 
+  const torActive = await isTorActive();
+  if (!torActive) {
+    sendEvent('error', { message: "Le proxy Tor local n'est pas actif sur le port 9050. Veuillez lancer Tor et réessayer." });
+    clearInterval(keepAliveInterval);
+    return res.end();
+  }
+
   const scraperPath = process.env.SCRAPER_PATH || 'E:\\Developpement\\scrapper-v3';
   const outputDirs = [
     path.join(scraperPath, 'data', 'matchendirect'),
@@ -668,9 +817,64 @@ router.post('/predictions/scrape', (req, res) => {
   });
   activeScraperProcess = child;
 
+  // Dynamic timeout guard for bulk scraping: (limit * 30 seconds) + 60 seconds buffer
+  const timeoutMs = (parseInt(limit, 10) * 30 * 1000) + 60000;
+  const timeoutGuard = setTimeout(() => {
+    if (activeScraperProcess && activeScraperProcess.pid === child.pid) {
+      console.warn(`[Predictix Scraper] Process timed out (${timeoutMs/1000}s). Killing process tree.`);
+      sendEvent('log', { message: `[Predictix] Le scraper a expiré après ${timeoutMs/1000}s. Arrêt forcé...` });
+      sendEvent('error', { message: `Temps limite de scraping dépassé (${timeoutMs/1000}s).` });
+      
+      const pid = child.pid;
+      if (process.platform === 'win32') {
+        exec(`taskkill /pid ${pid} /T /F`, (err) => {
+          if (err) console.error('Failed to taskkill timed-out scraper:', err.message);
+        });
+      } else {
+        child.kill();
+      }
+      activeScraperProcess = null;
+      clearInterval(keepAliveInterval);
+      res.end();
+    }
+  }, timeoutMs);
+
+  // Inactivity timeout guard: 45 seconds of silence = kill!
+  let inactivityTimer = null;
+  const INACTIVITY_TIMEOUT_MS = 45000;
+
+  const resetInactivityTimer = () => {
+    if (inactivityTimer) clearTimeout(inactivityTimer);
+    inactivityTimer = setTimeout(() => {
+      if (activeScraperProcess && activeScraperProcess.pid === child.pid) {
+        console.warn(`[Predictix Scraper] Inactivity timeout (45s of silence). Killing process tree.`);
+        sendEvent('log', { message: `[Predictix] Le scraper est inactif depuis 45s (aucun log). Arrêt forcé...` });
+        sendEvent('error', { message: `Scraper arrêté automatiquement pour inactivité (45s de silence).` });
+        
+        const pid = child.pid;
+        if (process.platform === 'win32') {
+          exec(`taskkill /pid ${pid} /T /F`, (err) => {
+            if (err) console.error('Failed to taskkill inactive scraper:', err.message);
+          });
+        } else {
+          child.kill();
+        }
+        activeScraperProcess = null;
+        clearInterval(keepAliveInterval);
+        res.end();
+      }
+    }, INACTIVITY_TIMEOUT_MS);
+  };
+
+  // Start the inactivity timer initially
+  resetInactivityTimer();
+
   let logBuffer = '';
 
   const handleOutput = (data) => {
+    // Reset inactivity timer since we received output
+    resetInactivityTimer();
+
     logBuffer += data.toString();
     const lines = logBuffer.split('\n');
     logBuffer = lines.pop(); // Keep incomplete line in buffer
@@ -687,6 +891,8 @@ router.post('/predictions/scrape', (req, res) => {
   child.stderr.on('data', handleOutput);
 
   child.on('error', (error) => {
+    clearTimeout(timeoutGuard);
+    if (inactivityTimer) clearTimeout(inactivityTimer);
     console.error('Failed to start scraper process:', error);
     sendEvent('error', { message: `Impossible de lancer le scraper : ${error.message}` });
     clearInterval(keepAliveInterval);
@@ -694,6 +900,8 @@ router.post('/predictions/scrape', (req, res) => {
   });
 
   child.on('close', async (code) => {
+    clearTimeout(timeoutGuard);
+    if (inactivityTimer) clearTimeout(inactivityTimer);
     activeScraperProcess = null;
     
     if (stopScraperRequested) {
@@ -734,6 +942,7 @@ router.post('/predictions/scrape', (req, res) => {
       sendEvent('log', { message: `[Predictix] ${matches.length} matchs trouvés. Enregistrement dans SQLite...` });
 
       let importedCount = 0;
+      const settledBetsList = [];
 
       for (const match of matches) {
         if (!match.home_team || !match.away_team) {
@@ -774,8 +983,8 @@ router.post('/predictions/scrape', (req, res) => {
             match_id, time, date, tournament, home_team, away_team, score,
             over_odds, under_odds, card_line, probability, best_tip, win_rate, status,
             is_live, is_finished, first_half_corners_home, first_half_corners_away, odds_corners,
-            home_logo, away_logo, historical_links, scraped_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            home_logo, away_logo, historical_links, match_url, scraped_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         `;
 
         await dbRun(sql, [
@@ -800,10 +1009,25 @@ router.post('/predictions/scrape', (req, res) => {
           match.odds_corners ? JSON.stringify(match.odds_corners) : null,
           match.home_logo || null,
           match.away_logo || null,
-          match.historical_links ? JSON.stringify(match.historical_links) : null
+          match.historical_links ? JSON.stringify(match.historical_links) : null,
+          match.match_url || null
         ]);
 
         importedCount++;
+
+        // Auto-settle any pending bets for this primary match in real time
+        if (match.first_half_corners_home !== null && match.first_half_corners_home !== undefined &&
+            match.first_half_corners_away !== null && match.first_half_corners_away !== undefined) {
+          try {
+            const { autoSettleBetsForMatch } = await import('./bets.js');
+            const resolved = await autoSettleBetsForMatch(matchId, match.first_half_corners_home, match.first_half_corners_away);
+            if (resolved && resolved.length > 0) {
+              settledBetsList.push(...resolved);
+            }
+          } catch (err) {
+            console.error('[Predictix Import] Failed to auto-settle bet:', err.message);
+          }
+        }
       }
 
       sendEvent('log', { message: `[Predictix] ✓ Importation réussie : ${importedCount} prédictions insérées.` });
@@ -828,8 +1052,10 @@ router.post('/predictions/scrape', (req, res) => {
               for (const link of linksList) {
                 if (matchAddedCount >= 10) break; // Limit to 10 past confrontations per match
                 
-                const cached = await dbQuery('SELECT match_id FROM scraped_predictions WHERE match_id = ?', [link]);
-                if (cached.length === 0) {
+                const cached = await dbQuery('SELECT match_id, date FROM scraped_predictions WHERE match_id = ?', [link]);
+                const isPlaceholder = cached.length > 0 && 
+                  (cached[0].date === '2026-05-30' || cached[0].date === '2026-05-31' || cached[0].date.includes(':'));
+                if (cached.length === 0 || isPlaceholder) {
                   uncachedLinksSet.add(link);
                   matchAddedCount++;
                 }
@@ -878,10 +1104,17 @@ router.post('/predictions/scrape', (req, res) => {
                 const cardLine = histMatch.card_line || (charSum % 2 === 0 ? '4.5' : '5.5');
                 const bestTip = histMatch.best_tip || (stableProb >= 66 ? 'Plus de' : 'Moins de');
 
+                let histDate = histMatch.date || new Date().toISOString().substring(0, 10);
+                let histTime = histMatch.time || 'Finished';
+                if (histDate.includes(':')) {
+                  histTime = histDate;
+                  histDate = new Date().toISOString().substring(0, 10);
+                }
+
                 await dbRun(sqlHist, [
                   link,
-                  'Finished',
-                  histMatch.date || new Date().toISOString().substring(0, 10),
+                  histTime,
+                  histDate,
                   histMatch.tournament || 'Football',
                   homeClean,
                   awayClean,
@@ -936,7 +1169,7 @@ router.post('/predictions/scrape', (req, res) => {
         sendEvent('log', { message: `[ERREUR H2H] Échec du crawl profond : ${deepCrawlErr.message}` });
       }
 
-      sendEvent('complete', { count: importedCount });
+      sendEvent('complete', { count: importedCount, settledBets: settledBetsList });
       clearInterval(keepAliveInterval);
       res.end();
     } catch (error) {
@@ -1000,8 +1233,44 @@ router.post('/predictions/:matchId/crawl-history', async (req, res) => {
       });
     }
 
+    const torActive = await isTorActive();
+    if (!torActive) {
+      return res.status(400).json({ 
+        success: false, 
+        error: { message: "Le proxy Tor local n'est pas actif sur le port 9050. Veuillez lancer Tor et réessayer." } 
+      });
+    }
+
     // Mark the match as crawling
     activeCrawlHistoryMatches.add(matchId);
+
+    const spawnedChildren = [];
+    const onSpawn = (child) => spawnedChildren.push(child);
+
+    // Global safety timeout for this background H2H crawl: 45 seconds max!
+    const backgroundTimeout = setTimeout(() => {
+      if (activeCrawlHistoryMatches.has(matchId)) {
+        console.warn(`[Predictix H2H Crawl] H2H crawl timed out globally (45s) for match: ${matchId}. Aborting background crawl.`);
+        
+        // Force kill all spawned processes for this match H2H crawl!
+        for (const child of spawnedChildren) {
+          if (child && !child.killed) {
+            try {
+              const pid = child.pid;
+              if (process.platform === 'win32') {
+                exec(`taskkill /pid ${pid} /T /F`, (err) => {
+                  if (err) console.error('Failed to taskkill H2H child process on timeout:', err.message);
+                });
+              } else {
+                child.kill();
+              }
+            } catch (e) {}
+          }
+        }
+        
+        activeCrawlHistoryMatches.delete(matchId);
+      }
+    }, 45000);
 
     // Send instant success response to the client
     res.json({
@@ -1028,7 +1297,7 @@ router.post('/predictions/:matchId/crawl-history', async (req, res) => {
           }
 
           console.log(`[Predictix On-Demand Background] Crawling primary match page: ${targetLink}`);
-          const primaryDetails = await scrapeSingleMatch(scraperPath, targetLink, false); // skipOdds = false to retrieve Oddschecker corner odds!
+          const primaryDetails = await scrapeSingleMatch(scraperPath, targetLink, false, onSpawn); // skipOdds = false to retrieve Oddschecker corner odds!
 
           if (primaryDetails) {
             const homeClean = primaryDetails.home_team.replace(/[▲▼]/g, '').trim();
@@ -1040,6 +1309,14 @@ router.post('/predictions/:matchId/crawl-history', async (req, res) => {
             const cardLine = primaryDetails.card_line || (charSum % 2 === 0 ? '4.5' : '5.5');
             const bestTip = primaryDetails.best_tip || (stableProb >= 66 ? 'Plus de' : 'Moins de');
 
+            let parsedPrimaryDate = parseFrenchDate(primaryDetails.date);
+            let pDate = parsedPrimaryDate || match.date || new Date().toISOString().substring(0, 10);
+            let pTime = primaryDetails.time || match.time;
+            if (primaryDetails.date && primaryDetails.date.includes(':')) {
+              pTime = primaryDetails.date;
+              pDate = match.date || new Date().toISOString().substring(0, 10);
+            }
+
             await dbRun(`
               UPDATE scraped_predictions SET
                 first_half_corners_home = ?,
@@ -1050,7 +1327,9 @@ router.post('/predictions/:matchId/crawl-history', async (req, res) => {
                 odds_corners = ?,
                 card_line = ?,
                 best_tip = ?,
-                probability = ?
+                probability = ?,
+                date = ?,
+                time = ?
               WHERE match_id = ?
             `, [
               primaryDetails.first_half_corners_home,
@@ -1062,10 +1341,21 @@ router.post('/predictions/:matchId/crawl-history', async (req, res) => {
               cardLine,
               bestTip,
               `${stableProb}%`,
+              pDate,
+              pTime,
               matchId
             ]);
 
             console.log(`[Predictix On-Demand Background] ✓ Successfully enriched primary match ${matchId}!`);
+
+            // Auto-settle any pending bets for this primary match in real time
+            try {
+              const { autoSettleBetsForMatch } = await import('./bets.js');
+              await autoSettleBetsForMatch(matchId, primaryDetails.first_half_corners_home, primaryDetails.first_half_corners_away);
+            } catch (err) {
+              console.error('[Predictix On-Demand Background] Failed to auto-settle bet:', err.message);
+            }
+
             activeLinks = primaryDetails.historical_links || [];
           }
         }
@@ -1074,24 +1364,31 @@ router.post('/predictions/:matchId/crawl-history', async (req, res) => {
           console.log(`[Predictix On-Demand Background] Starting background H2H deep crawl for ${activeLinks.length} past matches...`);
           const uncachedLinks = [];
           for (const link of activeLinks) {
-            const cached = await dbQuery('SELECT match_id FROM scraped_predictions WHERE match_id = ?', [link]);
-            if (cached.length === 0) {
+            const cached = await dbQuery('SELECT match_id, date FROM scraped_predictions WHERE match_id = ?', [link]);
+            const isPlaceholder = cached.length > 0 && 
+              (cached[0].date === '2026-05-30' || cached[0].date === '2026-05-31' || cached[0].date.includes(':'));
+            if (cached.length === 0 || isPlaceholder) {
               uncachedLinks.push(link);
             }
           }
 
           console.log(`[Predictix On-Demand Background] ${activeLinks.length - uncachedLinks.length} cached, ${uncachedLinks.length} new to crawl.`);
           
-          const linksToScrape = uncachedLinks.slice(0, 12);
+          const linksToScrape = uncachedLinks.slice(0, 8);
           const concurrency = 4;
           let importedCount = 0;
 
           for (let i = 0; i < linksToScrape.length; i += concurrency) {
+            if (stopScraperRequested || !activeCrawlHistoryMatches.has(matchId)) {
+              console.log("[Predictix On-Demand Background] Deep H2H crawl cancelled or timed out.");
+              break;
+            }
             const chunk = linksToScrape.slice(i, i + concurrency);
             
             await Promise.all(chunk.map(async (link) => {
+              if (stopScraperRequested || !activeCrawlHistoryMatches.has(matchId)) return;
               console.log(`[Predictix On-Demand Background] Parallel crawling H2H link: ${link}`);
-              const histMatch = await scrapeSingleMatch(scraperPath, link, true); // skipOdds = true for speed!
+              const histMatch = await scrapeSingleMatch(scraperPath, link, true, onSpawn); // skipOdds = true for speed!
 
               if (histMatch && histMatch.home_team && histMatch.away_team) {
                 const homeClean = histMatch.home_team.replace(/[▲▼]/g, '').trim();
@@ -1113,10 +1410,18 @@ router.post('/predictions/:matchId/crawl-history', async (req, res) => {
                 const cardLine = histMatch.card_line || (charSum % 2 === 0 ? '4.5' : '5.5');
                 const bestTip = histMatch.best_tip || (stableProb >= 66 ? 'Plus de' : 'Moins de');
 
+                let parsedHistDate = parseFrenchDate(histMatch.date);
+                let histDate = parsedHistDate || new Date().toISOString().substring(0, 10);
+                let histTime = histMatch.time || 'Finished';
+                if (histMatch.date && histMatch.date.includes(':')) {
+                  histTime = histMatch.date;
+                  histDate = new Date().toISOString().substring(0, 10);
+                }
+
                 await dbRun(sqlHist, [
                   link,
-                  'Finished',
-                  histMatch.date || new Date().toISOString().substring(0, 10),
+                  histTime,
+                  histDate,
                   histMatch.tournament || 'Football',
                   homeClean,
                   awayClean,
@@ -1169,6 +1474,7 @@ router.post('/predictions/:matchId/crawl-history', async (req, res) => {
       } catch (err) {
         console.error('[Predictix On-Demand Background Error]', err.message);
       } finally {
+        clearTimeout(backgroundTimeout);
         // Ensure the match ID is removed from active crawling list
         activeCrawlHistoryMatches.delete(matchId);
       }
