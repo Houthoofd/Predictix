@@ -67,6 +67,57 @@ router.get('/predictions', async (req, res) => {
   try {
     const rows = await dbQuery('SELECT * FROM scraped_predictions WHERE is_historical = 0 ORDER BY scraped_at DESC, time ASC');
     
+    // Helper to normalize tournament strings to clean league keys
+    function getLeagueKey(t) {
+      if (!t) return '';
+      return t.toLowerCase()
+              .replace(/match en direct/g, '')
+              .replace(/\(live score en direct\)/g, '')
+              .replace(/[^a-z0-9]/g, '');
+    }
+
+    // Dynamic League Averages learning: fetch completed historical matches to dynamically compute league baselines
+    const allHistoricalMatches = await dbQuery(`
+      SELECT tournament, home_team, away_team, first_half_corners_home, first_half_corners_away 
+      FROM scraped_predictions 
+      WHERE is_historical = 1 AND first_half_corners_home IS NOT NULL
+    `);
+
+    const leagueGroups = {};
+    for (const m of allHistoricalMatches) {
+      let rawTour = m.tournament || '';
+      // Slice off team names if present using home_team to group matches by exact league
+      if (m.home_team && rawTour.includes(m.home_team)) {
+        const idx = rawTour.indexOf(m.home_team);
+        rawTour = rawTour.substring(0, idx);
+      }
+      const key = getLeagueKey(rawTour);
+      if (!key) continue;
+      if (!leagueGroups[key]) {
+        leagueGroups[key] = { homeSum: 0, homeCount: 0, awaySum: 0, awayCount: 0 };
+      }
+      if (m.first_half_corners_home !== null && m.first_half_corners_home !== undefined) {
+        leagueGroups[key].homeSum += m.first_half_corners_home;
+        leagueGroups[key].homeCount++;
+      }
+      if (m.first_half_corners_away !== null && m.first_half_corners_away !== undefined) {
+        leagueGroups[key].awaySum += m.first_half_corners_away;
+        leagueGroups[key].awayCount++;
+      }
+    }
+
+    const leagueAverages = {};
+    for (const key in leagueGroups) {
+      const g = leagueGroups[key];
+      // Require at least 5 matches to establish a robust specific league baseline
+      if (g.homeCount >= 5 && g.awayCount >= 5) {
+        leagueAverages[key] = {
+          home: parseFloat((g.homeSum / g.homeCount).toFixed(2)),
+          away: parseFloat((g.awaySum / g.awayCount).toFixed(2))
+        };
+      }
+    }
+
     const enrichedRows = [];
     
     for (const row of rows) {
@@ -133,10 +184,19 @@ router.get('/predictions', async (req, res) => {
       const awayAvg = awayCount > 0 ? parseFloat((awaySum / awayCount).toFixed(1)) : null;
       
       // Apply statistical shrinkage estimation (Mean Reversion) to stabilize lambda across all matches
-      const defaultHome = 2.2;
-      const defaultAway = 2.0;
-      const teamWeight = 0.6;
+      let defaultHome = 2.2;
+      let defaultAway = 2.0;
       
+      const primaryKey = getLeagueKey(row.tournament);
+      if (primaryKey) {
+        const matchedKey = Object.keys(leagueAverages).find(k => k.includes(primaryKey) || primaryKey.includes(k));
+        if (matchedKey) {
+          defaultHome = leagueAverages[matchedKey].home;
+          defaultAway = leagueAverages[matchedKey].away;
+        }
+      }
+      
+      const teamWeight = 0.6;
       const homeRegressed = homeAvg !== null ? parseFloat((teamWeight * homeAvg + (1 - teamWeight) * defaultHome).toFixed(2)) : defaultHome;
       const awayRegressed = awayAvg !== null ? parseFloat((teamWeight * awayAvg + (1 - teamWeight) * defaultAway).toFixed(2)) : defaultAway;
       
