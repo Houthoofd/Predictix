@@ -110,6 +110,27 @@ router.get('/predictions', async (req, res) => {
       // Expected corners A + B in 1st half (default to standard 4.2 corners if no averages present)
       const lambda1MT = (homeAvg || 2.2) + (awayAvg || 2.0);
       
+      // Dynamic Poisson prediction
+      let dynamicBestTip = row.best_tip;
+      let dynamicCardLine = row.card_line;
+      let dynamicProbability = row.probability;
+
+      if (homeAvg !== null && awayAvg !== null) {
+        const targetLine = 4.5;
+        const overProb = poissonOver(lambda1MT, targetLine);
+        const underProb = poissonUnder(lambda1MT, targetLine);
+
+        if (overProb >= underProb) {
+          dynamicBestTip = "Plus de";
+          dynamicCardLine = "4.5";
+          dynamicProbability = `${Math.round(overProb * 100)}%`;
+        } else {
+          dynamicBestTip = "Moins de";
+          dynamicCardLine = "4.5";
+          dynamicProbability = `${Math.round(underProb * 100)}%`;
+        }
+      }
+
       // Parse cached Oddschecker odds
       let oddsCorners = [];
       try {
@@ -148,6 +169,9 @@ router.get('/predictions', async (req, res) => {
       
       enrichedRows.push({
         ...row,
+        best_tip: dynamicBestTip,
+        card_line: dynamicCardLine,
+        probability: dynamicProbability,
         home_avg_first_half_corners: homeAvg,
         away_avg_first_half_corners: awayAvg,
         h2h_avg_first_half_corners: h2hAvg,
@@ -493,94 +517,101 @@ router.post('/predictions/scrape', (req, res) => {
       }
 
       sendEvent('log', { message: `[Predictix] ✓ Importation réussie : ${importedCount} prédictions insérées.` });
-      sendEvent('log', { message: `[Predictix] Lancement du scraping de l'historique en tâche de fond...` });
-      sendEvent('complete', { count: importedCount });
-      res.end(); // Gracefully closes the SSE connection for a fast, success-indicated build in the browser!
+      sendEvent('log', { message: `[Predictix] Analyse de l'historique des opposants...` });
 
-      // Start Deep Crawl of H2H past historical links in background asynchronously!
-      console.log(`[Predictix] Starting asynchronous background H2H deep crawl for ${matches.length} matches...`);
-      (async () => {
-        try {
-          for (const match of matches) {
-            if (stopScraperRequested) {
-              console.log("[Predictix Background] Deep crawl stop requested.");
-              break;
+      try {
+        // Collect all historical links from newly imported matches that are not already cached
+        const uncachedLinksSet = new Set();
+        for (const match of matches) {
+          if (match.historical_links) {
+            let linksList = [];
+            try {
+              linksList = typeof match.historical_links === 'string' 
+                ? JSON.parse(match.historical_links) 
+                : match.historical_links;
+            } catch (e) {
+              linksList = match.historical_links;
             }
-
-            if (!match.home_team || !match.away_team) continue;
-
-            if (match.historical_links && match.historical_links.length > 0) {
-              console.log(`[Predictix Background] Crawling history for ${match.home_team} vs ${match.away_team}...`);
-              
-              const uncachedLinks = [];
-              for (const link of match.historical_links) {
+            
+            if (Array.isArray(linksList)) {
+              for (const link of linksList) {
                 const cached = await dbQuery('SELECT match_id FROM scraped_predictions WHERE match_id = ?', [link]);
                 if (cached.length === 0) {
-                  uncachedLinks.push(link);
+                  uncachedLinksSet.add(link);
                 }
-              }
-
-              console.log(`[Predictix Background] ${match.historical_links.length - uncachedLinks.length} H2H matches cached, ${uncachedLinks.length} new to crawl.`);
-
-              // Crawl up to 12 matches (10 required + 2 safety margin)
-              const linksToScrape = uncachedLinks.slice(0, 12);
-              for (const link of linksToScrape) {
-                if (stopScraperRequested) break;
-
-                console.log(`[Predictix Background] Deep crawling over Tor: ${link}`);
-                const histMatch = await scrapeSingleMatch(scraperPath, link, true);
-
-                if (histMatch && histMatch.home_team && histMatch.away_team) {
-                  const homeClean = histMatch.home_team.replace(/[▲▼]/g, '').trim();
-                  const awayClean = histMatch.away_team.replace(/[▲▼]/g, '').trim();
-
-                  const sqlHist = `
-                    INSERT OR REPLACE INTO scraped_predictions (
-                      match_id, time, date, tournament, home_team, away_team, score,
-                      over_odds, under_odds, card_line, probability, best_tip, win_rate, status,
-                      is_live, is_finished, first_half_corners_home, first_half_corners_away, odds_corners,
-                      home_logo, away_logo, is_historical, scraped_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                  `;
-
-                  const hashSeed = homeClean + awayClean;
-                  let charSum = 0;
-                  for (let i = 0; i < hashSeed.length; i++) charSum += hashSeed.charCodeAt(i);
-                  const stableProb = 55 + (charSum % 25);
-                  const cardLine = histMatch.card_line || (charSum % 2 === 0 ? '4.5' : '5.5');
-                  const bestTip = histMatch.best_tip || (stableProb >= 66 ? 'Plus de' : 'Moins de');
-
-                  await dbRun(sqlHist, [
-                    link,
-                    'Finished',
-                    histMatch.date || new Date().toISOString().substring(0, 10),
-                    histMatch.tournament || 'Football',
-                    homeClean,
-                    awayClean,
-                    histMatch.score || '',
-                    '1.85', '1.90', cardLine, `${stableProb}%`, bestTip, '60%', 'Finished',
-                    0, 1,
-                    histMatch.first_half_corners_home,
-                    histMatch.first_half_corners_away,
-                    null,
-                    histMatch.home_logo || null,
-                    histMatch.away_logo || null,
-                    1
-                  ]);
-
-                  console.log(`[Predictix Background] ✓ Imported H2H: ${homeClean} vs ${awayClean} (${histMatch.first_half_corners_home} - ${histMatch.first_half_corners_away})`);
-                }
-
-                // Polite delay to prevent SOCKS proxy bottlenecks
-                await new Promise(r => setTimeout(r, 1500));
               }
             }
           }
-          console.log("[Predictix Background] Async deep crawl successfully completed!");
-        } catch (err) {
-          console.error("[Predictix Background Error] Error in async deep crawl:", err.message);
         }
-      })();
+
+        const linksToScrape = Array.from(uncachedLinksSet).slice(0, 12);
+        
+        if (linksToScrape.length > 0) {
+          sendEvent('log', { message: `[Predictix] ${linksToScrape.length} nouveaux à scrapper` });
+          
+          for (const link of linksToScrape) {
+            if (stopScraperRequested) {
+              sendEvent('log', { message: `[Predictix] Deep crawl annulé par l'utilisateur.` });
+              break;
+            }
+
+            sendEvent('log', { message: `[Predictix] Deep crawling over Tor: ${link}` });
+            const histMatch = await scrapeSingleMatch(scraperPath, link, true); // skipOdds = true for past matches
+
+            if (histMatch && histMatch.home_team && histMatch.away_team) {
+              const homeClean = histMatch.home_team.replace(/[▲▼]/g, '').trim();
+              const awayClean = histMatch.away_team.replace(/[▲▼]/g, '').trim();
+
+              const sqlHist = `
+                INSERT OR REPLACE INTO scraped_predictions (
+                  match_id, time, date, tournament, home_team, away_team, score,
+                  over_odds, under_odds, card_line, probability, best_tip, win_rate, status,
+                  is_live, is_finished, first_half_corners_home, first_half_corners_away, odds_corners,
+                  home_logo, away_logo, is_historical, scraped_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+              `;
+
+              const hashSeed = homeClean + awayClean;
+              let charSum = 0;
+              for (let i = 0; i < hashSeed.length; i++) charSum += hashSeed.charCodeAt(i);
+              const stableProb = 55 + (charSum % 25);
+              const cardLine = histMatch.card_line || (charSum % 2 === 0 ? '4.5' : '5.5');
+              const bestTip = histMatch.best_tip || (stableProb >= 66 ? 'Plus de' : 'Moins de');
+
+              await dbRun(sqlHist, [
+                link,
+                'Finished',
+                histMatch.date || new Date().toISOString().substring(0, 10),
+                histMatch.tournament || 'Football',
+                homeClean,
+                awayClean,
+                histMatch.score || '',
+                '1.85', '1.90', cardLine, `${stableProb}%`, bestTip, '60%', 'Finished',
+                0, 1,
+                histMatch.first_half_corners_home,
+                histMatch.first_half_corners_away,
+                null,
+                histMatch.home_logo || null,
+                histMatch.away_logo || null,
+                1
+              ]);
+
+              sendEvent('log', { message: `[Predictix] ✓ Confrontation importée : ${homeClean} vs ${awayClean}` });
+            }
+
+            // Polite delay to prevent Tor bottleneck
+            await new Promise(r => setTimeout(r, 1500));
+          }
+        }
+        
+        sendEvent('log', { message: `[Predictix] ✓ Scraping de l'historique terminé avec succès.` });
+      } catch (deepCrawlErr) {
+        console.error("Error in sync deep H2H crawl:", deepCrawlErr);
+        sendEvent('log', { message: `[ERREUR H2H] Échec du crawl profond : ${deepCrawlErr.message}` });
+      }
+
+      sendEvent('complete', { count: importedCount });
+      res.end();
     } catch (error) {
       console.error('Error importing scraped data:', error);
       sendEvent('error', { message: `Erreur lors de l'importation en base de données : ${error.message}` });
@@ -669,7 +700,7 @@ router.post('/predictions/:matchId/crawl-history', async (req, res) => {
           }
 
           console.log(`[Predictix On-Demand Background] Crawling primary match page: ${targetLink}`);
-          const primaryDetails = await scrapeSingleMatch(scraperPath, targetLink, true); // skipOdds = true for maximum speed and robustness over SOCKS5 Tor proxy!
+          const primaryDetails = await scrapeSingleMatch(scraperPath, targetLink, false); // skipOdds = false to retrieve Oddschecker corner odds!
 
           if (primaryDetails) {
             const homeClean = primaryDetails.home_team.replace(/[▲▼]/g, '').trim();
