@@ -320,11 +320,26 @@ router.get('/predictions', async (req, res) => {
         };
       });
       
+      // Override general card O/U odds with our highly accurate Poisson estimated bookmaker odds
+      // when no real scraped corner odds are available.
+      const activeLineNum = parseFloat(dynamicCardLine);
+      const activeOddsRow = enrichedOdds.find(o => o.market_type === '1st_half' && parseFloat(o.line) === activeLineNum);
+      
+      let finalOverOdds = row.over_odds;
+      let finalUnderOdds = row.under_odds;
+      
+      if (activeOddsRow && activeOddsRow.is_estimated) {
+        finalOverOdds = String(activeOddsRow.over_decimal);
+        finalUnderOdds = String(activeOddsRow.under_decimal);
+      }
+      
       enrichedRows.push({
         ...row,
         best_tip: dynamicBestTip,
         card_line: dynamicCardLine,
         probability: dynamicProbability,
+        over_odds: finalOverOdds,
+        under_odds: finalUnderOdds,
         home_avg_first_half_corners: homeRegressed,
         away_avg_first_half_corners: awayRegressed,
         h2h_avg_first_half_corners: h2hAvg,
