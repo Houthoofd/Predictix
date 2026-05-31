@@ -695,7 +695,9 @@ router.post('/predictions/scrape', (req, res) => {
                 1
               ]);
 
-              sendEvent('log', { message: `[Predictix] ✓ Confrontation importée : ${homeClean} vs ${awayClean}` });
+              const scoreText = histMatch.score ? ` (Score: ${histMatch.score})` : '';
+              const dateText = histMatch.date ? ` (Date: ${histMatch.date})` : '';
+              sendEvent('log', { message: `[Predictix] ✓ Confrontation importee : ${homeClean} vs ${awayClean}${dateText}${scoreText}` });
             } else {
               const sqlHistSkipped = `
                 INSERT OR REPLACE INTO scraped_predictions (
@@ -926,7 +928,9 @@ router.post('/predictions/:matchId/crawl-history', async (req, res) => {
                 ]);
 
                 importedCount++;
-                console.log(`[Predictix On-Demand Background] ✓ Parallel H2H imported: ${homeClean} vs ${awayClean}`);
+                const scoreText = histMatch.score ? ` (Score: ${histMatch.score})` : '';
+                const dateText = histMatch.date ? ` (Date: ${histMatch.date})` : '';
+                console.log(`[Predictix On-Demand Background] ✓ Parallel H2H imported: ${homeClean} vs ${awayClean}${dateText}${scoreText}`);
               } else {
                 const sqlHistSkipped = `
                   INSERT OR REPLACE INTO scraped_predictions (
