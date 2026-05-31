@@ -338,6 +338,10 @@ router.post('/predictions/scrape/discover', (req, res) => {
 // Trigger scraper execution and stream progress via Server-Sent Events (SSE)
 router.post('/predictions/scrape', (req, res) => {
   stopScraperRequested = false;
+  
+  // Disable Node's default 2-minute request/socket timeout for long SSE scraper streams
+  req.socket.setTimeout(0);
+  
   // Set headers for Server-Sent Events (SSE)
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
