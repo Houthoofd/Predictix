@@ -16,5 +16,14 @@
   },
   "devDependencies": {
     "nodemon": "^3.1.0"
+  },
+  "nodemonConfig": {
+    "ignore": [
+      "predictix.db*",
+      "*.db*",
+      "*.db-journal",
+      "*.db-wal",
+      "*.db-shm"
+    ]
   }
 }
