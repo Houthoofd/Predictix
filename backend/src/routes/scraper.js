@@ -696,6 +696,27 @@ router.post('/predictions/scrape', (req, res) => {
               ]);
 
               sendEvent('log', { message: `[Predictix] ✓ Confrontation importée : ${homeClean} vs ${awayClean}` });
+            } else {
+              const sqlHistSkipped = `
+                INSERT OR REPLACE INTO scraped_predictions (
+                  match_id, time, date, tournament, home_team, away_team, score,
+                  over_odds, under_odds, card_line, probability, best_tip, win_rate, status,
+                  is_live, is_finished, is_historical, scraped_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+              `;
+              await dbRun(sqlHistSkipped, [
+                link,
+                'Finished',
+                new Date().toISOString().substring(0, 10),
+                'Football',
+                'Skipped Match',
+                'Skipped Match',
+                '-',
+                '1.85', '1.90', '4.5', '50%', 'Plus de', '50%', 'Finished',
+                0, 1,
+                1
+              ]);
+              sendEvent('log', { message: `[Predictix] ✓ Confrontation sautée (échec du crawl) : ${link}` });
             }
 
             // Polite delay to prevent Tor bottleneck
@@ -906,6 +927,27 @@ router.post('/predictions/:matchId/crawl-history', async (req, res) => {
 
                 importedCount++;
                 console.log(`[Predictix On-Demand Background] ✓ Parallel H2H imported: ${homeClean} vs ${awayClean}`);
+              } else {
+                const sqlHistSkipped = `
+                  INSERT OR REPLACE INTO scraped_predictions (
+                    match_id, time, date, tournament, home_team, away_team, score,
+                    over_odds, under_odds, card_line, probability, best_tip, win_rate, status,
+                    is_live, is_finished, is_historical, scraped_at
+                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                `;
+                await dbRun(sqlHistSkipped, [
+                  link,
+                  'Finished',
+                  new Date().toISOString().substring(0, 10),
+                  'Football',
+                  'Skipped Match',
+                  'Skipped Match',
+                  '-',
+                  '1.85', '1.90', '4.5', '50%', 'Plus de', '50%', 'Finished',
+                  0, 1,
+                  1
+                ]);
+                console.log(`[Predictix On-Demand Background] ✓ Parallel H2H skipped (failed): ${link}`);
               }
             }));
 
