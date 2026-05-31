@@ -140,20 +140,18 @@ router.get('/predictions', async (req, res) => {
       let dynamicCardLine = row.card_line;
       let dynamicProbability = row.probability;
 
-      if (homeAvg !== null && awayAvg !== null) {
-        const targetLine = 4.5;
-        const overProb = poissonOver(lambda1MT, targetLine);
-        const underProb = poissonUnder(lambda1MT, targetLine);
+      const targetLine = 4.5;
+      const overProb = poissonOver(lambda1MT, targetLine);
+      const underProb = poissonUnder(lambda1MT, targetLine);
 
-        if (overProb >= underProb) {
-          dynamicBestTip = "Plus de";
-          dynamicCardLine = "4.5";
-          dynamicProbability = `${Math.round(overProb * 100)}%`;
-        } else {
-          dynamicBestTip = "Moins de";
-          dynamicCardLine = "4.5";
-          dynamicProbability = `${Math.round(underProb * 100)}%`;
-        }
+      if (overProb >= underProb) {
+        dynamicBestTip = "Plus de";
+        dynamicCardLine = "4.5";
+        dynamicProbability = `${Math.round(overProb * 100)}%`;
+      } else {
+        dynamicBestTip = "Moins de";
+        dynamicCardLine = "4.5";
+        dynamicProbability = `${Math.round(underProb * 100)}%`;
       }
 
       // Parse cached Oddschecker odds
@@ -205,7 +203,7 @@ router.get('/predictions', async (req, res) => {
             }
           }
         }
-      } else if (!has1stHalf && !hasFullTime && homeAvg !== null && awayAvg !== null) {
+      } else if (!has1stHalf && !hasFullTime) {
         const projectedLines = [3.5, 4.5, 5.5];
         const payout = 0.93;
         for (const line of projectedLines) {
