@@ -1,0 +1,339 @@
+import express from 'express';
+import { dbQuery, dbGet, dbRun } from '../db/database.js';
+
+const router = express.Router();
+
+// Smart deterministic NLP Pattern Matcher for Magic Strategies
+function parsePromptToStrategy(prompt) {
+  const text = (prompt || '').toLowerCase();
+  
+  // 1. Identify Metric
+  let metric = 'corners'; // Default fallback
+  let metricLabel = 'Corners';
+  if (text.includes('faute')) {
+    metric = 'fouls';
+    metricLabel = 'Fautes commises';
+  } else if (text.includes('carton') || text.includes('jaune') || text.includes('rouge')) {
+    metric = 'yellow_cards';
+    metricLabel = 'Cartons';
+  } else if (text.includes('possession') || text.includes('balle')) {
+    metric = 'possession';
+    metricLabel = 'Possession';
+  } else if (text.includes('tir') && text.includes('cadr')) {
+    metric = 'shots_on_target';
+    metricLabel = 'Tirs cadrés';
+  } else if (text.includes('tir')) {
+    metric = 'shots';
+    metricLabel = 'Tirs';
+  } else if (text.includes('hors-jeu') || text.includes('hors jeu')) {
+    metric = 'offsides';
+    metricLabel = 'Hors-jeu';
+  }
+
+  // 2. Identify Operator
+  let operator = '>='; // Default fallback
+  let opLabel = 'au moins';
+  if (text.includes('moins') || text.includes('inférieur') || text.includes('<') || text.includes('maximum')) {
+    operator = '<=';
+    opLabel = 'maximum';
+  }
+
+  // 3. Identify Scope & Limit (e.g., "5 H2H" or "10 confrontations")
+  let scope = 'h2h';
+  let limit = 5;
+  const h2hMatch = text.match(/(\d+)\s*(?:confrontation|h2h|oppo|rencontre|match)/);
+  if (h2hMatch) {
+    limit = parseInt(h2hMatch[1], 10);
+  }
+
+  // 4. Identify Threshold (excluding the number used for limit if possible)
+  let threshold = null;
+  const numMatch = text.match(/\d+\.\d+|\d+/g);
+  if (numMatch) {
+    // Find the number that doesn't correspond to the match limit
+    for (const numStr of numMatch) {
+      const val = parseFloat(numStr);
+      if (val === limit && text.includes(numStr + ' h2h') || text.includes(numStr + ' match') || text.includes(numStr + ' confrontation')) {
+        continue; // Skip the limit number
+      }
+      threshold = val;
+      break;
+    }
+    // Fallback if we only found one number and it was the limit
+    if (threshold === null && numMatch.length > 0) {
+      threshold = parseFloat(numMatch[numMatch.length - 1]);
+    }
+  }
+
+  // Set default thresholds if no number was extracted
+  if (threshold === null) {
+    if (metric === 'fouls') threshold = 24.5;
+    else if (metric === 'yellow_cards') threshold = 3.5;
+    else if (metric === 'possession') threshold = 50.0;
+    else if (metric === 'shots_on_target') threshold = 8.5;
+    else if (metric === 'shots') threshold = 18.5;
+    else if (metric === 'offsides') threshold = 3.5;
+    else threshold = 4.5;
+  }
+
+  // Formulate readable Strategy Name
+  const name = `${metricLabel} : ${opLabel} ${threshold} (Moyenne H2H)`;
+
+  const conditions = {
+    scope: scope,
+    limit: limit,
+    operator: operator,
+    threshold: threshold,
+    aggregation: 'avg' // default average
+  };
+
+  return {
+    name,
+    metric,
+    conditions
+  };
+}
+
+/* ========================================================================
+   MAGIC STRATEGY API ENDPOINTS
+   ======================================================================== */
+
+// Get all custom strategies
+router.get('/strategies/magic', async (req, res) => {
+  try {
+    const strategies = await dbQuery('SELECT * FROM custom_strategies ORDER BY created_at DESC');
+    // Parse conditions_json back to object for convenience
+    const parsed = strategies.map(s => ({
+      ...s,
+      conditions: JSON.parse(s.conditions_json)
+    }));
+    res.json({ success: true, data: parsed });
+  } catch (error) {
+    res.status(500).json({ success: false, error: { message: error.message } });
+  }
+});
+
+// Create a new magic strategy based on prompt
+router.post('/strategies/magic', async (req, res) => {
+  const { prompt } = req.body;
+  if (!prompt || typeof prompt !== 'string' || prompt.trim() === '') {
+    return res.status(400).json({ success: false, error: { message: 'Le prompt est obligatoire et doit être valide.' } });
+  }
+
+  try {
+    // Run NLP pattern matcher
+    const parsed = parsePromptToStrategy(prompt);
+    const conditionsJson = JSON.stringify(parsed.conditions);
+
+    // Save in SQLite
+    const sql = `
+      INSERT INTO custom_strategies (name, prompt, metric, conditions_json, status)
+      VALUES (?, ?, ?, ?, 'ACTIVE')
+    `;
+    const result = await dbRun(sql, [parsed.name, prompt.trim(), parsed.metric, conditionsJson]);
+
+    const created = await dbGet('SELECT * FROM custom_strategies WHERE id = ?', [result.id]);
+    res.json({
+      success: true,
+      message: `Stratégie "${parsed.name}" générée et activée avec succès !`,
+      data: {
+        ...created,
+        conditions: parsed.conditions
+      }
+    });
+
+  } catch (error) {
+    res.status(500).json({ success: false, error: { message: error.message } });
+  }
+});
+
+// Toggle strategy status (ACTIVE / INACTIVE)
+router.post('/strategies/magic/:id/toggle', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const existing = await dbGet('SELECT * FROM custom_strategies WHERE id = ?', [id]);
+    if (!existing) {
+      return res.status(404).json({ success: false, error: { message: 'Stratégie introuvable.' } });
+    }
+
+    const newStatus = existing.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    await dbRun('UPDATE custom_strategies SET status = ? WHERE id = ?', [newStatus, id]);
+    
+    const updated = await dbGet('SELECT * FROM custom_strategies WHERE id = ?', [id]);
+    res.json({ 
+      success: true, 
+      message: `Stratégie "${existing.name}" est désormais ${newStatus === 'ACTIVE' ? 'activée' : 'désactivée'}.`,
+      data: updated 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: { message: error.message } });
+  }
+});
+
+// Delete a custom strategy
+router.delete('/strategies/magic/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const existing = await dbGet('SELECT * FROM custom_strategies WHERE id = ?', [id]);
+    if (!existing) {
+      return res.status(404).json({ success: false, error: { message: 'Stratégie introuvable.' } });
+    }
+
+    await dbRun('DELETE FROM custom_strategies WHERE id = ?', [id]);
+    res.json({ success: true, message: `Stratégie "${existing.name}" supprimée avec succès.`, data: { id } });
+  } catch (error) {
+    res.status(500).json({ success: false, error: { message: error.message } });
+  }
+});
+
+// GET /api/predictions/magic - Reactive Screener comparing matches against active custom strategies
+router.get('/predictions/magic', async (req, res) => {
+  try {
+    // 1. Get all active strategies
+    const activeStrategies = await dbQuery("SELECT * FROM custom_strategies WHERE status = 'ACTIVE'");
+    if (activeStrategies.length === 0) {
+      return res.json({ success: true, data: [] });
+    }
+
+    // 2. Get all upcoming matches
+    const upcomingMatches = await dbQuery("SELECT * FROM scraped_predictions WHERE is_historical = 0 AND is_finished = 0 ORDER BY date ASC, time ASC");
+    
+    const signals = [];
+
+    // Helper map for metric labels in French
+    const metricLabels = {
+      fouls: 'fautes',
+      yellow_cards: 'cartons jaunes',
+      possession: 'possession',
+      shots_on_target: 'tirs cadrés',
+      shots: 'tirs',
+      offsides: 'hors-jeu',
+      corners: 'corners'
+    };
+
+    // 3. For each upcoming match, check active strategies
+    for (const match of upcomingMatches) {
+      // Find historical finished H2H matches (up to 15 to cover potential limits)
+      const h2hMatches = await dbQuery(`
+        SELECT * FROM scraped_predictions 
+        WHERE is_finished = 1 
+          AND ((home_team = ? AND away_team = ?) OR (home_team = ? AND away_team = ?))
+        ORDER BY date DESC LIMIT 15
+      `, [match.home_team, match.away_team, match.away_team, match.home_team]);
+
+      if (h2hMatches.length === 0) {
+        continue; // No H2H data, cannot evaluate custom strategies
+      }
+
+      for (const strategy of activeStrategies) {
+        let conditions = {};
+        try {
+          conditions = JSON.parse(strategy.conditions_json);
+        } catch (e) {
+          continue; // Malformed JSON conditions
+        }
+
+        const limit = conditions.limit || 5;
+        const metric = strategy.metric;
+        const operator = conditions.operator || '>=';
+        const threshold = parseFloat(conditions.threshold);
+
+        let values = [];
+        for (const h2h of h2hMatches) {
+          if (values.length >= limit) break;
+
+          let stats = null;
+          try {
+            if (h2h.statistics_json) {
+              stats = JSON.parse(h2h.statistics_json);
+            }
+          } catch (e) {
+            continue;
+          }
+
+          if (!stats) continue;
+
+          // Standard evaluation logic based on metric type
+          if (metric === 'possession') {
+            if (stats.possession && stats.possession.home !== undefined && stats.possession.away !== undefined) {
+              // Relative possession for the upcoming home team
+              const val = (h2h.home_team === match.home_team) 
+                ? parseFloat(stats.possession.home) 
+                : parseFloat(stats.possession.away);
+              values.push(val);
+            }
+          } else {
+            // Cumulated metric (sum of home + away)
+            if (stats[metric] && stats[metric].home !== undefined && stats[metric].away !== undefined) {
+              const val = parseFloat(stats[metric].home) + parseFloat(stats[metric].away);
+              values.push(val);
+            }
+          }
+        }
+
+        // We require at least 1 historical match with stats to evaluate
+        if (values.length === 0) {
+          continue;
+        }
+
+        // Compute average
+        const sum = values.reduce((acc, curr) => acc + curr, 0);
+        const avg = parseFloat((sum / values.length).toFixed(1));
+
+        // Evaluate operator condition
+        let qualified = false;
+        if (operator === '>=' || operator === '>=') {
+          qualified = avg >= threshold;
+        } else if (operator === '<=') {
+          qualified = avg <= threshold;
+        } else if (operator === '>') {
+          qualified = avg > threshold;
+        } else if (operator === '<') {
+          qualified = avg < threshold;
+        }
+
+        if (qualified) {
+          const metricLabel = metricLabels[metric] || metric;
+          const readableOp = operator === '>=' ? 'au moins' : (operator === '<=' ? 'maximum' : operator);
+          
+          let rationale = '';
+          if (metric === 'possession') {
+            rationale = `Sélectionné par la stratégie "${strategy.name}" car la possession moyenne de ${match.home_team} sur les ${values.length} dernières confrontations H2H est de ${avg}% (seuil requis ${readableOp} ${threshold}%).`;
+          } else {
+            rationale = `Détecté par la stratégie "${strategy.name}" car la moyenne cumulée de ${metricLabel} sur les ${values.length} dernières confrontations H2H est de ${avg} (seuil requis ${readableOp} ${threshold}).`;
+          }
+
+          signals.push({
+            id: `${match.match_id}_${strategy.id}`,
+            match_id: match.match_id,
+            time: match.time,
+            date: match.date,
+            tournament: match.tournament,
+            home_team: match.home_team,
+            away_team: match.away_team,
+            home_logo: match.home_logo,
+            away_logo: match.away_logo,
+            score: match.score,
+            match_url: match.match_url,
+            strategy_id: strategy.id,
+            strategy_name: strategy.name,
+            metric: metric,
+            prompt: strategy.prompt,
+            avg_value: avg,
+            threshold: threshold,
+            operator: operator,
+            rationale: rationale,
+            scraped_at: match.scraped_at
+          });
+        }
+      }
+    }
+
+    res.json({ success: true, data: signals });
+
+  } catch (error) {
+    res.status(500).json({ success: false, error: { message: error.message } });
+  }
+});
+
+export default router;

@@ -22,9 +22,11 @@ app.use(express.json());
 // Routes
 import betsRoutes from './routes/bets.js';
 import scraperRoutes from './routes/scraper.js';
+import strategiesRoutes from './routes/strategies.js';
 
 app.use('/api', betsRoutes);
 app.use('/api', scraperRoutes);
+app.use('/api', strategiesRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

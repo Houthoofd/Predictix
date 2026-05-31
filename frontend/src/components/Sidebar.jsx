@@ -4,7 +4,8 @@ import {
   Database, 
   TrendingUp, 
   Award, 
-  RefreshCcw 
+  RefreshCcw,
+  Sparkles
 } from 'lucide-react';
 
 export default function Sidebar({ 
@@ -37,6 +38,18 @@ export default function Sidebar({
           >
             <Award size={20} />
             {!sidebarCollapsed && <span>Pronostics Corners</span>}
+          </button>
+          <button 
+            className={`nav-item ${activeTab === 'magic-predictions' ? 'active' : ''}`}
+            onClick={() => setActiveTab('magic-predictions')}
+            title={sidebarCollapsed ? "Pronostics Magiques" : ""}
+            style={{
+              borderLeft: activeTab === 'magic-predictions' ? '3px solid #bf5af2' : undefined,
+              color: activeTab === 'magic-predictions' ? '#bf5af2' : undefined
+            }}
+          >
+            <Sparkles size={20} style={{ color: activeTab === 'magic-predictions' ? '#bf5af2' : '#bf5af2' }} />
+            {!sidebarCollapsed && <span style={{ fontWeight: activeTab === 'magic-predictions' ? 700 : 500 }}>Pronostics Magiques</span>}
           </button>
           <button 
             className={`nav-item ${activeTab === 'scraper' ? 'active' : ''}`}

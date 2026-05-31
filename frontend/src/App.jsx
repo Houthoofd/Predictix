@@ -11,6 +11,7 @@ import DashboardTab from './components/DashboardTab';
 import ScraperTab from './components/ScraperTab';
 import TrackerTab from './components/TrackerTab';
 import PredictionsTab from './components/PredictionsTab';
+import MagicPredictionsTab from './components/MagicPredictionsTab';
 import StrategiesTab from './components/StrategiesTab';
 import AddBetModal from './components/AddBetModal';
 import ResetBankrollModal from './components/ResetBankrollModal';
@@ -64,6 +65,7 @@ export default function App() {
   const [crawlLoading, setCrawlLoading] = useState(false); // Track on-demand crawling loading state
   const [showScrapeResultModal, setShowScrapeResultModal] = useState(false);
   const [scrapeResultStats, setScrapeResultStats] = useState(null);
+  const [selectedScraperStrategyId, setSelectedScraperStrategyId] = useState('');
 
   // Custom Confirmation Dialog State
   const [confirmDialog, setConfirmDialog] = useState({
@@ -633,7 +635,10 @@ export default function App() {
       const response = await fetch('/api/predictions/scrape', { 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ limit: selectedLimit })
+        body: JSON.stringify({ 
+          limit: selectedLimit,
+          strategyId: selectedScraperStrategyId || null
+        })
       });
       if (!response.body) {
         throw new Error("Le serveur n'a pas renvoyé de flux de données.");
@@ -879,16 +884,18 @@ export default function App() {
               <h2 className="page-title">
                 {activeTab === 'dashboard' && 'Tableau de Bord'}
                 {activeTab === 'predictions' && 'Pronostics Corners'}
+                {activeTab === 'magic-predictions' && 'Pronostics Magiques 🪄'}
                 {activeTab === 'scraper' && 'Configuration Scraper'}
                 {activeTab === 'tracker' && 'Tracker de Paris'}
-                {activeTab === 'strategies' && 'Stratégies de Cartons'}
+                {activeTab === 'strategies' && 'Stratégies Personnalisées'}
               </h2>
               <p className="header-subtitle">
                 {activeTab === 'dashboard' && 'Statistiques de bankroll en temps réel et performances.'}
                 {activeTab === 'predictions' && 'Visualisez, analysez et placez vos paris corners basés sur le modèle de Poisson.'}
+                {activeTab === 'magic-predictions' && 'Signaux de value-bets basés sur vos stratégies personnalisées sur-mesure.'}
                 {activeTab === 'scraper' && 'Gérez et exécutez le scraper de match-en-direct.fr en temps réel.'}
                 {activeTab === 'tracker' && 'Journalisez vos paris sportifs pour optimiser votre capital.'}
-                {activeTab === 'strategies' && 'Analyse des cibles de paris à forte espérance mathématique.'}
+                {activeTab === 'strategies' && 'Analyse et configuration de vos cibles de paris à forte espérance mathématique.'}
               </p>
             </div>
             <div className="header-actions">
@@ -934,6 +941,8 @@ export default function App() {
                   handleTriggerScraping={handleTriggerScraping}
                   handleStartDetailedScraping={handleStartDetailedScraping}
                   consoleEndRef={consoleEndRef}
+                  selectedScraperStrategyId={selectedScraperStrategyId}
+                  setSelectedScraperStrategyId={setSelectedScraperStrategyId}
                 />
               )}
 
@@ -959,6 +968,13 @@ export default function App() {
                   setStartDate={setStartDate}
                   endDate={endDate}
                   setEndDate={setEndDate}
+                />
+              )}
+
+              {activeTab === 'magic-predictions' && (
+                <MagicPredictionsTab 
+                  handleQuickPlaceBet={handleQuickPlaceBet}
+                  setSelectedMatchDetails={setSelectedMatchDetails}
                 />
               )}
 

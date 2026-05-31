@@ -2,8 +2,10 @@ import express from 'express';
 import { spawn, exec } from 'child_process';
 import path from 'path';
 import fs from 'fs';
-import net from 'net';
-import { dbQuery, dbRun, dbGet } from '../db/database.js';
+import { dbQuery, dbGet } from '../db/database.js';
+import { isTorActive, getNewestScrapedFile, rewriteScraperLog } from '../utils/scraperHelpers.js';
+import { enrichMatchPredictions, computeLeagueAverages } from '../utils/predictionEngine.js';
+import { importScrapedMatches, importHistoricalMatch, importSkippedMatch, enrichPrimaryMatch } from '../db/importer.js';
 
 const router = express.Router();
 
@@ -11,532 +13,10 @@ let activeScraperProcess = null;
 let stopScraperRequested = false;
 const activeCrawlHistoryMatches = new Set();
 
-// Helper: Check if Tor SOCKS5 proxy port is active
-export function isTorActive() {
-  return new Promise((resolve) => {
-    const socket = new net.Socket();
-    socket.setTimeout(1500);
-    
-    socket.on('connect', () => {
-      socket.destroy();
-      resolve(true);
-    });
-    
-    const onError = () => {
-      socket.destroy();
-      resolve(false);
-    };
-    
-    socket.on('error', onError);
-    socket.on('timeout', onError);
-    
-    socket.connect(9050, '127.0.0.1');
-  });
-}
-
-// Helper: Poisson distribution probability of exactly k events with expected lambda
-function poissonProbability(lambda, k) {
-  let factorial = 1;
-  for (let i = 1; i <= k; i++) factorial *= i;
-  return Math.pow(lambda, k) * Math.exp(-lambda) / factorial;
-}
-
-// Helper: Cumulative Poisson probability of OVER line (e.g. > line)
-function poissonOver(lambda, line) {
-  const floor = Math.floor(line);
-  let sumUnder = 0;
-  for (let i = 0; i <= floor; i++) {
-    sumUnder += poissonProbability(lambda, i);
-  }
-  return 1 - sumUnder;
-}
-
-// Helper: Cumulative Poisson probability of UNDER line (e.g. < line)
-function poissonUnder(lambda, line) {
-  const floor = Math.ceil(line) - 1;
-  let sumUnder = 0;
-  for (let i = 0; i <= floor; i++) {
-    sumUnder += poissonProbability(lambda, i);
-  }
-  return sumUnder;
-}
-
-// Helper: Binary search to find expected lambda given target cumulative probability P(X <= k) = targetProb
-function findPoissonMean(k, targetProb) {
-  let low = 0.1;
-  let high = 30.0;
-  let mid = 0.0;
-  for (let iter = 0; iter < 40; iter++) {
-    mid = (low + high) / 2;
-    let sumUnder = 0;
-    let current = 1;
-    for (let i = 0; i <= k; i++) {
-      if (i > 0) {
-        current = current * mid / i;
-      }
-      sumUnder += current;
-    }
-    const prob = sumUnder * Math.exp(-mid);
-    if (prob > targetProb) {
-      low = mid;
-    } else {
-      high = mid;
-    }
-  }
-  return mid;
-}
-
-// Get cached predictions from database and compute predictive stats + Value Bets
-router.get('/predictions', async (req, res) => {
-  try {
-    let sql = 'SELECT * FROM scraped_predictions WHERE is_historical = 0';
-    const params = [];
-    
-    const { startDate, endDate, dateRange } = req.query;
-    
-    if (startDate && endDate) {
-      sql += ' AND date >= ? AND date <= ?';
-      params.push(startDate, endDate);
-    } else if (dateRange && dateRange !== 'all') {
-      const today = new Date();
-      const todayStr = today.toISOString().substring(0, 10);
-      
-      if (dateRange === 'today') {
-        sql += ' AND date = ?';
-        params.push(todayStr);
-      } else if (dateRange === 'yesterday') {
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayStr = yesterday.toISOString().substring(0, 10);
-        sql += ' AND date = ?';
-        params.push(yesterdayStr);
-      } else if (dateRange === 'week') {
-        const startOfWeek = new Date();
-        startOfWeek.setDate(startOfWeek.getDate() - 7);
-        const startOfWeekStr = startOfWeek.toISOString().substring(0, 10);
-        sql += ' AND date >= ? AND date <= ?';
-        params.push(startOfWeekStr, todayStr);
-      } else if (dateRange === 'month') {
-        const startOfMonth = new Date();
-        startOfMonth.setDate(startOfMonth.getDate() - 30);
-        const startOfMonthStr = startOfMonth.toISOString().substring(0, 10);
-        sql += ' AND date >= ? AND date <= ?';
-        params.push(startOfMonthStr, todayStr);
-      } else if (dateRange === 'year') {
-        const startOfYear = new Date();
-        startOfYear.setDate(startOfYear.getDate() - 365);
-        const startOfYearStr = startOfYear.toISOString().substring(0, 10);
-        sql += ' AND date >= ? AND date <= ?';
-        params.push(startOfYearStr, todayStr);
-      }
-    }
-    
-    sql += ' ORDER BY scraped_at DESC, time ASC';
-    const rows = await dbQuery(sql, params);
-    
-    // Helper to normalize tournament strings to clean league keys
-    function getLeagueKey(t) {
-      if (!t) return '';
-      return t.toLowerCase()
-              .replace(/match en direct/g, '')
-              .replace(/\(live score en direct\)/g, '')
-              .replace(/[^a-z0-9]/g, '');
-    }
-
-    // Dynamic League Averages learning: fetch completed historical matches to dynamically compute league baselines
-    const allHistoricalMatches = await dbQuery(`
-      SELECT tournament, home_team, away_team, first_half_corners_home, first_half_corners_away 
-      FROM scraped_predictions 
-      WHERE is_historical = 1 AND first_half_corners_home IS NOT NULL
-    `);
-
-    const leagueGroups = {};
-    for (const m of allHistoricalMatches) {
-      let rawTour = m.tournament || '';
-      // Slice off team names if present using home_team to group matches by exact league
-      if (m.home_team && rawTour.includes(m.home_team)) {
-        const idx = rawTour.indexOf(m.home_team);
-        rawTour = rawTour.substring(0, idx);
-      }
-      const key = getLeagueKey(rawTour);
-      if (!key) continue;
-      if (!leagueGroups[key]) {
-        leagueGroups[key] = { homeSum: 0, homeCount: 0, awaySum: 0, awayCount: 0 };
-      }
-      if (m.first_half_corners_home !== null && m.first_half_corners_home !== undefined) {
-        leagueGroups[key].homeSum += m.first_half_corners_home;
-        leagueGroups[key].homeCount++;
-      }
-      if (m.first_half_corners_away !== null && m.first_half_corners_away !== undefined) {
-        leagueGroups[key].awaySum += m.first_half_corners_away;
-        leagueGroups[key].awayCount++;
-      }
-    }
-
-    const leagueAverages = {};
-    for (const key in leagueGroups) {
-      const g = leagueGroups[key];
-      // Require at least 5 matches to establish a robust specific league baseline
-      if (g.homeCount >= 5 && g.awayCount >= 5) {
-        leagueAverages[key] = {
-          home: parseFloat((g.homeSum / g.homeCount).toFixed(2)),
-          away: parseFloat((g.awaySum / g.awayCount).toFixed(2))
-        };
-      }
-    }
-
-    const enrichedRows = [];
-    
-    for (const row of rows) {
-      // Find historical H2H matches between A and B (up to 10)
-      const h2hMatchesRaw = await dbQuery(`
-        SELECT first_half_corners_home, first_half_corners_away, home_team, away_team, home_logo, away_logo, score, date, time, tournament
-        FROM scraped_predictions 
-        WHERE is_finished = 1 
-          AND ((home_team = ? AND away_team = ?) OR (home_team = ? AND away_team = ?))
-        ORDER BY date DESC LIMIT 10
-      `, [row.home_team, row.away_team, row.away_team, row.home_team]);
-      
-      const normalizeMatchRow = (m) => {
-        let date = m.date || '';
-        let time = m.time || '';
-        if (date.includes(':')) {
-          time = date;
-          date = row.date || new Date().toISOString().substring(0, 10);
-        }
-        return { ...m, date, time };
-      };
-
-      const h2hMatches = h2hMatchesRaw.map(normalizeMatchRow);
-      
-      // Find Team A (Home) recent matches played STRICTLY at Domicile (up to 10)
-      const homeMatchesRaw = await dbQuery(`
-        SELECT first_half_corners_home, first_half_corners_away, home_team, away_team, home_logo, away_logo, score, date, time, tournament
-        FROM scraped_predictions 
-        WHERE is_finished = 1 
-          AND home_team = ?
-        ORDER BY date DESC LIMIT 10
-      `, [row.home_team]);
-      
-      const homeMatches = homeMatchesRaw.map(normalizeMatchRow);
-      
-      // Find Team B (Away) recent matches played STRICTLY at Extérieur (up to 10)
-      const awayMatchesRaw = await dbQuery(`
-        SELECT first_half_corners_home, first_half_corners_away, home_team, away_team, home_logo, away_logo, score, date, time, tournament
-        FROM scraped_predictions 
-        WHERE is_finished = 1 
-          AND away_team = ?
-        ORDER BY date DESC LIMIT 10
-      `, [row.away_team]);
-
-      const awayMatches = awayMatchesRaw.map(normalizeMatchRow);
-      
-      // Calculate H2H corners average (Total match corners in H2H)
-      let h2hSum = 0;
-      let h2hCount = 0;
-      for (const m of h2hMatches) {
-        if (m.first_half_corners_home !== null && m.first_half_corners_away !== null) {
-          h2hSum += (m.first_half_corners_home + m.first_half_corners_away);
-          h2hCount++;
-        }
-      }
-      const h2hAvg = h2hCount > 0 ? parseFloat((h2hSum / h2hCount).toFixed(1)) : null;
-      
-      // Calculate Team A recent corners average (Corners obtained by Team A)
-      let homeSum = 0;
-      let homeCount = 0;
-      for (const m of homeMatches) {
-        const corners = m.home_team === row.home_team ? m.first_half_corners_home : m.first_half_corners_away;
-        if (corners !== null && corners !== undefined) {
-          homeSum += corners;
-          homeCount++;
-        }
-      }
-      const homeAvg = homeCount > 0 ? parseFloat((homeSum / homeCount).toFixed(1)) : null;
-      
-      // Calculate Team B recent corners average (Corners obtained by Team B)
-      let awaySum = 0;
-      let awayCount = 0;
-      for (const m of awayMatches) {
-        const corners = m.home_team === row.away_team ? m.first_half_corners_home : m.first_half_corners_away;
-        if (corners !== null && corners !== undefined) {
-          awaySum += corners;
-          awayCount++;
-        }
-      }
-      const awayAvg = awayCount > 0 ? parseFloat((awaySum / awayCount).toFixed(1)) : null;
-      
-      // Apply statistical shrinkage estimation (Mean Reversion) to stabilize lambda across all matches
-      let defaultHome = 2.2;
-      let defaultAway = 2.0;
-      
-      const primaryKey = getLeagueKey(row.tournament);
-      if (primaryKey) {
-        const matchedKey = Object.keys(leagueAverages).find(k => k.includes(primaryKey) || primaryKey.includes(k));
-        if (matchedKey) {
-          defaultHome = leagueAverages[matchedKey].home;
-          defaultAway = leagueAverages[matchedKey].away;
-        }
-      }
-      
-      const teamWeight = 0.6;
-      const homeRegressed = homeAvg !== null ? parseFloat((teamWeight * homeAvg + (1 - teamWeight) * defaultHome).toFixed(2)) : defaultHome;
-      const awayRegressed = awayAvg !== null ? parseFloat((teamWeight * awayAvg + (1 - teamWeight) * defaultAway).toFixed(2)) : defaultAway;
-      
-      const lambda1MT = homeRegressed + awayRegressed;
-      
-      // Dynamic Poisson prediction
-      let dynamicBestTip = row.best_tip;
-      let dynamicCardLine = row.card_line;
-      let dynamicProbability = row.probability;
-
-      const targetLine = 4.5;
-      const overProb = poissonOver(lambda1MT, targetLine);
-      const underProb = poissonUnder(lambda1MT, targetLine);
-
-      if (overProb >= underProb) {
-        dynamicBestTip = "Plus de";
-        dynamicCardLine = "4.5";
-        dynamicProbability = `${Math.round(overProb * 100)}%`;
-      } else {
-        dynamicBestTip = "Moins de";
-        dynamicCardLine = "4.5";
-        dynamicProbability = `${Math.round(underProb * 100)}%`;
-      }
-
-      // Calculate actual historical corner success rate for the recommended line (dynamicCardLine) in the recent matches of home and away teams
-      const targetLineVal = parseFloat(dynamicCardLine);
-      const isOverTip = dynamicBestTip === "Plus de";
-      
-      let successMatches = 0;
-      let totalMatchesWithCorners = 0;
-      
-      const allRecent = [...homeMatches, ...awayMatches];
-      for (const m of allRecent) {
-        if (m.first_half_corners_home !== null && m.first_half_corners_away !== null) {
-          totalMatchesWithCorners++;
-          const sum = m.first_half_corners_home + m.first_half_corners_away;
-          const isSuccess = isOverTip ? sum > targetLineVal : sum < targetLineVal;
-          if (isSuccess) {
-            successMatches++;
-          }
-        }
-      }
-      
-      const dynamicWinRate = totalMatchesWithCorners > 0 
-        ? `${Math.round((successMatches / totalMatchesWithCorners) * 100)}%` 
-        : (row.win_rate || "50%");
-
-      // Parse cached Oddschecker odds
-      let oddsCorners = [];
-      try {
-        if (row.odds_corners) {
-          oddsCorners = JSON.parse(row.odds_corners);
-        }
-      } catch (e) {}
-
-      // Project Full-Time corners odds to First-Half corners odds if First-Half is missing
-      const has1stHalf = oddsCorners.some(o => o.market_type === '1st_half');
-      const hasFullTime = oddsCorners.some(o => o.market_type === 'full_time');
-
-      if (!has1stHalf && hasFullTime) {
-        const ftLine = oddsCorners.find(o => o.market_type === 'full_time' && o.over_decimal && o.under_decimal);
-        if (ftLine) {
-          const pOver = 1 / ftLine.over_decimal;
-          const pUnder = 1 / ftLine.under_decimal;
-          const totalP = pOver + pUnder;
-          
-          if (totalP > 0) {
-            const pUnderNorm = pUnder / totalP;
-            const k = Math.floor(ftLine.line);
-            const derivedLambdaFT = findPoissonMean(k, pUnderNorm);
-            
-            // Expected 1st half corners is 46% of Full Time corners
-            const derivedLambda1MT = 0.46 * derivedLambdaFT;
-            const originalPayout = 1 / totalP;
-            
-            // Generate projected 1st half odds for lines 3.5, 4.5, 5.5
-            const projectedLines = [3.5, 4.5, 5.5];
-            for (const line of projectedLines) {
-              const uProb = poissonUnder(derivedLambda1MT, line);
-              const oProb = 1 - uProb;
-              
-              if (uProb > 0.02 && oProb > 0.02) {
-                const overDec = parseFloat((originalPayout / oProb).toFixed(2));
-                const underDec = parseFloat((originalPayout / uProb).toFixed(2));
-                
-                oddsCorners.push({
-                  line: line,
-                  over_decimal: overDec,
-                  under_decimal: underDec,
-                  market_type: '1st_half',
-                  is_estimated: true
-                });
-              }
-            }
-          }
-        }
-      } else if (!has1stHalf && !hasFullTime) {
-        const projectedLines = [3.5, 4.5, 5.5];
-        const payout = 0.93;
-        for (const line of projectedLines) {
-          const uProb = poissonUnder(lambda1MT, line);
-          const oProb = 1 - uProb;
-          
-          if (uProb > 0.02 && oProb > 0.02) {
-            const overDec = parseFloat((payout / oProb).toFixed(2));
-            const underDec = parseFloat((payout / uProb).toFixed(2));
-            
-            oddsCorners.push({
-              line: line,
-              over_decimal: overDec,
-              under_decimal: underDec,
-              market_type: '1st_half',
-              is_estimated: true
-            });
-          }
-        }
-      }
-      
-      // Run Poisson distribution Value Bet calculations
-      const enrichedOdds = oddsCorners.map(o => {
-        const is1stHalf = o.market_type === '1st_half';
-        const lambda = is1stHalf ? lambda1MT : lambda1MT * 2.2; // Full Time corners is about 2.2x of 1st half
-        
-        const overProb = poissonOver(lambda, o.line);
-        const underProb = poissonUnder(lambda, o.line);
-        
-        const overValue = o.over_decimal ? overProb * o.over_decimal : 0;
-        const underValue = o.under_decimal ? underProb * o.under_decimal : 0;
-        
-        const overValueBet = overValue > 1.05;
-        const underValueBet = underValue > 1.05;
-        
-        return {
-          ...o,
-          over_value_bet: overValueBet,
-          over_value_edge: overValueBet ? Math.round((overValue - 1) * 100) : 0,
-          over_fair_odds: overProb > 0 ? parseFloat((1 / overProb).toFixed(2)) : null,
-          over_probability: Math.round(overProb * 100) + '%',
-          
-          under_value_bet: underValueBet,
-          under_value_edge: underValueBet ? Math.round((underValue - 1) * 100) : 0,
-          under_fair_odds: underProb > 0 ? parseFloat((1 / underProb).toFixed(2)) : null,
-          under_probability: Math.round(underProb * 100) + '%'
-        };
-      });
-      
-      // Override general card O/U odds with our highly accurate Poisson estimated bookmaker odds
-      // when no real scraped corner odds are available.
-      const activeLineNum = parseFloat(dynamicCardLine);
-      const activeOddsRow = enrichedOdds.find(o => o.market_type === '1st_half' && parseFloat(o.line) === activeLineNum);
-      
-      let finalOverOdds = row.over_odds;
-      let finalUnderOdds = row.under_odds;
-      
-      if (activeOddsRow && activeOddsRow.is_estimated) {
-        finalOverOdds = String(activeOddsRow.over_decimal);
-        finalUnderOdds = String(activeOddsRow.under_decimal);
-      }
-      
-      enrichedRows.push({
-        ...row,
-        best_tip: dynamicBestTip,
-        card_line: dynamicCardLine,
-        probability: dynamicProbability,
-        over_odds: finalOverOdds,
-        under_odds: finalUnderOdds,
-        win_rate: dynamicWinRate,
-        home_avg_first_half_corners: homeRegressed,
-        away_avg_first_half_corners: awayRegressed,
-        h2h_avg_first_half_corners: h2hAvg,
-        odds_corners: enrichedOdds,
-        recent_home_matches: homeMatches,
-        recent_away_matches: awayMatches,
-        recent_h2h_matches: h2hMatches,
-        isCrawling: activeCrawlHistoryMatches.has(row.match_id)
-      });
-    }
-
-    res.json({ success: true, data: enrichedRows });
-  } catch (error) {
-    res.status(500).json({ success: false, error: { message: error.message } });
-  }
-});
-
-// Helper: Scan scraper output directories and return path of the newest JSON file
-function getNewestScrapedFile(outputDirs) {
-  let allFiles = [];
-  
-  for (const dir of outputDirs) {
-    if (fs.existsSync(dir)) {
-      const files = fs.readdirSync(dir)
-        .filter(file => file.endsWith('.json'))
-        .map(file => {
-          const filePath = path.join(dir, file);
-          const stat = fs.statSync(filePath);
-          return { path: filePath, mtime: stat.mtime };
-        });
-      allFiles = allFiles.concat(files);
-    }
-  }
-
-  allFiles.sort((a, b) => b.mtime - a.mtime);
-  return allFiles.length > 0 ? allFiles[0].path : null;
-}
-
-// Helper: Robustly parse French date string (e.g. "17 mai 2026", "1er juin 2026", "20/05/2026") into YYYY-MM-DD format
-export function parseFrenchDate(dateStr) {
-  if (!dateStr) return null;
-  dateStr = dateStr.trim().toLowerCase();
-  
-  // Try YYYY-MM-DD first
-  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-    return dateStr;
-  }
-  
-  // Try DD/MM/YYYY or D/M/YYYY
-  const dmRef = dateStr.match(/^(\d{1,2})[\/\.-](\d{1,2})[\/\.-](\d{4})$/);
-  if (dmRef) {
-    const day = dmRef[1].padStart(2, '0');
-    const month = dmRef[2].padStart(2, '0');
-    const year = dmRef[3];
-    return `${year}-${month}-${day}`;
-  }
-  
-  // Try French text month, e.g. "17 mai 2026" or "1er juin 2026"
-  const frenchMonths = {
-    'janvier': '01', 'janv.': '01', 'janv': '01',
-    'février': '02', 'févr.': '02', 'févr': '02', 'fevrier': '02',
-    'mars': '03',
-    'avril': '04', 'avr.': '04', 'avr': '04',
-    'mai': '05',
-    'juin': '06',
-    'juillet': '07', 'juil.': '07', 'juil': '07',
-    'août': '08', 'aout': '08',
-    'septembre': '09', 'sept.': '09', 'sept': '09',
-    'octobre': '10', 'oct.': '10', 'oct': '10',
-    'novembre': '11', 'nov.': '11', 'nov': '11',
-    'décembre': '12', 'déc.': '12', 'déc': '12', 'decembre': '12'
-  };
-  
-  // Replace "1er" with "1" to simplify parsing
-  dateStr = dateStr.replace(/^1er\b/, '1');
-  
-  const textMatch = dateStr.match(/^(\d{1,2})\s+([a-zéûûöäêèéàç\.]+)\s+(\d{4})$/);
-  if (textMatch) {
-    const day = textMatch[1].padStart(2, '0');
-    const monthName = textMatch[2];
-    const year = textMatch[3];
-    const month = frenchMonths[monthName];
-    if (month) {
-      return `${year}-${month}-${day}`;
-    }
-  }
-  
-  return null;
-}
-
+/**
+ * Spawn Go scraper to retrieve details for a single specific match page.
+ * Acts as a generic child-process spawner guard.
+ */
 export async function scrapeSingleMatch(scraperPath, link, skipOdds = false, onSpawn = null) {
   const torActive = await isTorActive();
   if (!torActive) {
@@ -618,7 +98,126 @@ export async function scrapeSingleMatch(scraperPath, link, skipOdds = false, onS
   });
 }
 
-// Discover matches on homepage listing
+/**
+ * GET /api/predictions
+ * Fetches cached predictions from the database and enriches them with regressed averages and Value Bets
+ */
+router.get('/predictions', async (req, res) => {
+  try {
+    let sql = 'SELECT * FROM scraped_predictions WHERE is_historical = 0';
+    const params = [];
+    
+    const { startDate, endDate, dateRange } = req.query;
+    
+    if (startDate && endDate) {
+      sql += ' AND date >= ? AND date <= ?';
+      params.push(startDate, endDate);
+    } else if (dateRange && dateRange !== 'all') {
+      const today = new Date();
+      const todayStr = today.toISOString().substring(0, 10);
+      
+      if (dateRange === 'today') {
+        sql += ' AND date = ?';
+        params.push(todayStr);
+      } else if (dateRange === 'yesterday') {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().substring(0, 10);
+        sql += ' AND date = ?';
+        params.push(yesterdayStr);
+      } else if (dateRange === 'week') {
+        const startOfWeek = new Date();
+        startOfWeek.setDate(startOfWeek.getDate() - 7);
+        const startOfWeekStr = startOfWeek.toISOString().substring(0, 10);
+        sql += ' AND date >= ? AND date <= ?';
+        params.push(startOfWeekStr, todayStr);
+      } else if (dateRange === 'month') {
+        const startOfMonth = new Date();
+        startOfMonth.setDate(startOfMonth.getDate() - 30);
+        const startOfMonthStr = startOfMonth.toISOString().substring(0, 10);
+        sql += ' AND date >= ? AND date <= ?';
+        params.push(startOfMonthStr, todayStr);
+      } else if (dateRange === 'year') {
+        const startOfYear = new Date();
+        startOfYear.setDate(startOfYear.getDate() - 365);
+        const startOfYearStr = startOfYear.toISOString().substring(0, 10);
+        sql += ' AND date >= ? AND date <= ?';
+        params.push(startOfYearStr, todayStr);
+      }
+    }
+    
+    sql += ' ORDER BY scraped_at DESC, time ASC';
+    const rows = await dbQuery(sql, params);
+    
+    // Dynamic League Averages learning: fetch completed historical matches to dynamically compute league baselines
+    const allHistoricalMatches = await dbQuery(`
+      SELECT tournament, home_team, away_team, first_half_corners_home, first_half_corners_away 
+      FROM scraped_predictions 
+      WHERE is_historical = 1 AND first_half_corners_home IS NOT NULL
+    `);
+
+    const leagueAverages = computeLeagueAverages(allHistoricalMatches);
+    const enrichedRows = [];
+    
+    for (const row of rows) {
+      // Find historical H2H matches between A and B (up to 10)
+      const h2hMatches = await dbQuery(`
+        SELECT first_half_corners_home, first_half_corners_away, home_team, away_team, home_logo, away_logo, score, date, time, tournament
+        FROM scraped_predictions 
+        WHERE is_finished = 1 
+          AND ((home_team = ? AND away_team = ?) OR (home_team = ? AND away_team = ?))
+        ORDER BY date DESC LIMIT 10
+      `, [row.home_team, row.away_team, row.away_team, row.home_team]);
+      
+      const normalizeMatchRow = (m) => {
+        let date = m.date || '';
+        let time = m.time || '';
+        if (date.includes(':')) {
+          time = date;
+          date = row.date || new Date().toISOString().substring(0, 10);
+        }
+        return { ...m, date, time };
+      };
+
+      const normalizedH2H = h2hMatches.map(normalizeMatchRow);
+      
+      // Find Team A (Home) recent matches played STRICTLY at Domicile (up to 10)
+      const homeMatches = await dbQuery(`
+        SELECT first_half_corners_home, first_half_corners_away, home_team, away_team, home_logo, away_logo, score, date, time, tournament
+        FROM scraped_predictions 
+        WHERE is_finished = 1 
+          AND home_team = ?
+        ORDER BY date DESC LIMIT 10
+      `, [row.home_team]);
+      
+      const normalizedHome = homeMatches.map(normalizeMatchRow);
+      
+      // Find Team B (Away) recent matches played STRICTLY at Extérieur (up to 10)
+      const awayMatches = await dbQuery(`
+        SELECT first_half_corners_home, first_half_corners_away, home_team, away_team, home_logo, away_logo, score, date, time, tournament
+        FROM scraped_predictions 
+        WHERE is_finished = 1 
+          AND away_team = ?
+        ORDER BY date DESC LIMIT 10
+      `, [row.away_team]);
+
+      const normalizedAway = awayMatches.map(normalizeMatchRow);
+      
+      // Enrich prediction data using the modularized prediction engine
+      const enriched = enrichMatchPredictions(row, leagueAverages, normalizedH2H, normalizedHome, normalizedAway, activeCrawlHistoryMatches);
+      enrichedRows.push(enriched);
+    }
+
+    res.json({ success: true, data: enrichedRows });
+  } catch (error) {
+    res.status(500).json({ success: false, error: { message: error.message } });
+  }
+});
+
+/**
+ * POST /predictions/scrape/discover
+ * Discovers matches on homepage listing
+ */
 router.post('/predictions/scrape/discover', async (req, res) => {
   if (activeScraperProcess) {
     return res.status(400).json({ success: false, error: { message: "Un scraping ou une découverte est déjà en cours d'exécution." } });
@@ -731,12 +330,15 @@ router.post('/predictions/scrape/discover', async (req, res) => {
         }))
       });
     } catch (err) {
-      return res.status(500).json({ success: false, error: { message: `Erreur lors de la lecture du résultat de découverte : ${err.message}` } });
+      return res.status(500).json({ success: false, error: { message: `Erreur lors de l'écriture du résultat de découverte : ${err.message}` } });
     }
   });
 });
 
-// Trigger scraper execution and stream progress via Server-Sent Events (SSE)
+/**
+ * POST /predictions/scrape
+ * Trigger scraper execution and stream progress via Server-Sent Events (SSE)
+ */
 router.post('/predictions/scrape', async (req, res) => {
   stopScraperRequested = false;
   
@@ -750,7 +352,7 @@ router.post('/predictions/scrape', async (req, res) => {
     }
   }
   
-  // Disable Node's default request, response, and socket timeouts for long SSE scraper streams
+  // Disable timeouts for long streaming SSE scraper logs
   req.setTimeout(0);
   res.setTimeout(0);
   req.socket.setTimeout(0);
@@ -761,7 +363,7 @@ router.post('/predictions/scrape', async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
-  // Send an SSE keep-alive comment (":\n\n") every 5 seconds to keep the TCP socket warm and prevent any idle timeouts
+  // Send keep-alive comment every 5 seconds to prevent idle timeout
   const keepAliveInterval = setInterval(() => {
     try {
       if (!res.writableEnded && !res.destroyed) {
@@ -804,6 +406,7 @@ router.post('/predictions/scrape', async (req, res) => {
   
   if (!fs.existsSync(scraperPath)) {
     sendEvent('error', { message: `Dossier du scraper introuvable à l'emplacement configuré : ${scraperPath}` });
+    clearInterval(keepAliveInterval);
     return res.end();
   }
 
@@ -857,9 +460,9 @@ router.post('/predictions/scrape', async (req, res) => {
     if (inactivityTimer) clearTimeout(inactivityTimer);
     inactivityTimer = setTimeout(() => {
       if (activeScraperProcess && activeScraperProcess.pid === child.pid) {
-        console.warn(`[Predictix Scraper] Inactivity timeout (45s of silence). Killing process tree.`);
-        sendEvent('log', { message: `[Predictix] Le scraper est inactif depuis 45s (aucun log). Arrêt forcé...` });
-        sendEvent('error', { message: `Scraper arrêté automatiquement pour inactivité (45s de silence).` });
+        console.warn(`[Predictix Scraper] Inactivity timeout (90s of silence). Killing process tree.`);
+        sendEvent('log', { message: `[Predictix] Le scraper est inactif depuis 90s (aucun log). Arrêt forcé...` });
+        sendEvent('error', { message: `Scraper arrêté automatiquement pour inactivité (90s de silence).` });
         
         const pid = child.pid;
         if (process.platform === 'win32') {
@@ -880,38 +483,6 @@ router.post('/predictions/scrape', async (req, res) => {
   resetInactivityTimer();
 
   let logBuffer = '';
-
-  const rewriteScraperLog = (line, strategy) => {
-    if (!strategy) return line;
-    
-    const metricLabels = {
-      fouls: 'Fautes commises',
-      yellow_cards: 'Cartons Jaunes',
-      possession: 'Possession de balle',
-      shots_on_target: 'Tirs Cadrés',
-      shots: 'Tirs globaux',
-      offsides: 'Hors-jeu',
-      corners: 'Corners 1ère MT'
-    };
-
-    const metricLabel = metricLabels[strategy.metric] || strategy.metric;
-
-    // 1. Title block rewrite
-    if (line.includes('SCRAPER MATCH ENDIRECT PREMIUM - Corners 1ere Mi-Temps')) {
-      return line.replace('SCRAPER MATCH ENDIRECT PREMIUM - Corners 1ere Mi-Temps', `SCRAPER MATCH ENDIRECT PREMIUM - Cible : ${metricLabel}`);
-    }
-
-    // 2. Metric extraction line rewrite
-    if (line.includes('✓ Corners 1ère MT:')) {
-      const matchData = line.match(/✓ Corners 1ère MT:\s*(\d+)\s*-\s*(\d+)\s*\((Historical links:\s*\d+)\)/);
-      if (matchData) {
-        return `✓ Statistiques cibles extraites avec succès pour la stratégie (Métrique: ${metricLabel}) (${matchData[3]})`;
-      }
-      return `✓ Statistiques cibles extraites avec succès (Cible: ${metricLabel})`;
-    }
-
-    return line;
-  };
 
   const handleOutput = (data) => {
     // Reset inactivity timer since we received output
@@ -984,95 +555,8 @@ router.post('/predictions/scrape', async (req, res) => {
       const matches = parsed.all_matches || parsed.matches || [];
       sendEvent('log', { message: `[Predictix] ${matches.length} matchs trouvés. Enregistrement dans SQLite...` });
 
-      let importedCount = 0;
-      const settledBetsList = [];
-
-      for (const match of matches) {
-        if (!match.home_team || !match.away_team) {
-          continue;
-        }
-
-        let status = match.status || 'Planned';
-        const matchTime = String(match.time || '');
-        if (matchTime.includes("'") || matchTime.toLowerCase().includes('mi-temps') || matchTime.toLowerCase().includes('mt') || matchTime.toLowerCase().includes('prol.')) {
-          status = 'Live';
-        } else if (matchTime.toLowerCase().includes('fin') || matchTime.toLowerCase().includes('terminé') || matchTime.toLowerCase().includes('ft')) {
-          status = 'Finished';
-        }
-
-        const isLive = match.is_live === true || status === 'Live' ? 1 : 0;
-        const isFinished = match.is_finished === true || status === 'Finished' ? 1 : 0;
-        const matchId = match.match_id || `${match.home_team}_${match.away_team}_${match.date || new Date().toISOString().slice(0,10)}`;
-
-        const hashSeed = match.home_team + match.away_team;
-        let charSum = 0;
-        for (let i = 0; i < hashSeed.length; i++) {
-          charSum += hashSeed.charCodeAt(i);
-        }
-        
-        const stableProb = 55 + (charSum % 25);
-        const cardLine = match.card_line || (charSum % 2 === 0 ? '4.5' : '5.5');
-        const bestTip = match.best_tip || (stableProb >= 66 ? 'Plus de' : 'Moins de');
-        const probability = match.probability || `${stableProb}%`;
-        const overOdds = match.over_odds || (bestTip === 'Plus de' ? '1.85' : '2.05');
-        const underOdds = match.under_odds || (bestTip === 'Moins de' ? '1.90' : '1.75');
-        const winRate = match.win_rate || `${45 + (charSum % 35)}%`;
-
-        const homeClean = (match.home_team || '').replace(/[▲▼]/g, '').trim();
-        const awayClean = (match.away_team || '').replace(/[▲▼]/g, '').trim();
-
-        const sql = `
-          INSERT OR REPLACE INTO scraped_predictions (
-            match_id, time, date, tournament, home_team, away_team, score,
-            over_odds, under_odds, card_line, probability, best_tip, win_rate, status,
-            is_live, is_finished, first_half_corners_home, first_half_corners_away, odds_corners,
-            home_logo, away_logo, historical_links, match_url, statistics_json, scraped_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        `;
-
-        await dbRun(sql, [
-          matchId,
-          match.time || '',
-          match.date || parsed.metadata?.scraped_at?.substring(0, 10) || new Date().toISOString().substring(0, 10),
-          match.tournament || match.league || 'Football',
-          homeClean,
-          awayClean,
-          match.score || '',
-          overOdds,
-          underOdds,
-          cardLine,
-          probability,
-          bestTip,
-          winRate,
-          status,
-          isLive,
-          isFinished,
-          match.first_half_corners_home !== undefined ? match.first_half_corners_home : null,
-          match.first_half_corners_away !== undefined ? match.first_half_corners_away : null,
-          match.odds_corners ? JSON.stringify(match.odds_corners) : null,
-          match.home_logo || null,
-          match.away_logo || null,
-          match.historical_links ? JSON.stringify(match.historical_links) : null,
-          match.match_url || null,
-          match.statistics ? JSON.stringify(match.statistics) : null
-        ]);
-
-        importedCount++;
-
-        // Auto-settle any pending bets for this primary match in real time
-        if (match.first_half_corners_home !== null && match.first_half_corners_home !== undefined &&
-            match.first_half_corners_away !== null && match.first_half_corners_away !== undefined) {
-          try {
-            const { autoSettleBetsForMatch } = await import('./bets.js');
-            const resolved = await autoSettleBetsForMatch(matchId, match.first_half_corners_home, match.first_half_corners_away);
-            if (resolved && resolved.length > 0) {
-              settledBetsList.push(...resolved);
-            }
-          } catch (err) {
-            console.error('[Predictix Import] Failed to auto-settle bet:', err.message);
-          }
-        }
-      }
+      // Run bulk SQLite import using the modular DB importer
+      const { importedCount, settledBetsList } = await importScrapedMatches(matches, parsed.metadata?.scraped_at);
 
       sendEvent('log', { message: `[Predictix] ✓ Importation réussie : ${importedCount} prédictions insérées.` });
       sendEvent('log', { message: `[Predictix] Analyse de l'historique des opposants...` });
@@ -1083,7 +567,7 @@ router.post('/predictions/scrape', async (req, res) => {
         for (const match of matches) {
           if (!match.home_team || !match.away_team) continue;
 
-          // Smart-Scraping: filter out non-promising matches based on target strategy
+          // Smart-Scraping filter evaluation
           let isMatchPromising = true;
           if (targetStrategy) {
             try {
@@ -1185,75 +669,12 @@ router.post('/predictions/scrape', async (req, res) => {
               const histMatch = await scrapeSingleMatch(scraperPath, link, true); // skipOdds = true for past matches
 
               if (histMatch && histMatch.home_team && histMatch.away_team) {
-                const homeClean = histMatch.home_team.replace(/[▲▼]/g, '').trim();
-                const awayClean = histMatch.away_team.replace(/[▲▼]/g, '').trim();
-
-                const sqlHist = `
-                  INSERT OR REPLACE INTO scraped_predictions (
-                    match_id, time, date, tournament, home_team, away_team, score,
-                    over_odds, under_odds, card_line, probability, best_tip, win_rate, status,
-                    is_live, is_finished, first_half_corners_home, first_half_corners_away, odds_corners,
-                    home_logo, away_logo, is_historical, match_url, statistics_json, scraped_at
-                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                `;
-
-                const hashSeed = homeClean + awayClean;
-                let charSum = 0;
-                for (let k = 0; k < hashSeed.length; k++) charSum += hashSeed.charCodeAt(k);
-                const stableProb = 55 + (charSum % 25);
-                const cardLine = histMatch.card_line || (charSum % 2 === 0 ? '4.5' : '5.5');
-                const bestTip = histMatch.best_tip || (stableProb >= 66 ? 'Plus de' : 'Moins de');
-
-                let histDate = histMatch.date || new Date().toISOString().substring(0, 10);
-                let histTime = histMatch.time || 'Finished';
-                if (histDate.includes(':')) {
-                  histTime = histDate;
-                  histDate = new Date().toISOString().substring(0, 10);
-                }
-
-                await dbRun(sqlHist, [
-                  link,
-                  histTime,
-                  histDate,
-                  histMatch.tournament || 'Football',
-                  homeClean,
-                  awayClean,
-                  histMatch.score || '',
-                  '1.85', '1.90', cardLine, `${stableProb}%`, bestTip, '60%', 'Finished',
-                  0, 1,
-                  histMatch.first_half_corners_home,
-                  histMatch.first_half_corners_away,
-                  null,
-                  histMatch.home_logo || null,
-                  histMatch.away_logo || null,
-                  1,
-                  histMatch.match_url || link,
-                  histMatch.statistics ? JSON.stringify(histMatch.statistics) : null
-                ]);
-
+                await importHistoricalMatch(link, histMatch);
                 const scoreText = histMatch.score ? ` (Score: ${histMatch.score})` : '';
                 const dateText = histMatch.date ? ` (Date: ${histMatch.date})` : '';
-                sendEvent('log', { message: `[Predictix] ✓ Confrontation importée : ${homeClean} vs ${awayClean}${dateText}${scoreText}` });
+                sendEvent('log', { message: `[Predictix] ✓ Confrontation importée : ${histMatch.home_team.replace(/[▲▼]/g, '').trim()} vs ${histMatch.away_team.replace(/[▲▼]/g, '').trim()}${dateText}${scoreText}` });
               } else {
-                const sqlHistSkipped = `
-                  INSERT OR REPLACE INTO scraped_predictions (
-                    match_id, time, date, tournament, home_team, away_team, score,
-                    over_odds, under_odds, card_line, probability, best_tip, win_rate, status,
-                    is_live, is_finished, is_historical, scraped_at
-                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                `;
-                await dbRun(sqlHistSkipped, [
-                  link,
-                  'Finished',
-                  new Date().toISOString().substring(0, 10),
-                  'Football',
-                  'Skipped Match',
-                  'Skipped Match',
-                  '-',
-                  '1.85', '1.90', '4.5', '50%', 'Plus de', '50%', 'Finished',
-                  0, 1,
-                  1
-                ]);
+                await importSkippedMatch(link);
                 sendEvent('log', { message: `[Predictix] ✓ Confrontation sautée (échec du crawl) : ${link}` });
               }
             }));
@@ -1283,7 +704,10 @@ router.post('/predictions/scrape', async (req, res) => {
   });
 });
 
-// Stop active scraper run
+/**
+ * POST /predictions/scrape/stop
+ * Stop active scraper run
+ */
 router.post('/predictions/scrape/stop', (req, res) => {
   stopScraperRequested = true;
   
@@ -1308,7 +732,10 @@ router.post('/predictions/scrape/stop', (req, res) => {
   }
 });
 
-// POST /predictions/:matchId/crawl-history
+/**
+ * POST /predictions/:matchId/crawl-history
+ * Enriches a single match by crawling its page and past confrontations in the background
+ */
 router.post('/predictions/:matchId/crawl-history', async (req, res) => {
   const { matchId } = req.params;
   try {
@@ -1402,66 +829,8 @@ router.post('/predictions/:matchId/crawl-history', async (req, res) => {
           const primaryDetails = await scrapeSingleMatch(scraperPath, targetLink, false, onSpawn); // skipOdds = false to retrieve Oddschecker corner odds!
 
           if (primaryDetails) {
-            const homeClean = primaryDetails.home_team.replace(/[▲▼]/g, '').trim();
-            const awayClean = primaryDetails.away_team.replace(/[▲▼]/g, '').trim();
-            const hashSeed = homeClean + awayClean;
-            let charSum = 0;
-            for (let k = 0; k < hashSeed.length; k++) charSum += hashSeed.charCodeAt(k);
-            const stableProb = 55 + (charSum % 25);
-            const cardLine = primaryDetails.card_line || (charSum % 2 === 0 ? '4.5' : '5.5');
-            const bestTip = primaryDetails.best_tip || (stableProb >= 66 ? 'Plus de' : 'Moins de');
-
-            let parsedPrimaryDate = parseFrenchDate(primaryDetails.date);
-            let pDate = parsedPrimaryDate || match.date || new Date().toISOString().substring(0, 10);
-            let pTime = primaryDetails.time || match.time;
-            if (primaryDetails.date && primaryDetails.date.includes(':')) {
-              pTime = primaryDetails.date;
-              pDate = match.date || new Date().toISOString().substring(0, 10);
-            }
-
-            await dbRun(`
-              UPDATE scraped_predictions SET
-                first_half_corners_home = ?,
-                first_half_corners_away = ?,
-                home_logo = ?,
-                away_logo = ?,
-                historical_links = ?,
-                odds_corners = ?,
-                card_line = ?,
-                best_tip = ?,
-                probability = ?,
-                date = ?,
-                time = ?,
-                match_url = ?,
-                statistics_json = ?
-              WHERE match_id = ?
-            `, [
-              primaryDetails.first_half_corners_home,
-              primaryDetails.first_half_corners_away,
-              primaryDetails.home_logo || null,
-              primaryDetails.away_logo || null,
-              primaryDetails.historical_links ? JSON.stringify(primaryDetails.historical_links) : null,
-              primaryDetails.odds_corners ? JSON.stringify(primaryDetails.odds_corners) : null,
-              cardLine,
-              bestTip,
-              `${stableProb}%`,
-              pDate,
-              pTime,
-              primaryDetails.match_url || targetLink,
-              primaryDetails.statistics ? JSON.stringify(primaryDetails.statistics) : null,
-              matchId
-            ]);
-
+            await enrichPrimaryMatch(matchId, primaryDetails, targetLink, match);
             console.log(`[Predictix On-Demand Background] ✓ Successfully enriched primary match ${matchId}!`);
-
-            // Auto-settle any pending bets for this primary match in real time
-            try {
-              const { autoSettleBetsForMatch } = await import('./bets.js');
-              await autoSettleBetsForMatch(matchId, primaryDetails.first_half_corners_home, primaryDetails.first_half_corners_away);
-            } catch (err) {
-              console.error('[Predictix On-Demand Background] Failed to auto-settle bet:', err.message);
-            }
-
             activeLinks = primaryDetails.historical_links || [];
           }
         }
@@ -1482,7 +851,6 @@ router.post('/predictions/:matchId/crawl-history', async (req, res) => {
           
           const linksToScrape = uncachedLinks.slice(0, 8);
           const concurrency = 4;
-          let importedCount = 0;
 
           for (let i = 0; i < linksToScrape.length; i += concurrency) {
             if (stopScraperRequested || !activeCrawlHistoryMatches.has(matchId)) {
@@ -1497,77 +865,10 @@ router.post('/predictions/:matchId/crawl-history', async (req, res) => {
               const histMatch = await scrapeSingleMatch(scraperPath, link, true, onSpawn); // skipOdds = true for speed!
 
               if (histMatch && histMatch.home_team && histMatch.away_team) {
-                const homeClean = histMatch.home_team.replace(/[▲▼]/g, '').trim();
-                const awayClean = histMatch.away_team.replace(/[▲▼]/g, '').trim();
-
-                const sqlHist = `
-                  INSERT OR REPLACE INTO scraped_predictions (
-                    match_id, time, date, tournament, home_team, away_team, score,
-                    over_odds, under_odds, card_line, probability, best_tip, win_rate, status,
-                    is_live, is_finished, first_half_corners_home, first_half_corners_away, odds_corners,
-                    home_logo, away_logo, is_historical, match_url, statistics_json, scraped_at
-                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                `;
-
-                const hashSeed = homeClean + awayClean;
-                let charSum = 0;
-                for (let k = 0; k < hashSeed.length; k++) charSum += hashSeed.charCodeAt(k);
-                const stableProb = 55 + (charSum % 25);
-                const cardLine = histMatch.card_line || (charSum % 2 === 0 ? '4.5' : '5.5');
-                const bestTip = histMatch.best_tip || (stableProb >= 66 ? 'Plus de' : 'Moins de');
-
-                let parsedHistDate = parseFrenchDate(histMatch.date);
-                let histDate = parsedHistDate || new Date().toISOString().substring(0, 10);
-                let histTime = histMatch.time || 'Finished';
-                if (histMatch.date && histMatch.date.includes(':')) {
-                  histTime = histMatch.date;
-                  histDate = new Date().toISOString().substring(0, 10);
-                }
-
-                await dbRun(sqlHist, [
-                  link,
-                  histTime,
-                  histDate,
-                  histMatch.tournament || 'Football',
-                  homeClean,
-                  awayClean,
-                  histMatch.score || '',
-                  '1.85', '1.90', cardLine, `${stableProb}%`, bestTip, '60%', 'Finished',
-                  0, 1,
-                  histMatch.first_half_corners_home,
-                  histMatch.first_half_corners_away,
-                  null,
-                  histMatch.home_logo || null,
-                  histMatch.away_logo || null,
-                  1, // is_historical = 1
-                  histMatch.match_url || link,
-                  histMatch.statistics ? JSON.stringify(histMatch.statistics) : null
-                ]);
-
-                importedCount++;
-                const scoreText = histMatch.score ? ` (Score: ${histMatch.score})` : '';
-                const dateText = histMatch.date ? ` (Date: ${histMatch.date})` : '';
-                console.log(`[Predictix On-Demand Background] ✓ Parallel H2H imported: ${homeClean} vs ${awayClean}${dateText}${scoreText}`);
+                await importHistoricalMatch(link, histMatch);
+                console.log(`[Predictix On-Demand Background] ✓ Parallel H2H imported: ${histMatch.home_team.replace(/[▲▼]/g, '').trim()} vs ${histMatch.away_team.replace(/[▲▼]/g, '').trim()}`);
               } else {
-                const sqlHistSkipped = `
-                  INSERT OR REPLACE INTO scraped_predictions (
-                    match_id, time, date, tournament, home_team, away_team, score,
-                    over_odds, under_odds, card_line, probability, best_tip, win_rate, status,
-                    is_live, is_finished, is_historical, scraped_at
-                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                `;
-                await dbRun(sqlHistSkipped, [
-                  link,
-                  'Finished',
-                  new Date().toISOString().substring(0, 10),
-                  'Football',
-                  'Skipped Match',
-                  'Skipped Match',
-                  '-',
-                  '1.85', '1.90', '4.5', '50%', 'Plus de', '50%', 'Finished',
-                  0, 1,
-                  1
-                ]);
+                await importSkippedMatch(link);
                 console.log(`[Predictix On-Demand Background] ✓ Parallel H2H skipped (failed): ${link}`);
               }
             }));

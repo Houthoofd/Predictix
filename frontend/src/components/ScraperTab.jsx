@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   RefreshCcw, 
-  Terminal 
+  Terminal,
+  Sparkles,
+  Info
 } from 'lucide-react';
 
 export default function ScraperTab({
@@ -20,8 +22,28 @@ export default function ScraperTab({
   handleStopScraping,
   handleTriggerScraping,
   handleStartDetailedScraping,
-  consoleEndRef
+  consoleEndRef,
+  selectedScraperStrategyId,
+  setSelectedScraperStrategyId
 }) {
+  const [strategies, setStrategies] = useState([]);
+
+  useEffect(() => {
+    const fetchActiveStrategies = async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/strategies/magic');
+        const json = await res.json();
+        if (json.success) {
+          // Only show active strategies for target scraping
+          setStrategies(json.data.filter(s => s.status === 'ACTIVE') || []);
+        }
+      } catch (err) {
+        console.error("Failed to load active strategies in Scraper:", err);
+      }
+    };
+    fetchActiveStrategies();
+  }, []);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
       
@@ -38,6 +60,47 @@ export default function ScraperTab({
           </div>
           
           <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
+            
+            {/* Smart-Scraping Selector: Target Strategy Dropdown */}
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '8px', 
+              background: selectedScraperStrategyId ? 'rgba(127, 0, 255, 0.05)' : 'rgba(255, 255, 255, 0.03)', 
+              border: selectedScraperStrategyId ? '1px solid rgba(127, 0, 255, 0.3)' : '1px solid var(--border-color)', 
+              borderRadius: '6px', 
+              padding: '4px 12px', 
+              height: '36px',
+              boxShadow: selectedScraperStrategyId ? '0 0 10px rgba(127, 0, 255, 0.04)' : 'none',
+              transition: 'all 0.2s ease'
+            }}>
+              <Sparkles size={14} style={{ color: selectedScraperStrategyId ? '#bf5af2' : 'var(--text-muted)' }} />
+              <span style={{ fontSize: '12.5px', color: selectedScraperStrategyId ? '#bf5af2' : 'var(--text-secondary)', fontWeight: 600 }}>Cibler :</span>
+              <select
+                value={selectedScraperStrategyId || ''}
+                onChange={(e) => setSelectedScraperStrategyId(e.target.value)}
+                disabled={scraping}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--text-primary)',
+                  fontWeight: 700,
+                  fontSize: '12.5px',
+                  outline: 'none',
+                  cursor: 'pointer',
+                  maxWidth: '180px'
+                }}
+              >
+                <option value="" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>Aucun (Tous les H2H)</option>
+                {strategies.map(s => (
+                  <option key={s.id} value={s.id} style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Scrape Limit input */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '4px 10px', height: '36px' }}>
               <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>Limite :</span>
               <input 
@@ -71,6 +134,28 @@ export default function ScraperTab({
             )}
           </div>
         </div>
+
+        {/* Informative banner about Smart-Scraping savings */}
+        {selectedScraperStrategyId && !scraping && (
+          <div style={{ 
+            marginTop: '15px', 
+            padding: '10px 14px', 
+            background: 'rgba(127, 0, 255, 0.03)', 
+            border: '1px dashed rgba(127, 0, 255, 0.15)', 
+            borderRadius: '6px',
+            fontSize: '12px',
+            color: 'var(--text-secondary)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            animation: 'fadeIn 0.25s ease-out'
+          }}>
+            <Info size={14} style={{ color: '#bf5af2' }} />
+            <span>
+              <strong>Smart-Scraping actif :</strong> Predictix analysera la page d'accueil, mais filtrera instantanément les confrontations historiques en exploitant vos caches. Les H2H hors-cible ne seront pas scrapés en profondeur, économisant jusqu'à 80% du temps de traitement Tor !
+            </span>
+          </div>
+        )}
 
         {/* Live Scraper Progress Bar */}
         {scraping && (
