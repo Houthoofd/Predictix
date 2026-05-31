@@ -31,11 +31,19 @@ export default function Sidebar({
             {!sidebarCollapsed && <span>Tableau de Bord</span>}
           </button>
           <button 
+            className={`nav-item ${activeTab === 'predictions' ? 'active' : ''}`}
+            onClick={() => setActiveTab('predictions')}
+            title={sidebarCollapsed ? "Pronostics Corners" : ""}
+          >
+            <Award size={20} />
+            {!sidebarCollapsed && <span>Pronostics Corners</span>}
+          </button>
+          <button 
             className={`nav-item ${activeTab === 'scraper' ? 'active' : ''}`}
             onClick={() => setActiveTab('scraper')}
             title={sidebarCollapsed ? "Match en Direct" : ""}
           >
-            <Database size={20} />
+            <RefreshCcw size={20} />
             {!sidebarCollapsed && <span>Match en Direct</span>}
           </button>
           <button 
@@ -51,7 +59,7 @@ export default function Sidebar({
             onClick={() => setActiveTab('strategies')}
             title={sidebarCollapsed ? "Stratégies" : ""}
           >
-            <Award size={20} />
+            <Database size={20} />
             {!sidebarCollapsed && <span>Stratégies</span>}
           </button>
         </nav>
