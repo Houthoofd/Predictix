@@ -11,6 +11,8 @@ export default defineConfig({
         target: 'http://localhost:5000',
         changeOrigin: true,
         secure: false,
+        timeout: 600000, // 10 minutes timeout for streaming SSE scraper logs
+        proxyTimeout: 600000, // 10 minutes proxy timeout
       },
     },
   },
