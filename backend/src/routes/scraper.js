@@ -3,8 +3,8 @@ import { spawn, exec } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { dbQuery, dbGet } from '../db/database.js';
-import { isTorActive, getNewestScrapedFile, rewriteScraperLog, scrapeSingleMatch, runDiscoveryProcess } from '../utils/scraperHelpers.js';
-import { enrichMatchPredictions, computeLeagueAverages, evaluateSmartScrapingFilter } from '../utils/predictionEngine.js';
+import { isTorActive, getNewestScrapedFile, rewriteScraperLog, scrapeSingleMatch, runDiscoveryProcess, crawlH2HLinksBatch } from '../utils/scraperHelpers.js';
+import { enrichMatchPredictions, computeLeagueAverages, evaluateSmartScrapingFilter, getEnrichedPredictions } from '../utils/predictionEngine.js';
 import { importScrapedMatches, importHistoricalMatch, importSkippedMatch, enrichPrimaryMatch } from '../db/importer.js';
 
 const router = express.Router();
@@ -20,115 +20,13 @@ const activeCrawlHistoryMatches = new Set();
  */
 router.get('/predictions', async (req, res) => {
   try {
-    let sql = 'SELECT * FROM scraped_predictions WHERE is_historical = 0';
-    const params = [];
-    
-    const { startDate, endDate, dateRange } = req.query;
-    
-    if (startDate && endDate) {
-      sql += ' AND date >= ? AND date <= ?';
-      params.push(startDate, endDate);
-    } else if (dateRange && dateRange !== 'all') {
-      const today = new Date();
-      const todayStr = today.toISOString().substring(0, 10);
-      
-      if (dateRange === 'today') {
-        sql += ' AND date = ?';
-        params.push(todayStr);
-      } else if (dateRange === 'yesterday') {
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayStr = yesterday.toISOString().substring(0, 10);
-        sql += ' AND date = ?';
-        params.push(yesterdayStr);
-      } else if (dateRange === 'week') {
-        const startOfWeek = new Date();
-        startOfWeek.setDate(startOfWeek.getDate() - 7);
-        const startOfWeekStr = startOfWeek.toISOString().substring(0, 10);
-        sql += ' AND date >= ? AND date <= ?';
-        params.push(startOfWeekStr, todayStr);
-      } else if (dateRange === 'month') {
-        const startOfMonth = new Date();
-        startOfMonth.setDate(startOfMonth.getDate() - 30);
-        const startOfMonthStr = startOfMonth.toISOString().substring(0, 10);
-        sql += ' AND date >= ? AND date <= ?';
-        params.push(startOfMonthStr, todayStr);
-      } else if (dateRange === 'year') {
-        const startOfYear = new Date();
-        startOfYear.setDate(startOfYear.getDate() - 365);
-        const startOfYearStr = startOfYear.toISOString().substring(0, 10);
-        sql += ' AND date >= ? AND date <= ?';
-        params.push(startOfYearStr, todayStr);
-      }
-    }
-    
-    sql += ' ORDER BY scraped_at DESC, time ASC';
-    const rows = await dbQuery(sql, params);
-    
-    // Dynamic League Averages learning: fetch completed historical matches to dynamically compute league baselines
-    const allHistoricalMatches = await dbQuery(`
-      SELECT tournament, home_team, away_team, first_half_corners_home, first_half_corners_away 
-      FROM scraped_predictions 
-      WHERE is_historical = 1 AND first_half_corners_home IS NOT NULL
-    `);
-
-    const leagueAverages = computeLeagueAverages(allHistoricalMatches);
-    const enrichedRows = [];
-    
-    for (const row of rows) {
-      // Find historical H2H matches between A and B (up to 10)
-      const h2hMatches = await dbQuery(`
-        SELECT first_half_corners_home, first_half_corners_away, home_team, away_team, home_logo, away_logo, score, date, time, tournament
-        FROM scraped_predictions 
-        WHERE is_finished = 1 
-          AND ((home_team = ? AND away_team = ?) OR (home_team = ? AND away_team = ?))
-        ORDER BY date DESC LIMIT 10
-      `, [row.home_team, row.away_team, row.away_team, row.home_team]);
-      
-      const normalizeMatchRow = (m) => {
-        let date = m.date || '';
-        let time = m.time || '';
-        if (date.includes(':')) {
-          time = date;
-          date = row.date || new Date().toISOString().substring(0, 10);
-        }
-        return { ...m, date, time };
-      };
-
-      const normalizedH2H = h2hMatches.map(normalizeMatchRow);
-      
-      // Find Team A (Home) recent matches played STRICTLY at Domicile (up to 10)
-      const homeMatches = await dbQuery(`
-        SELECT first_half_corners_home, first_half_corners_away, home_team, away_team, home_logo, away_logo, score, date, time, tournament
-        FROM scraped_predictions 
-        WHERE is_finished = 1 
-          AND home_team = ?
-        ORDER BY date DESC LIMIT 10
-      `, [row.home_team]);
-      
-      const normalizedHome = homeMatches.map(normalizeMatchRow);
-      
-      // Find Team B (Away) recent matches played STRICTLY at Extérieur (up to 10)
-      const awayMatches = await dbQuery(`
-        SELECT first_half_corners_home, first_half_corners_away, home_team, away_team, home_logo, away_logo, score, date, time, tournament
-        FROM scraped_predictions 
-        WHERE is_finished = 1 
-          AND away_team = ?
-        ORDER BY date DESC LIMIT 10
-      `, [row.away_team]);
-
-      const normalizedAway = awayMatches.map(normalizeMatchRow);
-      
-      // Enrich prediction data using the modularized prediction engine
-      const enriched = enrichMatchPredictions(row, leagueAverages, normalizedH2H, normalizedHome, normalizedAway, activeCrawlHistoryMatches);
-      enrichedRows.push(enriched);
-    }
-
-    res.json({ success: true, data: enrichedRows });
+    const data = await getEnrichedPredictions(req.query, dbQuery, activeCrawlHistoryMatches);
+    res.json({ success: true, data });
   } catch (error) {
     res.status(500).json({ success: false, error: { message: error.message } });
   }
 });
+
 
 /**
  * POST /predictions/scrape/discover
@@ -473,37 +371,13 @@ router.post('/predictions/scrape', async (req, res) => {
         if (linksToScrape.length > 0) {
           sendEvent('log', { message: `[Predictix] ${linksToScrape.length} nouvelles confrontations à scrapper` });
           
-          const concurrency = 4;
-          for (let i = 0; i < linksToScrape.length; i += concurrency) {
-            if (stopScraperRequested) {
-              sendEvent('log', { message: `[Predictix] Deep crawl annulé par l'utilisateur.` });
-              break;
-            }
-
-            const chunk = linksToScrape.slice(i, i + concurrency);
-            
-            await Promise.all(chunk.map(async (link) => {
-              if (stopScraperRequested) return;
-
-              sendEvent('log', { message: `[Predictix] Deep crawling over Tor: ${link}` });
-              const histMatch = await scrapeSingleMatch(scraperPath, link, true); // skipOdds = true for past matches
-
-              if (histMatch && histMatch.home_team && histMatch.away_team) {
-                await importHistoricalMatch(link, histMatch);
-                const scoreText = histMatch.score ? ` (Score: ${histMatch.score})` : '';
-                const dateText = histMatch.date ? ` (Date: ${histMatch.date})` : '';
-                sendEvent('log', { message: `[Predictix] ✓ Confrontation importée : ${histMatch.home_team.replace(/[▲▼]/g, '').trim()} vs ${histMatch.away_team.replace(/[▲▼]/g, '').trim()}${dateText}${scoreText}` });
-              } else {
-                await importSkippedMatch(link);
-                sendEvent('log', { message: `[Predictix] ✓ Confrontation sautée (échec du crawl) : ${link}` });
-              }
-            }));
-
-            // Polite delay between batches to avoid Tor congestion
-            if (i + concurrency < linksToScrape.length) {
-              await new Promise(r => setTimeout(r, 1200));
-            }
-          }
+          await crawlH2HLinksBatch(linksToScrape, scraperPath, {
+            concurrency: 4,
+            shouldStop: () => stopScraperRequested,
+            log: (msg) => sendEvent('log', { message: msg }),
+            importHistoricalMatch,
+            importSkippedMatch
+          });
         }
         
         sendEvent('log', { message: `[Predictix] ✓ Scraping de l'historique terminé avec succès.` });
@@ -670,34 +544,14 @@ router.post('/predictions/:matchId/crawl-history', async (req, res) => {
           console.log(`[Predictix On-Demand Background] ${activeLinks.length - uncachedLinks.length} cached, ${uncachedLinks.length} new to crawl.`);
           
           const linksToScrape = uncachedLinks.slice(0, 8);
-          const concurrency = 4;
-
-          for (let i = 0; i < linksToScrape.length; i += concurrency) {
-            if (stopScraperRequested || !activeCrawlHistoryMatches.has(matchId)) {
-              console.log("[Predictix On-Demand Background] Deep H2H crawl cancelled or timed out.");
-              break;
-            }
-            const chunk = linksToScrape.slice(i, i + concurrency);
-            
-            await Promise.all(chunk.map(async (link) => {
-              if (stopScraperRequested || !activeCrawlHistoryMatches.has(matchId)) return;
-              console.log(`[Predictix On-Demand Background] Parallel crawling H2H link: ${link}`);
-              const histMatch = await scrapeSingleMatch(scraperPath, link, true, onSpawn); // skipOdds = true for speed!
-
-              if (histMatch && histMatch.home_team && histMatch.away_team) {
-                await importHistoricalMatch(link, histMatch);
-                console.log(`[Predictix On-Demand Background] ✓ Parallel H2H imported: ${histMatch.home_team.replace(/[▲▼]/g, '').trim()} vs ${histMatch.away_team.replace(/[▲▼]/g, '').trim()}`);
-              } else {
-                await importSkippedMatch(link);
-                console.log(`[Predictix On-Demand Background] ✓ Parallel H2H skipped (failed): ${link}`);
-              }
-            }));
-
-            // Polite delay between H2H batches
-            if (i + concurrency < linksToScrape.length) {
-              await new Promise(r => setTimeout(r, 1200));
-            }
-          }
+          await crawlH2HLinksBatch(linksToScrape, scraperPath, {
+            concurrency: 4,
+            onSpawn: onSpawn,
+            shouldStop: () => stopScraperRequested || !activeCrawlHistoryMatches.has(matchId),
+            log: (msg) => console.log(`[Predictix On-Demand Background] ${msg}`),
+            importHistoricalMatch,
+            importSkippedMatch
+          });
         }
         console.log(`[Predictix On-Demand Background] ✓ Finished background crawl of H2H matches for primary match ${matchId}!`);
       } catch (err) {

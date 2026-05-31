@@ -296,3 +296,45 @@ export function runDiscoveryProcess(scraperPath, scriptName, outputDirs, onSpawn
   });
 }
 
+/**
+ * Perform a parallel batch H2H crawl over Tor proxy
+ */
+export async function crawlH2HLinksBatch(linksToScrape, scraperPath, options = {}) {
+  const { 
+    concurrency = 4, 
+    onSpawn = null, 
+    shouldStop = () => false, 
+    log = console.log,
+    importHistoricalMatch,
+    importSkippedMatch
+  } = options;
+  
+  for (let i = 0; i < linksToScrape.length; i += concurrency) {
+    if (shouldStop()) break;
+    const chunk = linksToScrape.slice(i, i + concurrency);
+    
+    await Promise.all(chunk.map(async (link) => {
+      if (shouldStop()) return;
+      
+      const histMatch = await scrapeSingleMatch(scraperPath, link, true, onSpawn);
+
+      if (histMatch && histMatch.home_team && histMatch.away_team) {
+        if (importHistoricalMatch) await importHistoricalMatch(link, histMatch);
+        const homeClean = histMatch.home_team.replace(/[▲▼]/g, '').trim();
+        const awayClean = histMatch.away_team.replace(/[▲▼]/g, '').trim();
+        const scoreText = histMatch.score ? ` (Score: ${histMatch.score})` : '';
+        const dateText = histMatch.date ? ` (Date: ${histMatch.date})` : '';
+        log(`✓ Confrontation importée : ${homeClean} vs ${awayClean}${dateText}${scoreText}`);
+      } else {
+        if (importSkippedMatch) await importSkippedMatch(link);
+        log(`✓ Confrontation sautée (échec du crawl) : ${link}`);
+      }
+    }));
+
+    if (i + concurrency < linksToScrape.length) {
+      await new Promise(r => setTimeout(r, 1200));
+    }
+  }
+}
+
+

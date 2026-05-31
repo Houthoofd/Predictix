@@ -336,3 +336,110 @@ export function evaluateSmartScrapingFilter(match, h2hExisting, targetStrategy) 
   return true;
 }
 
+/**
+ * Fetch and enrich predictions based on date query parameters
+ */
+export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistoryMatches = new Set()) {
+  let sql = 'SELECT * FROM scraped_predictions WHERE is_historical = 0';
+  const params = [];
+  
+  const { startDate, endDate, dateRange } = query;
+  
+  if (startDate && endDate) {
+    sql += ' AND date >= ? AND date <= ?';
+    params.push(startDate, endDate);
+  } else if (dateRange && dateRange !== 'all') {
+    const today = new Date();
+    const todayStr = today.toISOString().substring(0, 10);
+    
+    if (dateRange === 'today') {
+      sql += ' AND date = ?';
+      params.push(todayStr);
+    } else if (dateRange === 'yesterday') {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().substring(0, 10);
+      sql += ' AND date = ?';
+      params.push(yesterdayStr);
+    } else if (dateRange === 'week') {
+      const startOfWeek = new Date();
+      startOfWeek.setDate(startOfWeek.getDate() - 7);
+      const startOfWeekStr = startOfWeek.toISOString().substring(0, 10);
+      sql += ' AND date >= ? AND date <= ?';
+      params.push(startOfWeekStr, todayStr);
+    } else if (dateRange === 'month') {
+      const startOfMonth = new Date();
+      startOfMonth.setDate(startOfMonth.getDate() - 30);
+      const startOfMonthStr = startOfMonth.toISOString().substring(0, 10);
+      sql += ' AND date >= ? AND date <= ?';
+      params.push(startOfMonthStr, todayStr);
+    } else if (dateRange === 'year') {
+      const startOfYear = new Date();
+      startOfYear.setDate(startOfYear.getDate() - 365);
+      const startOfYearStr = startOfYear.toISOString().substring(0, 10);
+      sql += ' AND date >= ? AND date <= ?';
+      params.push(startOfYearStr, todayStr);
+    }
+  }
+  
+  sql += ' ORDER BY scraped_at DESC, time ASC';
+  const rows = await dbQueryFn(sql, params);
+  
+  const allHistoricalMatches = await dbQueryFn(`
+    SELECT tournament, home_team, away_team, first_half_corners_home, first_half_corners_away 
+    FROM scraped_predictions 
+    WHERE is_historical = 1 AND first_half_corners_home IS NOT NULL
+  `);
+
+  const leagueAverages = computeLeagueAverages(allHistoricalMatches);
+  const enrichedRows = [];
+  
+  for (const row of rows) {
+    const h2hMatches = await dbQueryFn(`
+      SELECT first_half_corners_home, first_half_corners_away, home_team, away_team, home_logo, away_logo, score, date, time, tournament
+      FROM scraped_predictions 
+      WHERE is_finished = 1 
+        AND ((home_team = ? AND away_team = ?) OR (home_team = ? AND away_team = ?))
+      ORDER BY date DESC LIMIT 10
+    `, [row.home_team, row.away_team, row.away_team, row.home_team]);
+    
+    const normalizeMatchRow = (m) => {
+      let date = m.date || '';
+      let time = m.time || '';
+      if (date.includes(':')) {
+        time = date;
+        date = row.date || new Date().toISOString().substring(0, 10);
+      }
+      return { ...m, date, time };
+    };
+
+    const normalizedH2H = h2hMatches.map(normalizeMatchRow);
+    
+    const homeMatches = await dbQueryFn(`
+      SELECT first_half_corners_home, first_half_corners_away, home_team, away_team, home_logo, away_logo, score, date, time, tournament
+      FROM scraped_predictions 
+      WHERE is_finished = 1 
+        AND home_team = ?
+      ORDER BY date DESC LIMIT 10
+    `, [row.home_team]);
+    
+    const normalizedHome = homeMatches.map(normalizeMatchRow);
+    
+    const awayMatches = await dbQueryFn(`
+      SELECT first_half_corners_home, first_half_corners_away, home_team, away_team, home_logo, away_logo, score, date, time, tournament
+      FROM scraped_predictions 
+      WHERE is_finished = 1 
+        AND away_team = ?
+      ORDER BY date DESC LIMIT 10
+    `, [row.away_team]);
+
+    const normalizedAway = awayMatches.map(normalizeMatchRow);
+    
+    const enriched = enrichMatchPredictions(row, leagueAverages, normalizedH2H, normalizedHome, normalizedAway, activeCrawlHistoryMatches);
+    enrichedRows.push(enriched);
+  }
+
+  return enrichedRows;
+}
+
+
