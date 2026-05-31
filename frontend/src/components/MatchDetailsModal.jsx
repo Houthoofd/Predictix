@@ -18,7 +18,168 @@ export default function MatchDetailsModal({
     }
   }, [selectedMatchDetails]);
 
+  const [activeMetric, setActiveMetric] = React.useState(selectedMatchDetails?.metric || 'corners');
+
+  const availableMetrics = React.useMemo(() => {
+    const metrics = new Set(['corners']);
+    if (!selectedMatchDetails) return Array.from(metrics);
+    const allMatches = [
+      ...(selectedMatchDetails.recent_h2h_matches || []),
+      ...(selectedMatchDetails.recent_home_matches || []),
+      ...(selectedMatchDetails.recent_away_matches || [])
+    ];
+    for (const m of allMatches) {
+      if (m.statistics_json) {
+        try {
+          const stats = typeof m.statistics_json === 'string' ? JSON.parse(m.statistics_json) : m.statistics_json;
+          if (stats) {
+            if (stats.fouls) metrics.add('fouls');
+            if (stats.yellow_cards) metrics.add('yellow_cards');
+            if (stats.possession) metrics.add('possession');
+            if (stats.shots_on_target) metrics.add('shots_on_target');
+            if (stats.shots) metrics.add('shots');
+            if (stats.offsides) metrics.add('offsides');
+          }
+        } catch (e) {}
+      }
+    }
+    return Array.from(metrics);
+  }, [selectedMatchDetails]);
+
+  // Ensure activeMetric aligns with available metrics if dynamically changed
+  React.useEffect(() => {
+    if (selectedMatchDetails?.metric && availableMetrics.includes(selectedMatchDetails.metric)) {
+      setActiveMetric(selectedMatchDetails.metric);
+    } else {
+      setActiveMetric('corners');
+    }
+  }, [selectedMatchDetails, availableMetrics]);
+
+  const getAverage = (matches, metric, isHomeOnly = false, isAwayOnly = false) => {
+    if (!matches || !Array.isArray(matches) || matches.length === 0) return null;
+    
+    let sum = 0;
+    let count = 0;
+    
+    for (const m of matches) {
+      if (metric === 'corners') {
+        if (isHomeOnly) {
+          const val = m.home_team === selectedMatchDetails.home_team ? m.first_half_corners_home : m.first_half_corners_away;
+          if (val !== null && val !== undefined) {
+            sum += val;
+            count++;
+          }
+        } else if (isAwayOnly) {
+          const val = m.away_team === selectedMatchDetails.away_team ? m.first_half_corners_away : m.first_half_corners_home;
+          if (val !== null && val !== undefined) {
+            sum += val;
+            count++;
+          }
+        } else {
+          if (m.first_half_corners_home !== null && m.first_half_corners_home !== undefined &&
+              m.first_half_corners_away !== null && m.first_half_corners_away !== undefined) {
+            sum += (m.first_half_corners_home + m.first_half_corners_away);
+            count++;
+          }
+        }
+        continue;
+      }
+      
+      let stats = null;
+      try {
+        if (m.statistics_json) {
+          stats = typeof m.statistics_json === 'string' ? JSON.parse(m.statistics_json) : m.statistics_json;
+        }
+      } catch (e) {}
+      
+      if (!stats || !stats[metric]) continue;
+      
+      if (metric === 'possession') {
+        if (stats.possession.home !== undefined) {
+          const val = (isHomeOnly || m.home_team === selectedMatchDetails.home_team)
+            ? parseFloat(stats.possession.home)
+            : parseFloat(stats.possession.away);
+          sum += val;
+          count++;
+        }
+      } else if (stats[metric].home !== undefined && stats[metric].away !== undefined) {
+        if (isHomeOnly) {
+          const val = m.home_team === selectedMatchDetails.home_team ? parseFloat(stats[metric].home) : parseFloat(stats[metric].away);
+          sum += val;
+          count++;
+        } else if (isAwayOnly) {
+          const val = m.away_team === selectedMatchDetails.away_team ? parseFloat(stats[metric].away) : parseFloat(stats[metric].home);
+          sum += val;
+          count++;
+        } else {
+          sum += (parseFloat(stats[metric].home) + parseFloat(stats[metric].away));
+          count++;
+        }
+      }
+    }
+    
+    return count > 0 ? parseFloat((sum / count).toFixed(1)) : null;
+  };
+
+  const renderMatchBadge = (m) => {
+    if (activeMetric === 'corners') {
+      return (
+        <span style={{ fontWeight: 700, color: 'var(--color-success)', background: 'rgba(16, 185, 129, 0.08)', padding: '3px 8px', borderRadius: '4px', fontSize: '11px', marginLeft: '12px', flexShrink: 0 }}>
+          Corners: {m.first_half_corners_home} - {m.first_half_corners_away}
+        </span>
+      );
+    }
+    
+    let stats = null;
+    try {
+      if (m.statistics_json) {
+        stats = typeof m.statistics_json === 'string' ? JSON.parse(m.statistics_json) : m.statistics_json;
+      }
+    } catch (e) {}
+    
+    if (!stats || !stats[activeMetric]) {
+      return (
+        <span style={{ fontWeight: 600, color: 'var(--text-muted)', background: 'rgba(255, 255, 255, 0.02)', padding: '3px 8px', borderRadius: '4px', fontSize: '11px', marginLeft: '12px', flexShrink: 0 }}>
+          N/A
+        </span>
+      );
+    }
+    
+    const valHome = stats[activeMetric].home;
+    const valAway = stats[activeMetric].away;
+    const formatted = activeMetric === 'possession' ? `${valHome}% - ${valAway}%` : `${valHome} - ${valAway}`;
+    const label = {
+      fouls: 'Fautes',
+      yellow_cards: 'Cartons',
+      possession: 'Poss.',
+      shots_on_target: 'Tirs Cad',
+      shots: 'Tirs',
+      offsides: 'Hors-jeu'
+    }[activeMetric];
+    
+    return (
+      <span style={{ fontWeight: 700, color: 'var(--color-accent-solid)', background: 'rgba(9, 132, 227, 0.08)', padding: '3px 8px', borderRadius: '4px', fontSize: '11px', marginLeft: '12px', flexShrink: 0 }}>
+        {label}: {formatted}
+      </span>
+    );
+  };
+
   if (!selectedMatchDetails) return null;
+
+  const h2hAvg = getAverage(selectedMatchDetails.recent_h2h_matches, activeMetric);
+  const homeAvg = getAverage(selectedMatchDetails.recent_home_matches, activeMetric, true);
+  const awayAvg = getAverage(selectedMatchDetails.recent_away_matches, activeMetric, false, true);
+  
+  const metricUnit = activeMetric === 'possession' ? '%' : '';
+  const metricTitle = {
+    corners: 'Corners 1MT',
+    fouls: 'Fautes',
+    yellow_cards: 'Cartons',
+    possession: 'Possession',
+    shots_on_target: 'Tirs Cadrés',
+    shots: 'Tirs Globaux',
+    offsides: 'Hors-jeu'
+  }[activeMetric];
 
   return (
     <div className="modal-overlay" onClick={() => setSelectedMatchDetails(null)}>
@@ -75,30 +236,65 @@ export default function MatchDetailsModal({
           </div>
         </div>
 
-        {/* Corners Averages Grid */}
+        {/* Metric Selector Tabs */}
+        {availableMetrics.length > 1 && (
+          <div style={{ display: 'flex', gap: '4px', marginBottom: '14px', background: 'var(--bg-secondary)', padding: '3px', borderRadius: '8px', border: '1px solid var(--border-color)', overflowX: 'auto', scrollbarWidth: 'none' }}>
+            {availableMetrics.map(m => {
+              const labels = {
+                corners: 'Corners 1MT',
+                fouls: 'Fautes',
+                yellow_cards: 'Cartons',
+                possession: 'Possession',
+                shots_on_target: 'Tirs Cad.',
+                shots: 'Tirs Glob.',
+                offsides: 'Hors-jeu'
+              };
+              const isActive = activeMetric === m;
+              return (
+                <button
+                  key={m}
+                  onClick={() => setActiveMetric(m)}
+                  style={{
+                    flex: '1 0 auto',
+                    padding: '5px 10px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    background: isActive ? 'var(--color-accent-solid)' : 'transparent',
+                    color: isActive ? '#fff' : 'var(--text-secondary)',
+                    fontSize: '10.5px',
+                    fontFamily: 'Outfit',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.02em'
+                  }}
+                >
+                  {labels[m] || m}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Dynamic Averages Grid */}
         <div className="grid-3" style={{ gap: '12px', marginBottom: '24px' }}>
           <div style={{ background: 'rgba(9, 132, 227, 0.05)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(9, 132, 227, 0.15)', textAlign: 'center' }}>
-            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Moy. Corners H2H (1MT)</span>
+            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Moy. {metricTitle} H2H</span>
             <p style={{ fontSize: '17px', fontWeight: 800, marginTop: '4px', color: 'var(--color-accent-solid)' }}>
-              {selectedMatchDetails.h2h_avg_first_half_corners !== null && selectedMatchDetails.h2h_avg_first_half_corners !== undefined
-                ? `${selectedMatchDetails.h2h_avg_first_half_corners} corners`
-                : 'N/A'}
+              {h2hAvg !== null ? `${h2hAvg}${metricUnit}` : 'N/A'}
             </p>
           </div>
           <div style={{ background: 'rgba(16, 185, 129, 0.05)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.15)', textAlign: 'center' }}>
-            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Moy. {selectedMatchDetails.home_team} (Dom.)</span>
+            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Moy. {selectedMatchDetails.home_team}</span>
             <p style={{ fontSize: '17px', fontWeight: 800, marginTop: '4px', color: 'var(--color-success)' }}>
-              {selectedMatchDetails.home_avg_first_half_corners !== null && selectedMatchDetails.home_avg_first_half_corners !== undefined
-                ? `${selectedMatchDetails.home_avg_first_half_corners} corners`
-                : 'N/A'}
+              {homeAvg !== null ? `${homeAvg}${metricUnit}` : 'N/A'}
             </p>
           </div>
           <div style={{ background: 'rgba(235, 94, 40, 0.05)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(235, 94, 40, 0.15)', textAlign: 'center' }}>
-            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Moy. {selectedMatchDetails.away_team} (Ext.)</span>
+            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Moy. {selectedMatchDetails.away_team}</span>
             <p style={{ fontSize: '17px', fontWeight: 800, marginTop: '4px', color: 'var(--color-danger)' }}>
-              {selectedMatchDetails.away_avg_first_half_corners !== null && selectedMatchDetails.away_avg_first_half_corners !== undefined
-                ? `${selectedMatchDetails.away_avg_first_half_corners} corners`
-                : 'N/A'}
+              {awayAvg !== null ? `${awayAvg}${metricUnit}` : 'N/A'}
             </p>
           </div>
         </div>
@@ -191,9 +387,7 @@ export default function MatchDetailsModal({
                         )}
                       </div>
                       
-                      <span style={{ fontWeight: 700, color: 'var(--color-success)', background: 'rgba(16, 185, 129, 0.08)', padding: '3px 8px', borderRadius: '4px', fontSize: '11px', marginLeft: '12px', flexShrink: 0 }}>
-                        Corners: {m.first_half_corners_home} - {m.first_half_corners_away}
-                      </span>
+                      {renderMatchBadge(m)}
                     </div>
                   ))}
                 </div>
@@ -239,9 +433,7 @@ export default function MatchDetailsModal({
                           )}
                         </div>
                         
-                        <span style={{ fontWeight: 600, color: 'var(--color-accent-solid)', background: 'rgba(9, 132, 227, 0.08)', padding: '3px 8px', borderRadius: '4px', fontSize: '11px', marginLeft: '12px', flexShrink: 0 }} title="Corners obtenus / concédés en 1ère mi-temps">
-                          Corners: {obtained} - {conceded}
-                        </span>
+                        {renderMatchBadge(m)}
                       </div>
                     );
                   })}
@@ -288,9 +480,7 @@ export default function MatchDetailsModal({
                           )}
                         </div>
                         
-                        <span style={{ fontWeight: 600, color: 'var(--color-accent-solid)', background: 'rgba(9, 132, 227, 0.08)', padding: '3px 8px', borderRadius: '4px', fontSize: '11px', marginLeft: '12px', flexShrink: 0 }} title="Corners obtenus / concédés en 1ère mi-temps">
-                          Corners: {obtained} - {conceded}
-                        </span>
+                        {renderMatchBadge(m)}
                       </div>
                     );
                   })}

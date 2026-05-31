@@ -2,7 +2,7 @@ import { spawn, exec } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { dbQuery, dbGet } from '../db/database.js';
-import { isTorActive, getNewestScrapedFile, rewriteScraperLog, scrapeSingleMatch, runDiscoveryProcess, crawlH2HLinksBatch } from '../utils/scraperHelpers.js';
+import { isTorActive, getNewestScrapedFile, rewriteScraperLog, scrapeSingleMatch, runDiscoveryProcess, crawlH2HLinksBatch, prioritizeDirectH2H } from '../utils/scraperHelpers.js';
 import { enrichMatchPredictions, computeLeagueAverages, evaluateSmartScrapingFilter, getEnrichedPredictions } from '../utils/predictionEngine.js';
 import { importScrapedMatches, importHistoricalMatch, importSkippedMatch, enrichPrimaryMatch } from '../db/importer.js';
 
@@ -174,7 +174,7 @@ class ScraperController {
     });
     activeScraperProcess = child;
 
-    const timeoutMs = (parseInt(limit, 10) * 30 * 1000) + 60000;
+    const timeoutMs = (parseInt(limit, 10) * 75 * 1000) + 120000;
     const timeoutGuard = setTimeout(() => {
       if (activeScraperProcess && activeScraperProcess.pid === child.pid) {
         console.warn(`[Predictix Scraper] Process timed out (${timeoutMs/1000}s). Killing process tree.`);
@@ -331,8 +331,9 @@ class ScraperController {
               }
               
               if (Array.isArray(linksList) && linksList.length > 1) {
+                const prioritizedLinks = prioritizeDirectH2H(linksList, match.home_team, match.away_team);
                 let matchAddedCount = 0;
-                for (const link of linksList) {
+                for (const link of prioritizedLinks) {
                   if (matchAddedCount >= 10) break;
                   
                   const cached = await dbQuery('SELECT match_id, date FROM scraped_predictions WHERE match_id = ?', [link]);
@@ -448,7 +449,7 @@ class ScraperController {
 
       const backgroundTimeout = setTimeout(() => {
         if (activeCrawlHistoryMatches.has(matchId)) {
-          console.warn(`[Predictix H2H Crawl] H2H crawl timed out globally (45s) for match: ${matchId}. Aborting background crawl.`);
+          console.warn(`[Predictix H2H Crawl] H2H crawl timed out globally (120s) for match: ${matchId}. Aborting background crawl.`);
           
           for (const child of spawnedChildren) {
             if (child && !child.killed) {
@@ -467,7 +468,7 @@ class ScraperController {
           
           activeCrawlHistoryMatches.delete(matchId);
         }
-      }, 45000);
+      }, 120000);
 
       res.json({
         success: true,
@@ -499,8 +500,9 @@ class ScraperController {
 
           if (activeLinks.length > 0) {
             console.log(`[Predictix On-Demand Background] Starting background H2H deep crawl for ${activeLinks.length} past matches...`);
+            const prioritizedLinks = prioritizeDirectH2H(activeLinks, match.home_team, match.away_team);
             const uncachedLinks = [];
-            for (const link of activeLinks) {
+            for (const link of prioritizedLinks) {
               const cached = await dbQuery('SELECT match_id, date FROM scraped_predictions WHERE match_id = ?', [link]);
               const isPlaceholder = cached.length > 0 && 
                 (cached[0].date === '2026-05-30' || cached[0].date === '2026-05-31' || cached[0].date.includes(':'));

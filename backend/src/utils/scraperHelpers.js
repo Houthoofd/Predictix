@@ -168,11 +168,11 @@ export async function scrapeSingleMatch(scraperPath, link, skipOdds = false, onS
       onSpawn(child);
     }
     
-    // Security timeout guard: 20 seconds max execution
+    // Security timeout guard: 50 seconds max execution
     const timeout = setTimeout(() => {
       if (resolved) return;
       resolved = true;
-      console.warn(`[Predictix Scraper] Single match scraper timed out (20s) for: ${link}. Terminating process.`);
+      console.warn(`[Predictix Scraper] Single match scraper timed out (50s) for: ${link}. Terminating process.`);
       try {
         if (process.platform === 'win32') {
           exec(`taskkill /pid ${child.pid} /T /F`, (err) => {
@@ -189,7 +189,7 @@ export async function scrapeSingleMatch(scraperPath, link, skipOdds = false, onS
         try { fs.unlinkSync(tmpOutFile); } catch (e) {}
       }
       resolve(null);
-    }, 20000);
+    }, 50000);
     
     child.on('error', (err) => {
       if (resolved) return;
@@ -336,5 +336,45 @@ export async function crawlH2HLinksBatch(linksToScrape, scraperPath, options = {
     }
   }
 }
+
+/**
+ * Sorts and prioritizes direct H2H matches between the two teams to the front of the queue
+ */
+export function prioritizeDirectH2H(links, homeTeam, awayTeam) {
+  if (!links || !Array.isArray(links)) return [];
+  if (!homeTeam || !awayTeam) return links;
+
+  const normalize = (name) => {
+    return name.toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // remove diacritics
+      .replace(/[^a-z0-9]/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length > 2);
+  };
+
+  const homeKeywords = normalize(homeTeam);
+  const awayKeywords = normalize(awayTeam);
+
+  const direct = [];
+  const others = [];
+
+  for (const link of links) {
+    const lLower = link.toLowerCase().replace(/[^a-z0-9]/g, ' ');
+    
+    // Check if the link contains at least one significant keyword from BOTH teams
+    const matchesHome = homeKeywords.some(kw => lLower.includes(kw));
+    const matchesAway = awayKeywords.some(kw => lLower.includes(kw));
+
+    if (matchesHome && matchesAway) {
+      direct.push(link);
+    } else {
+      others.push(link);
+    }
+  }
+
+  return [...direct, ...others];
+}
+
 
 
