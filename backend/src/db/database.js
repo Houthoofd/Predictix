@@ -73,7 +73,6 @@ function initDb() {
       }
     });
 
-    // 2. Table bets
     db.run(`
       CREATE TABLE IF NOT EXISTS bets (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -92,6 +91,7 @@ function initDb() {
         status TEXT NOT NULL DEFAULT 'PENDING', -- PENDING, WON, LOST, REFUNDED
         payout REAL NOT NULL DEFAULT 0.0,
         notes TEXT,
+        match_url TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
@@ -123,7 +123,22 @@ function initDb() {
         away_logo TEXT,
         historical_links TEXT,
         is_historical INTEGER DEFAULT 0,
+        match_url TEXT,
+        statistics_json TEXT,
         scraped_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // 4. Table custom_strategies
+    db.run(`
+      CREATE TABLE IF NOT EXISTS custom_strategies (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        prompt TEXT NOT NULL,
+        metric TEXT NOT NULL,
+        conditions_json TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'ACTIVE', -- ACTIVE, INACTIVE
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
@@ -170,6 +185,24 @@ function initDb() {
       // Ignore error if column already exists
       // In any case, migrate existing data to set is_historical = 1 for historical rows
       db.run("UPDATE scraped_predictions SET is_historical = 1 WHERE match_id LIKE '%/%' OR match_id LIKE 'http%'");
+    });
+
+    db.run(`
+      ALTER TABLE bets ADD COLUMN match_url TEXT
+    `, (err) => {
+      // Ignore if exists
+    });
+
+    db.run(`
+      ALTER TABLE scraped_predictions ADD COLUMN match_url TEXT
+    `, (err) => {
+      // Ignore if exists
+    });
+
+    db.run(`
+      ALTER TABLE scraped_predictions ADD COLUMN statistics_json TEXT
+    `, (err) => {
+      // Ignore if exists
     });
     
     console.log("Database tables initialized successfully");
