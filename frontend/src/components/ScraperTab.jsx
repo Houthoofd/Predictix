@@ -389,34 +389,10 @@ export default function ScraperTab({
             let modelValueEdge = 0;
             let parsedProb = 0;
             let parsedOdds = 0;
-            let isOver = false;
-            let isUnder = false;
             
-            try {
-              let rawProb = pred.win_rate || pred.probability || '';
-              let cleanProb = String(rawProb).replace('%', '').trim();
-              parsedProb = parseInt(cleanProb, 10);
-              
-              let rawOdds = '';
-              const tipLower = String(pred.best_tip).toLowerCase();
-              isOver = tipLower.includes('plus') || tipLower.includes('over');
-              isUnder = tipLower.includes('moins') || tipLower.includes('under');
-              
-              if (isOver) {
-                rawOdds = pred.over_odds;
-              } else if (isUnder) {
-                rawOdds = pred.under_odds;
-              }
-              parsedOdds = parseFloat(String(rawOdds).trim());
-              
-              if (!isNaN(parsedProb) && !isNaN(parsedOdds) && parsedProb > 0 && parsedOdds > 0) {
-                const ev = (parsedProb / 100) * parsedOdds;
-                if (ev >= 1.05) {
-                  isModelValueBet = true;
-                  modelValueEdge = Math.round((ev - 1) * 100);
-                }
-              }
-            } catch (e) {}
+            const tipLower = String(pred.best_tip).toLowerCase();
+            const isOver = tipLower.includes('plus') || tipLower.includes('over');
+            const isUnder = tipLower.includes('moins') || tipLower.includes('under');
             
             // Find the estimated odds for the card_line (e.g. 4.5)
             const cardLineVal = parseFloat(pred.card_line);
@@ -426,6 +402,20 @@ export default function ScraperTab({
             const estimatedOddsVal = matchingRow 
               ? (isOver ? matchingRow.over_decimal : matchingRow.under_decimal) 
               : null;
+            
+            if (matchingRow) {
+              if (isOver) {
+                isModelValueBet = matchingRow.over_value_bet;
+                modelValueEdge = matchingRow.over_value_edge;
+                parsedProb = parseInt(String(matchingRow.over_probability).replace('%', ''), 10);
+                parsedOdds = matchingRow.over_decimal;
+              } else if (isUnder) {
+                isModelValueBet = matchingRow.under_value_bet;
+                modelValueEdge = matchingRow.under_value_edge;
+                parsedProb = parseInt(String(matchingRow.under_probability).replace('%', ''), 10);
+                parsedOdds = matchingRow.under_decimal;
+              }
+            }
             
             const isSelected = selectedPredIds.includes(pred.match_id);
 
