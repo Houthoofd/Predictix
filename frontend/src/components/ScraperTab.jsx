@@ -54,7 +54,7 @@ export default function ScraperTab({
             
             {!scraping ? (
               <>
-                <button className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '36px' }} onClick={handleStartDetailedScraping}>
+                <button className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '36px' }} onClick={() => handleStartDetailedScraping(scrapeLimit)}>
                   <RefreshCcw size={15} />
                   <span>Crawl Profond H2H (Tor)</span>
                 </button>
@@ -77,7 +77,14 @@ export default function ScraperTab({
           <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
               <span style={{ fontWeight: 600, color: 'var(--color-accent-solid)' }}>
-                {scrapePhase}
+                {scrapePhase === 'idle' && 'En attente'}
+                {scrapePhase === 'discovering' && 'Découverte des matchs en cours...'}
+                {scrapePhase === 'discovered_waiting' && 'En attente de configuration...'}
+                {scrapePhase === 'scraping_primary' && 'Analyse des détails des matchs...'}
+                {scrapePhase === 'scraping_history' && 'Crawl profond des historiques H2H (Tor)...'}
+                {scrapePhase === 'importing' && 'Calcul de Poisson & Importation...'}
+                {scrapePhase === 'stopped' && 'Scraper arrêté'}
+                {scrapePhase === 'completed' && 'Scraping terminé avec succès !'}
               </span>
               <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
                 {scrapeTimeRemaining ? `Temps restant estimé : ${scrapeTimeRemaining}` : 'Calcul du temps...'}
@@ -96,8 +103,44 @@ export default function ScraperTab({
               )}
             </div>
 
+            {/* Configuration for Detailed Scraping after match discovery */}
+            {scrapePhase === 'discovered_waiting' && (
+              <div style={{ marginTop: '14px', padding: '14px 18px', background: 'rgba(255,255,255,0.02)', border: '1.5px solid var(--color-accent-solid)', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
+                <div>
+                  <h4 style={{ fontSize: '13.5px', fontWeight: 700, color: '#ffffff', fontFamily: 'Outfit' }}>
+                    Matchs découverts : {totalPrimary}
+                  </h4>
+                  <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                    Choisissez le nombre maximum de matchs que vous souhaitez analyser en détail :
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '4px 10px', height: '36px' }}>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Limite :</span>
+                    <input 
+                      type="number" 
+                      min="1" 
+                      max={totalPrimary} 
+                      style={{ width: '40px', border: 'none', background: 'transparent', color: 'var(--text-primary)', fontWeight: 700, textAlign: 'center', outline: 'none', padding: '0' }}
+                      value={scrapeLimit}
+                      onChange={(e) => setScrapeLimit(Math.max(1, Math.min(totalPrimary, parseInt(e.target.value) || 30)))}
+                    />
+                    <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>matchs</span>
+                  </div>
+                  <button 
+                    className="btn btn-primary" 
+                    style={{ height: '36px', padding: '0 16px', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                    onClick={() => handleStartDetailedScraping(scrapeLimit)}
+                  >
+                    <RefreshCcw size={14} />
+                    <span>Lancer l'Analyse Détaillée</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Deep crawl sub-progress */}
-            {totalPrimary > 0 && (
+            {totalPrimary > 0 && scrapePhase !== 'discovered_waiting' && (
               <div style={{ display: 'flex', gap: '20px', fontSize: '12px', color: 'var(--text-secondary)', padding: '8px 12px', background: 'rgba(255,255,255,0.01)', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.02)', marginTop: '8px', flexWrap: 'wrap' }}>
                 <div>
                   <span style={{ fontWeight: 600 }}>Découverte :</span> {currentPrimary} / {totalPrimary}
