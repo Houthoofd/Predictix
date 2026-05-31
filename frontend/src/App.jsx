@@ -73,13 +73,26 @@ export default function App() {
   const [predHighProbOnly, setPredHighProbOnly] = useState(false);
   const [predValueBetsOnly, setPredValueBetsOnly] = useState(false);
   const [predStatusFilter, setPredStatusFilter] = useState('all'); // all, live, planned, finished
+  const [dateRange, setDateRange] = useState('all'); // all, today, yesterday, week, month, year, custom
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   const consoleEndRef = useRef(null);
+  const isFirstMount = useRef(true);
 
   // Sync theme to body element
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
+
+  // Fetch predictions whenever date range parameters change
+  useEffect(() => {
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      return;
+    }
+    fetchPredictions(dateRange, startDate, endDate);
+  }, [dateRange, startDate, endDate]);
 
   // Initial Data Fetch
   useEffect(() => {
@@ -139,7 +152,7 @@ export default function App() {
       await Promise.all([
         fetchBankroll(),
         fetchBets(),
-        fetchPredictions(),
+        fetchPredictions(dateRange, startDate, endDate),
         fetchStats()
       ]);
     } catch (error) {
@@ -154,7 +167,7 @@ export default function App() {
       await Promise.all([
         fetchBankroll(),
         fetchBets(),
-        fetchPredictions(),
+        fetchPredictions(dateRange, startDate, endDate),
         fetchStats()
       ]);
     } catch (error) {
@@ -174,8 +187,15 @@ export default function App() {
     if (json.success) setBets(json.data);
   };
 
-  const fetchPredictions = async () => {
-    const res = await fetch(`/api/predictions?t=${Date.now()}`);
+  const fetchPredictions = async (range = 'all', start = '', end = '') => {
+    let url = `/api/predictions?t=${Date.now()}`;
+    if (range && range !== 'all') {
+      url += `&dateRange=${range}`;
+    }
+    if (start && end) {
+      url += `&startDate=${start}&endDate=${end}`;
+    }
+    const res = await fetch(url);
     const json = await res.json();
     if (json.success) setPredictions(json.data);
   };
@@ -796,6 +816,12 @@ export default function App() {
                   setSelectedMatchDetails={setSelectedMatchDetails}
                   handleQuickPlaceBet={handleQuickPlaceBet}
                   stats={stats}
+                  dateRange={dateRange}
+                  setDateRange={setDateRange}
+                  startDate={startDate}
+                  setStartDate={setStartDate}
+                  endDate={endDate}
+                  setEndDate={setEndDate}
                 />
               )}
 

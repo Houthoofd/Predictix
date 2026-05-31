@@ -99,7 +99,15 @@ export default function PredictionsTab({
   setSelectedPredIds,
   setSelectedMatchDetails,
   handleQuickPlaceBet,
-  stats
+  stats,
+  
+  // Date range filters
+  dateRange,
+  setDateRange,
+  startDate,
+  setStartDate,
+  endDate,
+  setEndDate
 }) {
   const [collapsedLeagues, setCollapsedLeagues] = React.useState({});
 
@@ -164,8 +172,48 @@ export default function PredictionsTab({
             </span>
           </label>
 
+          {/* Period Selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 600 }}>Période :</span>
+            <select
+              value={dateRange}
+              onChange={(e) => setDateRange(e.target.value)}
+              className="form-control"
+              style={{ height: '36px', fontSize: '13px', padding: '0 10px', background: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', borderRadius: '6px', color: 'var(--text-primary)', outline: 'none', cursor: 'pointer' }}
+            >
+              <option value="all">Toutes les dates</option>
+              <option value="today">Aujourd'hui</option>
+              <option value="yesterday">Hier</option>
+              <option value="week">7 derniers jours</option>
+              <option value="month">30 derniers jours</option>
+              <option value="year">Cette année</option>
+              <option value="custom">Personnalisé...</option>
+            </select>
+          </div>
+
+          {/* Custom Date Inputs */}
+          {dateRange === 'custom' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', animation: 'fadeIn 0.2s ease-out' }}>
+              <input
+                type="date"
+                className="form-control"
+                style={{ height: '36px', fontSize: '12.5px', padding: '0 8px', width: '125px', background: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>à</span>
+              <input
+                type="date"
+                className="form-control"
+                style={{ height: '36px', fontSize: '12.5px', padding: '0 8px', width: '125px', background: 'var(--bg-tertiary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+            </div>
+          )}
+
           {/* Search bar */}
-          <div style={{ position: 'relative', width: '220px' }}>
+          <div style={{ position: 'relative', width: '200px' }}>
             <Search size={16} style={{ position: 'absolute', left: '10px', top: '10px', color: 'var(--text-muted)' }} />
             <input 
               type="text" 

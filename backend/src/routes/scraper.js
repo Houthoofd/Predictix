@@ -65,7 +65,50 @@ function findPoissonMean(k, targetProb) {
 // Get cached predictions from database and compute predictive stats + Value Bets
 router.get('/predictions', async (req, res) => {
   try {
-    const rows = await dbQuery('SELECT * FROM scraped_predictions WHERE is_historical = 0 ORDER BY scraped_at DESC, time ASC');
+    let sql = 'SELECT * FROM scraped_predictions WHERE is_historical = 0';
+    const params = [];
+    
+    const { startDate, endDate, dateRange } = req.query;
+    
+    if (startDate && endDate) {
+      sql += ' AND date >= ? AND date <= ?';
+      params.push(startDate, endDate);
+    } else if (dateRange && dateRange !== 'all') {
+      const today = new Date();
+      const todayStr = today.toISOString().substring(0, 10);
+      
+      if (dateRange === 'today') {
+        sql += ' AND date = ?';
+        params.push(todayStr);
+      } else if (dateRange === 'yesterday') {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().substring(0, 10);
+        sql += ' AND date = ?';
+        params.push(yesterdayStr);
+      } else if (dateRange === 'week') {
+        const startOfWeek = new Date();
+        startOfWeek.setDate(startOfWeek.getDate() - 7);
+        const startOfWeekStr = startOfWeek.toISOString().substring(0, 10);
+        sql += ' AND date >= ? AND date <= ?';
+        params.push(startOfWeekStr, todayStr);
+      } else if (dateRange === 'month') {
+        const startOfMonth = new Date();
+        startOfMonth.setDate(startOfMonth.getDate() - 30);
+        const startOfMonthStr = startOfMonth.toISOString().substring(0, 10);
+        sql += ' AND date >= ? AND date <= ?';
+        params.push(startOfMonthStr, todayStr);
+      } else if (dateRange === 'year') {
+        const startOfYear = new Date();
+        startOfYear.setDate(startOfYear.getDate() - 365);
+        const startOfYearStr = startOfYear.toISOString().substring(0, 10);
+        sql += ' AND date >= ? AND date <= ?';
+        params.push(startOfYearStr, todayStr);
+      }
+    }
+    
+    sql += ' ORDER BY scraped_at DESC, time ASC';
+    const rows = await dbQuery(sql, params);
     
     // Helper to normalize tournament strings to clean league keys
     function getLeagueKey(t) {
