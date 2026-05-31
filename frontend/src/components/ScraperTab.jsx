@@ -389,6 +389,8 @@ export default function ScraperTab({
             let modelValueEdge = 0;
             let parsedProb = 0;
             let parsedOdds = 0;
+            let isOver = false;
+            let isUnder = false;
             
             try {
               let rawProb = pred.win_rate || pred.probability || '';
@@ -397,9 +399,12 @@ export default function ScraperTab({
               
               let rawOdds = '';
               const tipLower = String(pred.best_tip).toLowerCase();
-              if (tipLower.includes('plus') || tipLower.includes('over')) {
+              isOver = tipLower.includes('plus') || tipLower.includes('over');
+              isUnder = tipLower.includes('moins') || tipLower.includes('under');
+              
+              if (isOver) {
                 rawOdds = pred.over_odds;
-              } else if (tipLower.includes('moins') || tipLower.includes('under')) {
+              } else if (isUnder) {
                 rawOdds = pred.under_odds;
               }
               parsedOdds = parseFloat(String(rawOdds).trim());
@@ -685,17 +690,62 @@ export default function ScraperTab({
 
 
               {/* Recommendation card bottom */}
-              <div style={{ background: 'var(--bg-tertiary)', padding: '16px', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
+              <div style={{ 
+                background: isModelValueBet 
+                  ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(16, 185, 129, 0.015) 100%)' 
+                  : 'var(--bg-tertiary)', 
+                padding: '16px', 
+                borderRadius: '10px', 
+                border: isModelValueBet 
+                  ? '1px solid rgba(16, 185, 129, 0.25)' 
+                  : '1px solid var(--border-color)',
+                boxShadow: isModelValueBet 
+                  ? '0 4px 12px rgba(16, 185, 129, 0.04)' 
+                  : 'none',
+                position: 'relative',
+                overflow: 'hidden'
+              }}>
+                {isModelValueBet && (
+                  <div style={{ 
+                    fontSize: '9.5px', 
+                    color: 'var(--color-success)', 
+                    fontWeight: 800, 
+                    textTransform: 'uppercase', 
+                    letterSpacing: '0.08em', 
+                    marginBottom: '10px', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '5px' 
+                  }}>
+                    <span style={{ 
+                      width: '6px', 
+                      height: '6px', 
+                      borderRadius: '50%', 
+                      background: 'var(--color-success)', 
+                      display: 'inline-block',
+                      boxShadow: '0 0 8px var(--color-success)'
+                    }}></span>
+                    VALUE BET DÉTECTÉ (+{modelValueEdge}% EDGE)
+                  </div>
+                )}
+
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                   <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Conseil:</span>
-                  <span style={{ fontWeight: 700, fontFamily: 'Outfit', color: 'var(--text-primary)' }}>
+                  <span style={{ 
+                    fontWeight: 800, 
+                    fontFamily: 'Outfit', 
+                    color: isModelValueBet ? 'var(--color-success)' : 'var(--text-primary)' 
+                  }}>
                     {pred.best_tip} {pred.card_line}
                   </span>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                   <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Probabilité:</span>
-                  <span className={isHighProb ? 'prob-high' : 'prob-medium'}>
+                  <span className={isHighProb ? 'prob-high' : 'prob-medium'} style={{ 
+                    fontWeight: isModelValueBet ? 800 : 600,
+                    color: isModelValueBet ? 'var(--color-success)' : undefined
+                  }}>
                     {pred.probability}
                   </span>
                 </div>
@@ -703,14 +753,30 @@ export default function ScraperTab({
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                   <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Cotes (O/U):</span>
                   <span style={{ fontSize: '12px', fontWeight: 600 }}>
-                    {pred.over_odds} / {pred.under_odds}
+                    <span style={{ 
+                      color: isOver && isModelValueBet ? 'var(--color-success)' : 'var(--text-primary)', 
+                      fontWeight: isOver && isModelValueBet ? 800 : 600 
+                    }}>
+                      {pred.over_odds}
+                    </span>
+                    <span style={{ color: 'var(--text-muted)', margin: '0 4px' }}>/</span>
+                    <span style={{ 
+                      color: isUnder && isModelValueBet ? 'var(--color-success)' : 'var(--text-primary)', 
+                      fontWeight: isUnder && isModelValueBet ? 800 : 600 
+                    }}>
+                      {pred.under_odds}
+                    </span>
                   </span>
                 </div>
 
                 {pred.win_rate && (
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Taux Réussite Hist:</span>
-                    <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>
+                    <span style={{ 
+                      fontSize: '12px', 
+                      fontWeight: isModelValueBet ? 700 : 600, 
+                      color: isModelValueBet ? 'var(--color-success)' : 'var(--text-muted)' 
+                    }}>
                       {pred.win_rate}
                     </span>
                   </div>
