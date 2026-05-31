@@ -574,48 +574,86 @@ export default function ScraperTab({
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                      {pred.odds_corners.map((o, idx) => {
-                        const hasOverValue = o.over_value_bet;
-                        const hasUnderValue = o.under_value_bet;
-                        
-                        if (!o.over_decimal && !o.under_decimal) return null;
-                        
-                        return (
-                          <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '3px', borderTop: idx > 0 ? '1px solid rgba(255,255,255,0.03)' : 'none', paddingTop: idx > 0 ? '5px' : '0' }}>
-                            {o.over_decimal && (
-                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', padding: '2px 6px', borderRadius: '4px', background: hasOverValue ? 'rgba(16, 185, 129, 0.06)' : 'transparent', border: hasOverValue ? '1px dashed rgba(16, 185, 129, 0.2)' : 'none' }}>
-                                <span style={{ color: hasOverValue ? 'var(--color-success)' : 'var(--text-secondary)', fontWeight: hasOverValue ? 700 : 500 }}>
-                                  Plus de {o.line} {o.market_type === '1st_half' ? '(1MT)' : '(Fin)'}
-                                </span>
-                                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                                  <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{o.over_decimal}</span>
-                                  {hasOverValue && (
-                                    <span style={{ color: 'var(--color-success)', fontWeight: 700, fontSize: '10px' }} title={`Cote Juste : ${o.over_fair_odds} (${o.over_probability})`}>
-                                      +{o.over_value_edge}%
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            )}
+                      {(() => {
+                        const tipLower = String(pred.best_tip).toLowerCase();
+                        const wantOver = tipLower.includes('plus') || tipLower.includes('over');
+                        const wantUnder = tipLower.includes('moins') || tipLower.includes('under');
+                        const predLine = parseFloat(pred.card_line);
 
-                            {o.under_decimal && (
-                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', padding: '2px 6px', borderRadius: '4px', background: hasUnderValue ? 'rgba(16, 185, 129, 0.06)' : 'transparent', border: hasUnderValue ? '1px dashed rgba(16, 185, 129, 0.2)' : 'none' }}>
-                                <span style={{ color: hasUnderValue ? 'var(--color-success)' : 'var(--text-secondary)', fontWeight: hasUnderValue ? 700 : 500 }}>
-                                  Moins de {o.line} {o.market_type === '1st_half' ? '(1MT)' : '(Fin)'}
-                                </span>
-                                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                                  <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{o.under_decimal}</span>
-                                  {hasUnderValue && (
-                                    <span style={{ color: 'var(--color-success)', fontWeight: 700, fontSize: '10px' }} title={`Cote Juste : ${o.under_fair_odds} (${o.under_probability})`}>
-                                      +{o.under_value_edge}%
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                          </div>
+                        // Try to find the exact recommended line in 1st half (since Poisson targets 1MT corners)
+                        let filtered = pred.odds_corners.filter(o => 
+                          o.market_type === '1st_half' && parseFloat(o.line) === predLine
                         );
-                      })}
+
+                        // Fallback 1: Any 1st half lines if the exact recommended line isn't loaded
+                        if (filtered.length === 0) {
+                          filtered = pred.odds_corners.filter(o => o.market_type === '1st_half');
+                        }
+
+                        // Fallback 2: Any full-time lines matching the exact line
+                        if (filtered.length === 0) {
+                          filtered = pred.odds_corners.filter(o => parseFloat(o.line) === predLine);
+                        }
+
+                        // Fallback 3: All available lines
+                        if (filtered.length === 0) {
+                          filtered = pred.odds_corners;
+                        }
+
+                        // Clean out elements that have no decimal odds for the direction we want
+                        const displayable = filtered.filter(o => 
+                          (wantOver && o.over_decimal) || (wantUnder && o.under_decimal)
+                        );
+
+                        if (displayable.length === 0) {
+                          return (
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', padding: '4px 0' }}>
+                              Cote non ouverte sur Oddschecker
+                            </div>
+                          );
+                        }
+
+                        return displayable.map((o, idx) => {
+                          const hasOverValue = o.over_value_bet;
+                          const hasUnderValue = o.under_value_bet;
+
+                          return (
+                            <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '3px', borderTop: idx > 0 ? '1px solid rgba(255,255,255,0.03)' : 'none', paddingTop: idx > 0 ? '5px' : '0' }}>
+                              {wantOver && o.over_decimal && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', padding: '4px 6px', borderRadius: '4px', background: hasOverValue ? 'rgba(16, 185, 129, 0.06)' : 'transparent', border: hasOverValue ? '1px dashed rgba(16, 185, 129, 0.2)' : 'none' }}>
+                                  <span style={{ color: hasOverValue ? 'var(--color-success)' : 'var(--text-secondary)', fontWeight: hasOverValue ? 700 : 500 }}>
+                                    Plus de {o.line} {o.market_type === '1st_half' ? '(1MT)' : '(Fin)'}
+                                  </span>
+                                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                    <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{o.over_decimal}</span>
+                                    {hasOverValue && (
+                                      <span style={{ color: 'var(--color-success)', fontWeight: 700, fontSize: '10px' }} title={`Cote Juste : ${o.over_fair_odds} (${o.over_probability})`}>
+                                        +{o.over_value_edge}%
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {wantUnder && o.under_decimal && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', padding: '4px 6px', borderRadius: '4px', background: hasUnderValue ? 'rgba(16, 185, 129, 0.06)' : 'transparent', border: hasUnderValue ? '1px dashed rgba(16, 185, 129, 0.2)' : 'none' }}>
+                                  <span style={{ color: hasUnderValue ? 'var(--color-success)' : 'var(--text-secondary)', fontWeight: hasUnderValue ? 700 : 500 }}>
+                                    Moins de {o.line} {o.market_type === '1st_half' ? '(1MT)' : '(Fin)'}
+                                  </span>
+                                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                    <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{o.under_decimal}</span>
+                                    {hasUnderValue && (
+                                      <span style={{ color: 'var(--color-success)', fontWeight: 700, fontSize: '10px' }} title={`Cote Juste : ${o.under_fair_odds} (${o.under_probability})`}>
+                                        +{o.under_value_edge}%
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        });
+                      })()}
                     </div>
                   </div>
                 )}
