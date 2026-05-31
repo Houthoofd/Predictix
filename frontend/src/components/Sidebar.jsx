@@ -30,14 +30,25 @@ export default function Sidebar({
             <LayoutDashboard size={20} />
             {!sidebarCollapsed && <span>Tableau de Bord</span>}
           </button>
+          
+          <button 
+            className={`nav-item ${activeTab === 'predictions' ? 'active' : ''}`}
+            onClick={() => setActiveTab('predictions')}
+            title={sidebarCollapsed ? "Pronostics Corners" : ""}
+          >
+            <Award size={20} />
+            {!sidebarCollapsed && <span>Pronostics Corners</span>}
+          </button>
+
           <button 
             className={`nav-item ${activeTab === 'scraper' ? 'active' : ''}`}
             onClick={() => setActiveTab('scraper')}
-            title={sidebarCollapsed ? "Match en Direct" : ""}
+            title={sidebarCollapsed ? "Match en Direct (Scraper)" : ""}
           >
-            <Database size={20} />
+            <RefreshCcw size={20} />
             {!sidebarCollapsed && <span>Match en Direct</span>}
           </button>
+          
           <button 
             className={`nav-item ${activeTab === 'tracker' ? 'active' : ''}`}
             onClick={() => setActiveTab('tracker')}
@@ -46,12 +57,13 @@ export default function Sidebar({
             <TrendingUp size={20} />
             {!sidebarCollapsed && <span>Suivi des Paris</span>}
           </button>
+          
           <button 
             className={`nav-item ${activeTab === 'strategies' ? 'active' : ''}`}
             onClick={() => setActiveTab('strategies')}
             title={sidebarCollapsed ? "Stratégies" : ""}
           >
-            <Award size={20} />
+            <Database size={20} />
             {!sidebarCollapsed && <span>Stratégies</span>}
           </button>
         </nav>

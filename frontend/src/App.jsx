@@ -9,6 +9,7 @@ import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import DashboardTab from './components/DashboardTab';
 import ScraperTab from './components/ScraperTab';
+import PredictionsTab from './components/PredictionsTab';
 import TrackerTab from './components/TrackerTab';
 import StrategiesTab from './components/StrategiesTab';
 import AddBetModal from './components/AddBetModal';
@@ -720,12 +721,14 @@ export default function App() {
             <div className="header-title-section">
               <h2 className="page-title">
                 {activeTab === 'dashboard' && 'Tableau de Bord'}
-                {activeTab === 'scraper' && 'Match en Direct'}
+                {activeTab === 'predictions' && 'Pronostics Corners'}
+                {activeTab === 'scraper' && 'Configuration Scraper'}
                 {activeTab === 'tracker' && 'Tracker de Paris'}
                 {activeTab === 'strategies' && 'Stratégies de Cartons'}
               </h2>
               <p className="header-subtitle">
                 {activeTab === 'dashboard' && 'Statistiques de bankroll en temps réel et performances.'}
+                {activeTab === 'predictions' && 'Visualisez, analysez et placez vos paris corners basés sur le modèle de Poisson.'}
                 {activeTab === 'scraper' && 'Gérez et exécutez le scraper de match-en-direct.fr en temps réel.'}
                 {activeTab === 'tracker' && 'Journalisez vos paris sportifs pour optimiser votre capital.'}
                 {activeTab === 'strategies' && 'Analyse des cibles de paris à forte espérance mathématique.'}
@@ -770,6 +773,15 @@ export default function App() {
                   currentDeep={currentDeep}
                   totalDeep={totalDeep}
                   scraperLogs={scraperLogs}
+                  handleStopScraping={handleStopScraping}
+                  handleTriggerScraping={handleTriggerScraping}
+                  handleStartDetailedScraping={handleStartDetailedScraping}
+                  consoleEndRef={consoleEndRef}
+                />
+              )}
+
+              {activeTab === 'predictions' && (
+                <PredictionsTab 
                   predStatusFilter={predStatusFilter}
                   setPredStatusFilter={setPredStatusFilter}
                   predValueBetsOnly={predValueBetsOnly}
@@ -782,11 +794,7 @@ export default function App() {
                   selectedPredIds={selectedPredIds}
                   setSelectedPredIds={setSelectedPredIds}
                   setSelectedMatchDetails={setSelectedMatchDetails}
-                  handleStopScraping={handleStopScraping}
-                  handleTriggerScraping={handleTriggerScraping}
-                  handleStartDetailedScraping={handleStartDetailedScraping}
                   handleQuickPlaceBet={handleQuickPlaceBet}
-                  consoleEndRef={consoleEndRef}
                   stats={stats}
                 />
               )}
