@@ -18,6 +18,7 @@
     "nodemon": "^3.1.0"
   },
   "nodemonConfig": {
+    "watch": ["src"],
     "ignore": [
       "predictix.db*",
       "*.db*",

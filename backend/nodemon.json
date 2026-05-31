@@ -1,4 +1,5 @@
 {
+  "watch": ["src"],
   "ignore": [
     "predictix.db*",
     "*.db*",

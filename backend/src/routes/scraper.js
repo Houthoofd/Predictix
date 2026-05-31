@@ -348,6 +348,15 @@ router.post('/predictions/scrape', (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
+  // Send an SSE keep-alive comment (":\n\n") every 5 seconds to keep the TCP socket warm and prevent any idle timeouts
+  const keepAliveInterval = setInterval(() => {
+    res.write(':\n\n');
+  }, 5000);
+
+  req.on('close', () => {
+    clearInterval(keepAliveInterval);
+  });
+
   const sendEvent = (type, data) => {
     res.write(`data: ${JSON.stringify({ type, ...data })}\n\n`);
   };
@@ -407,6 +416,7 @@ router.post('/predictions/scrape', (req, res) => {
   child.on('error', (error) => {
     console.error('Failed to start scraper process:', error);
     sendEvent('error', { message: `Impossible de lancer le scraper : ${error.message}` });
+    clearInterval(keepAliveInterval);
     res.end();
   });
 
@@ -415,6 +425,7 @@ router.post('/predictions/scrape', (req, res) => {
     
     if (stopScraperRequested) {
       sendEvent('log', { message: `[Predictix] Scraping annulé par l'utilisateur.` });
+      clearInterval(keepAliveInterval);
       return res.end();
     }
 
@@ -427,6 +438,7 @@ router.post('/predictions/scrape', (req, res) => {
 
     if (code !== 0) {
       sendEvent('error', { message: `Le scraper a rencontré une erreur (Code de sortie : ${code})` });
+      clearInterval(keepAliveInterval);
       return res.end();
     }
 
@@ -436,6 +448,7 @@ router.post('/predictions/scrape', (req, res) => {
       const newestFile = getNewestScrapedFile(outputDirs);
       if (!newestFile) {
         sendEvent('error', { message: `Aucun fichier de données scrapées (.json) trouvé dans les répertoires scannés.` });
+        clearInterval(keepAliveInterval);
         return res.end();
       }
 
@@ -615,10 +628,12 @@ router.post('/predictions/scrape', (req, res) => {
       }
 
       sendEvent('complete', { count: importedCount });
+      clearInterval(keepAliveInterval);
       res.end();
     } catch (error) {
       console.error('Error importing scraped data:', error);
       sendEvent('error', { message: `Erreur lors de l'importation en base de données : ${error.message}` });
+      clearInterval(keepAliveInterval);
       res.end();
     }
   });
