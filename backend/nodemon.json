@@ -1,0 +1,8 @@
+{
+  "ignore": [
+    "predictix.db",
+    "predictix.db-journal",
+    "*.db",
+    "*.db-journal"
+  ]
+}
