@@ -740,6 +740,16 @@ router.post('/predictions/scrape/discover', async (req, res) => {
 router.post('/predictions/scrape', async (req, res) => {
   stopScraperRequested = false;
   
+  const strategyId = req.body.strategyId || req.query.strategyId || null;
+  let targetStrategy = null;
+  if (strategyId) {
+    try {
+      targetStrategy = await dbGet('SELECT * FROM custom_strategies WHERE id = ?', [strategyId]);
+    } catch (e) {
+      console.error("Failed to load target strategy in scraper:", e);
+    }
+  }
+  
   // Disable Node's default request, response, and socket timeouts for long SSE scraper streams
   req.setTimeout(0);
   res.setTimeout(0);
@@ -839,9 +849,9 @@ router.post('/predictions/scrape', async (req, res) => {
     }
   }, timeoutMs);
 
-  // Inactivity timeout guard: 45 seconds of silence = kill!
+  // Inactivity timeout guard: 90 seconds of silence = kill!
   let inactivityTimer = null;
-  const INACTIVITY_TIMEOUT_MS = 45000;
+  const INACTIVITY_TIMEOUT_MS = 90000;
 
   const resetInactivityTimer = () => {
     if (inactivityTimer) clearTimeout(inactivityTimer);
@@ -871,6 +881,38 @@ router.post('/predictions/scrape', async (req, res) => {
 
   let logBuffer = '';
 
+  const rewriteScraperLog = (line, strategy) => {
+    if (!strategy) return line;
+    
+    const metricLabels = {
+      fouls: 'Fautes commises',
+      yellow_cards: 'Cartons Jaunes',
+      possession: 'Possession de balle',
+      shots_on_target: 'Tirs Cadrés',
+      shots: 'Tirs globaux',
+      offsides: 'Hors-jeu',
+      corners: 'Corners 1ère MT'
+    };
+
+    const metricLabel = metricLabels[strategy.metric] || strategy.metric;
+
+    // 1. Title block rewrite
+    if (line.includes('SCRAPER MATCH ENDIRECT PREMIUM - Corners 1ere Mi-Temps')) {
+      return line.replace('SCRAPER MATCH ENDIRECT PREMIUM - Corners 1ere Mi-Temps', `SCRAPER MATCH ENDIRECT PREMIUM - Cible : ${metricLabel}`);
+    }
+
+    // 2. Metric extraction line rewrite
+    if (line.includes('✓ Corners 1ère MT:')) {
+      const matchData = line.match(/✓ Corners 1ère MT:\s*(\d+)\s*-\s*(\d+)\s*\((Historical links:\s*\d+)\)/);
+      if (matchData) {
+        return `✓ Statistiques cibles extraites avec succès pour la stratégie (Métrique: ${metricLabel}) (${matchData[3]})`;
+      }
+      return `✓ Statistiques cibles extraites avec succès (Cible: ${metricLabel})`;
+    }
+
+    return line;
+  };
+
   const handleOutput = (data) => {
     // Reset inactivity timer since we received output
     resetInactivityTimer();
@@ -880,8 +922,9 @@ router.post('/predictions/scrape', async (req, res) => {
     logBuffer = lines.pop(); // Keep incomplete line in buffer
 
     for (const line of lines) {
-      const cleanLine = line.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '').trim();
+      let cleanLine = line.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '').trim();
       if (cleanLine) {
+        cleanLine = rewriteScraperLog(cleanLine, targetStrategy);
         sendEvent('log', { message: cleanLine });
       }
     }
@@ -983,8 +1026,8 @@ router.post('/predictions/scrape', async (req, res) => {
             match_id, time, date, tournament, home_team, away_team, score,
             over_odds, under_odds, card_line, probability, best_tip, win_rate, status,
             is_live, is_finished, first_half_corners_home, first_half_corners_away, odds_corners,
-            home_logo, away_logo, historical_links, match_url, scraped_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            home_logo, away_logo, historical_links, match_url, statistics_json, scraped_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         `;
 
         await dbRun(sql, [
@@ -1010,7 +1053,8 @@ router.post('/predictions/scrape', async (req, res) => {
           match.home_logo || null,
           match.away_logo || null,
           match.historical_links ? JSON.stringify(match.historical_links) : null,
-          match.match_url || null
+          match.match_url || null,
+          match.statistics ? JSON.stringify(match.statistics) : null
         ]);
 
         importedCount++;
@@ -1037,6 +1081,62 @@ router.post('/predictions/scrape', async (req, res) => {
         // Collect all historical links from newly imported matches that are not already cached
         const uncachedLinksSet = new Set();
         for (const match of matches) {
+          if (!match.home_team || !match.away_team) continue;
+
+          // Smart-Scraping: filter out non-promising matches based on target strategy
+          let isMatchPromising = true;
+          if (targetStrategy) {
+            try {
+              const h2hExisting = await dbQuery(`
+                SELECT * FROM scraped_predictions 
+                WHERE is_finished = 1 
+                  AND ((home_team = ? AND away_team = ?) OR (home_team = ? AND away_team = ?))
+              `, [match.home_team, match.away_team, match.away_team, match.home_team]);
+
+              if (h2hExisting.length >= 2) {
+                const conds = JSON.parse(targetStrategy.conditions_json);
+                const threshold = parseFloat(conds.threshold);
+                const metric = targetStrategy.metric;
+                const operator = conds.operator || '>=';
+                
+                const values = [];
+                for (const h of h2hExisting) {
+                  if (h.statistics_json) {
+                    const stats = JSON.parse(h.statistics_json);
+                    if (metric === 'possession') {
+                      if (stats.possession && stats.possession.home !== undefined) {
+                        const val = (h.home_team === match.home_team) 
+                          ? parseFloat(stats.possession.home) 
+                          : parseFloat(stats.possession.away);
+                        values.push(val);
+                      }
+                    } else if (stats[metric]) {
+                      values.push(parseFloat(stats[metric].home) + parseFloat(stats[metric].away));
+                    }
+                  }
+                }
+
+                if (values.length >= 2) {
+                  const avg = values.reduce((a, b) => a + b, 0) / values.length;
+                  const margin = metric === 'possession' ? 5.0 : 2.5; // Tolerance buffer
+                  
+                  if (operator === '>=' && avg < (threshold - margin)) {
+                    isMatchPromising = false;
+                  } else if (operator === '<=' && avg > (threshold + margin)) {
+                    isMatchPromising = false;
+                  }
+                }
+              }
+            } catch (e) {
+              console.error("Smart-Scraping filter evaluation failed:", e);
+            }
+          }
+
+          if (!isMatchPromising) {
+            sendEvent('log', { message: `[Smart-Scraping] Match ${match.home_team} vs ${match.away_team} écarté (stats H2H hors-cible). Gain de temps Tor appréciable.` });
+            continue;
+          }
+
           if (match.historical_links) {
             let linksList = [];
             try {
@@ -1093,8 +1193,8 @@ router.post('/predictions/scrape', async (req, res) => {
                     match_id, time, date, tournament, home_team, away_team, score,
                     over_odds, under_odds, card_line, probability, best_tip, win_rate, status,
                     is_live, is_finished, first_half_corners_home, first_half_corners_away, odds_corners,
-                    home_logo, away_logo, is_historical, scraped_at
-                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    home_logo, away_logo, is_historical, match_url, statistics_json, scraped_at
+                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 `;
 
                 const hashSeed = homeClean + awayClean;
@@ -1126,7 +1226,9 @@ router.post('/predictions/scrape', async (req, res) => {
                   null,
                   histMatch.home_logo || null,
                   histMatch.away_logo || null,
-                  1
+                  1,
+                  histMatch.match_url || link,
+                  histMatch.statistics ? JSON.stringify(histMatch.statistics) : null
                 ]);
 
                 const scoreText = histMatch.score ? ` (Score: ${histMatch.score})` : '';
@@ -1329,7 +1431,9 @@ router.post('/predictions/:matchId/crawl-history', async (req, res) => {
                 best_tip = ?,
                 probability = ?,
                 date = ?,
-                time = ?
+                time = ?,
+                match_url = ?,
+                statistics_json = ?
               WHERE match_id = ?
             `, [
               primaryDetails.first_half_corners_home,
@@ -1343,6 +1447,8 @@ router.post('/predictions/:matchId/crawl-history', async (req, res) => {
               `${stableProb}%`,
               pDate,
               pTime,
+              primaryDetails.match_url || targetLink,
+              primaryDetails.statistics ? JSON.stringify(primaryDetails.statistics) : null,
               matchId
             ]);
 
@@ -1399,8 +1505,8 @@ router.post('/predictions/:matchId/crawl-history', async (req, res) => {
                     match_id, time, date, tournament, home_team, away_team, score,
                     over_odds, under_odds, card_line, probability, best_tip, win_rate, status,
                     is_live, is_finished, first_half_corners_home, first_half_corners_away, odds_corners,
-                    home_logo, away_logo, is_historical, scraped_at
-                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    home_logo, away_logo, is_historical, match_url, statistics_json, scraped_at
+                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 `;
 
                 const hashSeed = homeClean + awayClean;
@@ -1433,7 +1539,9 @@ router.post('/predictions/:matchId/crawl-history', async (req, res) => {
                   null,
                   histMatch.home_logo || null,
                   histMatch.away_logo || null,
-                  1 // is_historical = 1
+                  1, // is_historical = 1
+                  histMatch.match_url || link,
+                  histMatch.statistics ? JSON.stringify(histMatch.statistics) : null
                 ]);
 
                 importedCount++;
