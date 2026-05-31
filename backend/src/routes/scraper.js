@@ -632,7 +632,7 @@ router.post('/predictions/scrape', (req, res) => {
               linksList = match.historical_links;
             }
             
-            if (Array.isArray(linksList)) {
+            if (Array.isArray(linksList) && linksList.length > 1) {
               for (const link of linksList) {
                 const cached = await dbQuery('SELECT match_id FROM scraped_predictions WHERE match_id = ?', [link]);
                 if (cached.length === 0) {
