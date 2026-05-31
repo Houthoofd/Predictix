@@ -9,7 +9,6 @@ import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import DashboardTab from './components/DashboardTab';
 import ScraperTab from './components/ScraperTab';
-import PredictionsTab from './components/PredictionsTab';
 import TrackerTab from './components/TrackerTab';
 import StrategiesTab from './components/StrategiesTab';
 import AddBetModal from './components/AddBetModal';
@@ -721,15 +720,13 @@ export default function App() {
             <div className="header-title-section">
               <h2 className="page-title">
                 {activeTab === 'dashboard' && 'Tableau de Bord'}
-                {activeTab === 'predictions' && 'Pronostics Corners'}
-                {activeTab === 'scraper' && 'Configuration Scraper'}
+                {activeTab === 'scraper' && 'Matchs & Pronostics Corners en Direct'}
                 {activeTab === 'tracker' && 'Tracker de Paris'}
                 {activeTab === 'strategies' && 'Stratégies de Cartons'}
               </h2>
               <p className="header-subtitle">
                 {activeTab === 'dashboard' && 'Statistiques de bankroll en temps réel et performances.'}
-                {activeTab === 'predictions' && 'Visualisez, analysez et placez vos paris corners basés sur le modèle de Poisson.'}
-                {activeTab === 'scraper' && 'Gérez et exécutez le scraper de match-en-direct.fr en temps réel.'}
+                {activeTab === 'scraper' && 'Scrappez MatchEnDirect.fr en temps réel et analysez les prédictions de corners Poisson.'}
                 {activeTab === 'tracker' && 'Journalisez vos paris sportifs pour optimiser votre capital.'}
                 {activeTab === 'strategies' && 'Analyse des cibles de paris à forte espérance mathématique.'}
               </p>
@@ -777,11 +774,6 @@ export default function App() {
                   handleTriggerScraping={handleTriggerScraping}
                   handleStartDetailedScraping={handleStartDetailedScraping}
                   consoleEndRef={consoleEndRef}
-                />
-              )}
-
-              {activeTab === 'predictions' && (
-                <PredictionsTab 
                   predStatusFilter={predStatusFilter}
                   setPredStatusFilter={setPredStatusFilter}
                   predValueBetsOnly={predValueBetsOnly}
