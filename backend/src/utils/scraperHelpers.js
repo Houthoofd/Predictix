@@ -241,9 +241,9 @@ export function runDiscoveryProcess(scraperPath, scriptName, outputDirs, onSpawn
       onSpawn(child);
     }
 
-    // Discovery timeout guard: 50 seconds max execution
+    // Discovery timeout guard: 80 seconds max execution (allows 3 Tor retries)
     const timeoutGuard = setTimeout(() => {
-      console.warn(`[Predictix Discovery] Process timed out (50s). Killing process tree.`);
+      console.warn(`[Predictix Discovery] Process timed out (80s). Killing process tree.`);
       const pid = child.pid;
       if (process.platform === 'win32') {
         exec(`taskkill /pid ${pid} /T /F`, (err) => {
@@ -252,8 +252,8 @@ export function runDiscoveryProcess(scraperPath, scriptName, outputDirs, onSpawn
       } else {
         child.kill();
       }
-      reject(new Error("La découverte a expiré (timeout de 50 secondes)."));
-    }, 50000);
+      reject(new Error("La découverte a expiré (timeout de 80 secondes)."));
+    }, 80000);
 
     let logOutput = '';
     child.stdout.on('data', (data) => logOutput += data.toString());
