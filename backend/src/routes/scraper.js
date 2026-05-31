@@ -350,7 +350,13 @@ router.post('/predictions/scrape', (req, res) => {
 
   // Send an SSE keep-alive comment (":\n\n") every 5 seconds to keep the TCP socket warm and prevent any idle timeouts
   const keepAliveInterval = setInterval(() => {
-    res.write(':\n\n');
+    try {
+      if (!res.writableEnded && !res.destroyed) {
+        res.write(':\n\n');
+      }
+    } catch (err) {
+      console.warn('[Predictix Keep-Alive Warning] Write failed:', err.message);
+    }
   }, 5000);
 
   req.on('close', () => {
@@ -358,7 +364,13 @@ router.post('/predictions/scrape', (req, res) => {
   });
 
   const sendEvent = (type, data) => {
-    res.write(`data: ${JSON.stringify({ type, ...data })}\n\n`);
+    try {
+      if (!res.writableEnded && !res.destroyed) {
+        res.write(`data: ${JSON.stringify({ type, ...data })}\n\n`);
+      }
+    } catch (err) {
+      console.warn('[Predictix SSE Warning] Write failed:', err.message);
+    }
   };
 
   const scraperPath = process.env.SCRAPER_PATH || 'E:\\Developpement\\scrapper-v3';
