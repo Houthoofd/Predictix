@@ -448,6 +448,7 @@ function getNewestScrapedFile(outputDirs) {
 // Helper: Scrape a single match page dynamically over Tor
 async function scrapeSingleMatch(scraperPath, link, skipOdds = false) {
   return new Promise((resolve) => {
+    let resolved = false;
     const tmpOutFile = path.join(scraperPath, 'data', `tmp_${Date.now()}_${Math.random().toString(36).substring(7)}.json`);
     const exePath = path.join(scraperPath, 'cmd', 'scrapper-lite', 'examples', 'scrapper-matchendirect.exe');
     
@@ -459,12 +460,35 @@ async function scrapeSingleMatch(scraperPath, link, skipOdds = false) {
     // Spawn Go scraper with -url and -tor options
     const child = spawn(exePath, args);
     
+    // Security timeout guard: 45 seconds max execution
+    const timeout = setTimeout(() => {
+      if (resolved) return;
+      resolved = true;
+      console.warn(`[Predictix Scraper] Single match scraper timed out (45s) for: ${link}. Terminating process.`);
+      try {
+        child.kill();
+      } catch (err) {
+        console.error('Failed to kill timed-out scraper child process:', err.message);
+      }
+      if (fs.existsSync(tmpOutFile)) {
+        try { fs.unlinkSync(tmpOutFile); } catch (e) {}
+      }
+      resolve(null);
+    }, 45000);
+    
     child.on('error', (err) => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeout);
       console.error('[Predictix Scraper] Failed to spawn single match scraper:', err.message);
       resolve(null);
     });
     
     child.on('close', async (code) => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeout);
+      
       if (code === 0 && fs.existsSync(tmpOutFile)) {
         try {
           const rawData = fs.readFileSync(tmpOutFile, 'utf-8');
