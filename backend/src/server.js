@@ -32,7 +32,7 @@ app.get('/health', (req, res) => {
 });
 
 // Start Express server
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`========================================================================`);
   console.log(` PREDICTIX BACKEND SERVER RUNNING`);
   console.log(`========================================================================`);
@@ -41,3 +41,9 @@ app.listen(PORT, () => {
   console.log(` Scraper: ${process.env.SCRAPER_PATH || 'E:\\Developpement\\scrapper-v3'}`);
   console.log(`========================================================================`);
 });
+
+// Completely disable all server-level request, connection, and header timeouts for long scraper operations
+server.timeout = 0;
+server.headersTimeout = 0;
+server.requestTimeout = 0;
+server.keepAliveTimeout = 0;
