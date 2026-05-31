@@ -567,6 +567,51 @@ export default function App() {
     }
   };
 
+  // Automated 1-Click Pipeline: Run discovery, and instantly chain detailed crawling!
+  const handleOneClickScraping = async () => {
+    if (scraping) return;
+    setScraping(true);
+    setScrapeProgress(5);
+    setScrapePhase('discovering');
+    setScrapeTimeRemaining('Découverte en cours...');
+    setMatchesRemaining(0);
+    setCurrentPrimary(0);
+    setTotalPrimary(0);
+    setCurrentDeep(0);
+    setTotalDeep(0);
+    setScraperLogs([{ message: "[Predictix] [1-Clic] Lancement de la découverte des matchs du jour...", type: 'system' }]);
+    
+    try {
+      const response = await fetch('/api/predictions/scrape/discover', { 
+        method: 'POST'
+      });
+      const json = await response.json();
+      
+      if (json.success) {
+        setTotalPrimary(json.count);
+        setMatchesRemaining(json.count);
+        setScrapeProgress(25);
+        setScraperLogs(prev => [
+          ...prev, 
+          { message: `[Predictix] ✓ Découverte réussie : ${json.count} matchs programmés ou en direct aujourd'hui.`, type: 'success' },
+          { message: `[Predictix] [1-Clic] Enchaînement automatique : Lancement de l'analyse détaillée pour les ${Math.min(scrapeLimit, json.count)} premiers matchs...`, type: 'system' }
+        ]);
+        
+        // Directly chain detailed scraping with the configured limit!
+        await handleStartDetailedScraping(Math.min(scrapeLimit, json.count));
+      } else {
+        alert("Erreur lors de la découverte : " + (json.error?.message || "Erreur inconnue"));
+        setScraping(false);
+        setScrapePhase('idle');
+      }
+    } catch (error) {
+      setScraperLogs(prev => [...prev, { message: `[ERREUR CONTEXTE] ${error.message}`, type: 'error' }]);
+      alert("Erreur lors de la communication avec le serveur de scraping : " + error.message);
+      setScraping(false);
+      setScrapePhase('idle');
+    }
+  };
+
   // Phase 1: Trigger Homepage discovery first
   const handleTriggerScraping = async () => {
     if (scraping) return;
@@ -940,6 +985,7 @@ export default function App() {
                   handleStopScraping={handleStopScraping}
                   handleTriggerScraping={handleTriggerScraping}
                   handleStartDetailedScraping={handleStartDetailedScraping}
+                  handleOneClickScraping={handleOneClickScraping}
                   consoleEndRef={consoleEndRef}
                   selectedScraperStrategyId={selectedScraperStrategyId}
                   setSelectedScraperStrategyId={setSelectedScraperStrategyId}

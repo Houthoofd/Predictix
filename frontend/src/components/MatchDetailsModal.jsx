@@ -32,13 +32,13 @@ export default function MatchDetailsModal({
       if (m.statistics_json) {
         try {
           const stats = typeof m.statistics_json === 'string' ? JSON.parse(m.statistics_json) : m.statistics_json;
-          if (stats) {
-            if (stats.fouls) metrics.add('fouls');
-            if (stats.yellow_cards) metrics.add('yellow_cards');
-            if (stats.possession) metrics.add('possession');
-            if (stats.shots_on_target) metrics.add('shots_on_target');
-            if (stats.shots) metrics.add('shots');
-            if (stats.offsides) metrics.add('offsides');
+          if (stats && typeof stats === 'object') {
+            Object.keys(stats).forEach(key => {
+              // Ensure that this key matches the structure { home: number, away: number }
+              if (stats[key] && (stats[key].home !== undefined || stats[key].away !== undefined)) {
+                metrics.add(key);
+              }
+            });
           }
         } catch (e) {}
       }
@@ -148,14 +148,26 @@ export default function MatchDetailsModal({
     const valHome = stats[activeMetric].home;
     const valAway = stats[activeMetric].away;
     const formatted = activeMetric === 'possession' ? `${valHome}% - ${valAway}%` : `${valHome} - ${valAway}`;
-    const label = {
-      fouls: 'Fautes',
-      yellow_cards: 'Cartons',
-      possession: 'Poss.',
-      shots_on_target: 'Tirs Cad',
-      shots: 'Tirs',
-      offsides: 'Hors-jeu'
-    }[activeMetric];
+    
+    const getMetricShortLabel = (key) => {
+      const labels = {
+        corners: 'Corners 1MT',
+        fouls: 'Fautes',
+        yellow_cards: 'Cartons',
+        possession: 'Poss.',
+        shots_on_target: 'Tirs Cad',
+        shots: 'Tirs',
+        offsides: 'Hors-jeu',
+        red_cards: 'Cartons R.'
+      };
+      if (labels[key]) return labels[key];
+      return key
+        .split('_')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+    };
+    
+    const label = getMetricShortLabel(activeMetric);
     
     return (
       <span style={{ fontWeight: 700, color: 'var(--color-accent-solid)', background: 'rgba(9, 132, 227, 0.08)', padding: '3px 8px', borderRadius: '4px', fontSize: '11px', marginLeft: '12px', flexShrink: 0 }}>
@@ -171,15 +183,26 @@ export default function MatchDetailsModal({
   const awayAvg = getAverage(selectedMatchDetails.recent_away_matches, activeMetric, false, true);
   
   const metricUnit = activeMetric === 'possession' ? '%' : '';
-  const metricTitle = {
-    corners: 'Corners 1MT',
-    fouls: 'Fautes',
-    yellow_cards: 'Cartons',
-    possession: 'Possession',
-    shots_on_target: 'Tirs Cadrés',
-    shots: 'Tirs Globaux',
-    offsides: 'Hors-jeu'
-  }[activeMetric];
+  
+  const getMetricTitle = (key) => {
+    const titles = {
+      corners: 'Corners 1MT',
+      fouls: 'Fautes',
+      yellow_cards: 'Cartons',
+      possession: 'Possession',
+      shots_on_target: 'Tirs Cadrés',
+      shots: 'Tirs Globaux',
+      offsides: 'Hors-jeu',
+      red_cards: 'Cartons Rouges'
+    };
+    if (titles[key]) return titles[key];
+    return key
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+  
+  const metricTitle = getMetricTitle(activeMetric);
 
   return (
     <div className="modal-overlay" onClick={() => setSelectedMatchDetails(null)}>
@@ -247,8 +270,10 @@ export default function MatchDetailsModal({
                 possession: 'Possession',
                 shots_on_target: 'Tirs Cad.',
                 shots: 'Tirs Glob.',
-                offsides: 'Hors-jeu'
+                offsides: 'Hors-jeu',
+                red_cards: 'Cartons R.'
               };
+              const label = labels[m] || m.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
               const isActive = activeMetric === m;
               return (
                 <button
@@ -270,7 +295,7 @@ export default function MatchDetailsModal({
                     letterSpacing: '0.02em'
                   }}
                 >
-                  {labels[m] || m}
+                  {label}
                 </button>
               );
             })}

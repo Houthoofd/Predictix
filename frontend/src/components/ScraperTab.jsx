@@ -22,6 +22,7 @@ export default function ScraperTab({
   handleStopScraping,
   handleTriggerScraping,
   handleStartDetailedScraping,
+  handleOneClickScraping,
   consoleEndRef,
   selectedScraperStrategyId,
   setSelectedScraperStrategyId
@@ -117,14 +118,33 @@ export default function ScraperTab({
             
             {!scraping ? (
               <>
-                <button className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '36px' }} onClick={() => handleStartDetailedScraping(scrapeLimit)}>
-                  <RefreshCcw size={15} />
-                  <span>Crawl Profond H2H (Tor)</span>
+                <button className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '36px' }} onClick={() => handleStartDetailedScraping(scrapeLimit)} title="Lancer le crawl profond des H2H directement depuis les caches existants">
+                  <RefreshCcw size={14} />
+                  <span>Deep Crawl Seul</span>
                 </button>
                 
-                <button className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '36px' }} onClick={handleTriggerScraping}>
-                  <RefreshCcw size={15} />
-                  <span>Démarrer Scraper Rapide</span>
+                <button className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '36px' }} onClick={handleTriggerScraping} title="Découvrir les matchs puis configurer la limite de crawl">
+                  <RefreshCcw size={14} />
+                  <span>Découverte Seule</span>
+                </button>
+
+                <button 
+                  className="btn btn-primary" 
+                  style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '6px', 
+                    height: '36px',
+                    background: 'linear-gradient(135deg, #7f00ff 0%, #0082ff 100%)',
+                    border: 'none',
+                    boxShadow: '0 4px 15px rgba(127, 0, 255, 0.25)',
+                    fontWeight: 700
+                  }} 
+                  onClick={handleOneClickScraping}
+                  title="Automatique: Découvrir les matchs puis lancer l'analyse détaillée en 1 clic!"
+                >
+                  <Sparkles size={14} />
+                  <span>Analyse en 1-Clic 🪄</span>
                 </button>
               </>
             ) : (
