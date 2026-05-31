@@ -1,6 +1,6 @@
 import express from 'express';
 import { dbQuery, dbGet, dbRun } from '../db/database.js';
-import { scrapeSingleMatch, isTorActive } from './scraper.js';
+import { scrapeSingleMatch, isTorActive } from '../utils/scraperHelpers.js';
 
 const router = express.Router();
 

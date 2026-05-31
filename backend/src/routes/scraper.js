@@ -3,8 +3,8 @@ import { spawn, exec } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { dbQuery, dbGet } from '../db/database.js';
-import { isTorActive, getNewestScrapedFile, rewriteScraperLog } from '../utils/scraperHelpers.js';
-import { enrichMatchPredictions, computeLeagueAverages } from '../utils/predictionEngine.js';
+import { isTorActive, getNewestScrapedFile, rewriteScraperLog, scrapeSingleMatch, runDiscoveryProcess } from '../utils/scraperHelpers.js';
+import { enrichMatchPredictions, computeLeagueAverages, evaluateSmartScrapingFilter } from '../utils/predictionEngine.js';
 import { importScrapedMatches, importHistoricalMatch, importSkippedMatch, enrichPrimaryMatch } from '../db/importer.js';
 
 const router = express.Router();
@@ -13,90 +13,6 @@ let activeScraperProcess = null;
 let stopScraperRequested = false;
 const activeCrawlHistoryMatches = new Set();
 
-/**
- * Spawn Go scraper to retrieve details for a single specific match page.
- * Acts as a generic child-process spawner guard.
- */
-export async function scrapeSingleMatch(scraperPath, link, skipOdds = false, onSpawn = null) {
-  const torActive = await isTorActive();
-  if (!torActive) {
-    console.warn(`[Predictix Scraper] Tor is inactive. Skipping scrape for: ${link}`);
-    return null;
-  }
-
-  return new Promise((resolve) => {
-    let resolved = false;
-    const tmpOutFile = path.join(scraperPath, 'data', `tmp_${Date.now()}_${Math.random().toString(36).substring(7)}.json`);
-    const exePath = path.join(scraperPath, 'cmd', 'scrapper-lite', 'examples', 'scrapper-matchendirect.exe');
-    
-    const args = ['-tor', '-url', link, '-output', tmpOutFile];
-    if (skipOdds) {
-      args.push('-skip-odds');
-    }
-
-    // Spawn Go scraper with -url and -tor options
-    const child = spawn(exePath, args);
-    
-    if (onSpawn && typeof onSpawn === 'function') {
-      onSpawn(child);
-    }
-    
-    // Security timeout guard: 20 seconds max execution
-    const timeout = setTimeout(() => {
-      if (resolved) return;
-      resolved = true;
-      console.warn(`[Predictix Scraper] Single match scraper timed out (20s) for: ${link}. Terminating process.`);
-      try {
-        if (process.platform === 'win32') {
-          exec(`taskkill /pid ${child.pid} /T /F`, (err) => {
-            if (err) console.error('Failed to taskkill timed-out child process tree:', err.message);
-          });
-        } else {
-          child.kill();
-        }
-      } catch (err) {
-        console.error('Failed to kill timed-out scraper child process:', err.message);
-        try { child.kill(); } catch (e) {}
-      }
-      if (fs.existsSync(tmpOutFile)) {
-        try { fs.unlinkSync(tmpOutFile); } catch (e) {}
-      }
-      resolve(null);
-    }, 20000);
-    
-    child.on('error', (err) => {
-      if (resolved) return;
-      resolved = true;
-      clearTimeout(timeout);
-      console.error('[Predictix Scraper] Failed to spawn single match scraper:', err.message);
-      resolve(null);
-    });
-    
-    child.on('close', async (code) => {
-      if (resolved) return;
-      resolved = true;
-      clearTimeout(timeout);
-      
-      if (code === 0 && fs.existsSync(tmpOutFile)) {
-        try {
-          const rawData = fs.readFileSync(tmpOutFile, 'utf-8');
-          const parsed = JSON.parse(rawData);
-          const matchData = (parsed.all_matches || parsed.matches || [])[0];
-          
-          if (fs.existsSync(tmpOutFile)) fs.unlinkSync(tmpOutFile);
-          resolve(matchData || null);
-        } catch (e) {
-          console.error('Failed to parse single match tmp JSON output:', e);
-          if (fs.existsSync(tmpOutFile)) fs.unlinkSync(tmpOutFile);
-          resolve(null);
-        }
-      } else {
-        if (fs.existsSync(tmpOutFile)) fs.unlinkSync(tmpOutFile);
-        resolve(null);
-      }
-    });
-  });
-}
 
 /**
  * GET /api/predictions
@@ -246,94 +162,34 @@ router.post('/predictions/scrape/discover', async (req, res) => {
     scriptName = 'scrape-matchendirect.sh';
   }
 
-  console.log(`[Predictix Discovery] Starting discovery in ${scraperPath}...`);
-  
-  const child = spawn('cmd.exe', ['/c', scriptName, 'verbose', '0', 'discover'], {
-    cwd: scraperPath,
-    env: { ...process.env, FORCE_COLOR: '1' }
-  });
-  activeScraperProcess = child;
+  try {
+    const matches = await runDiscoveryProcess(scraperPath, scriptName, outputDirs, (child) => {
+      activeScraperProcess = child;
+    });
 
-  // Discovery timeout guard: 50 seconds max execution
-  const timeoutGuard = setTimeout(() => {
-    if (activeScraperProcess && activeScraperProcess.pid === child.pid) {
-      console.warn(`[Predictix Discovery] Process timed out (50s). Killing process tree.`);
-      const pid = child.pid;
-      if (process.platform === 'win32') {
-        exec(`taskkill /pid ${pid} /T /F`, (err) => {
-          if (err) console.error('Failed to taskkill timed-out discovery:', err.message);
-        });
-      } else {
-        child.kill();
-      }
-      activeScraperProcess = null;
-      if (!res.headersSent) {
-        res.status(500).json({ success: false, error: { message: "La découverte a expiré (timeout de 50 secondes)." } });
-      }
-    }
-  }, 50000);
-
-  let logOutput = '';
-  child.stdout.on('data', (data) => logOutput += data.toString());
-  child.stderr.on('data', (data) => logOutput += data.toString());
-
-  child.on('error', (err) => {
-    clearTimeout(timeoutGuard);
     activeScraperProcess = null;
-    console.error('[Predictix Discovery] Failed to spawn discovery process:', err);
-    if (!res.headersSent) {
-      return res.status(500).json({ success: false, error: { message: `Impossible de démarrer le processus : ${err.message}` } });
-    }
-  });
 
-  child.on('close', async (code) => {
-    clearTimeout(timeoutGuard);
+    return res.json({
+      success: true,
+      count: matches.length,
+      matches: matches.map(m => ({
+        match_id: m.match_id,
+        time: m.time,
+        tournament: m.tournament,
+        home_team: m.home_team,
+        away_team: m.away_team,
+        home_logo: m.home_logo,
+        away_logo: m.away_logo,
+        score: m.score,
+        href: m.historical_links?.[0] || '' // retrieve temporarily stored href
+      }))
+    });
+  } catch (err) {
     activeScraperProcess = null;
-    console.log(`[Predictix Discovery] Process closed with code: ${code}`);
-
-    if (code !== 0) {
-      if (!res.headersSent) {
-        return res.status(500).json({ success: false, error: { message: `Le scraper a échoué (Code : ${code})`, logs: logOutput } });
-      }
-      return;
-    }
-
-    try {
-      const newestFile = getNewestScrapedFile(outputDirs);
-      if (!newestFile) {
-        return res.status(404).json({ success: false, error: { message: "Aucun fichier de résultats de découverte trouvé." } });
-      }
-
-      console.log(`[Predictix Discovery] Parsing newest file: ${newestFile}`);
-      const rawData = fs.readFileSync(newestFile, 'utf-8');
-      const parsed = JSON.parse(rawData);
-      const matches = parsed.all_matches || parsed.matches || [];
-
-      // Clean up the temporary discovery file
-      try {
-        if (fs.existsSync(newestFile)) fs.unlinkSync(newestFile);
-      } catch (e) {}
-
-      return res.json({
-        success: true,
-        count: matches.length,
-        matches: matches.map(m => ({
-          match_id: m.match_id,
-          time: m.time,
-          tournament: m.tournament,
-          home_team: m.home_team,
-          away_team: m.away_team,
-          home_logo: m.home_logo,
-          away_logo: m.away_logo,
-          score: m.score,
-          href: m.historical_links?.[0] || '' // retrieve temporarily stored href
-        }))
-      });
-    } catch (err) {
-      return res.status(500).json({ success: false, error: { message: `Erreur lors de l'écriture du résultat de découverte : ${err.message}` } });
-    }
-  });
+    return res.status(500).json({ success: false, error: { message: err.message } });
+  }
 });
+
 
 /**
  * POST /predictions/scrape
@@ -570,51 +426,15 @@ router.post('/predictions/scrape', async (req, res) => {
           // Smart-Scraping filter evaluation
           let isMatchPromising = true;
           if (targetStrategy) {
-            try {
-              const h2hExisting = await dbQuery(`
-                SELECT * FROM scraped_predictions 
-                WHERE is_finished = 1 
-                  AND ((home_team = ? AND away_team = ?) OR (home_team = ? AND away_team = ?))
-              `, [match.home_team, match.away_team, match.away_team, match.home_team]);
-
-              if (h2hExisting.length >= 2) {
-                const conds = JSON.parse(targetStrategy.conditions_json);
-                const threshold = parseFloat(conds.threshold);
-                const metric = targetStrategy.metric;
-                const operator = conds.operator || '>=';
-                
-                const values = [];
-                for (const h of h2hExisting) {
-                  if (h.statistics_json) {
-                    const stats = JSON.parse(h.statistics_json);
-                    if (metric === 'possession') {
-                      if (stats.possession && stats.possession.home !== undefined) {
-                        const val = (h.home_team === match.home_team) 
-                          ? parseFloat(stats.possession.home) 
-                          : parseFloat(stats.possession.away);
-                        values.push(val);
-                      }
-                    } else if (stats[metric]) {
-                      values.push(parseFloat(stats[metric].home) + parseFloat(stats[metric].away));
-                    }
-                  }
-                }
-
-                if (values.length >= 2) {
-                  const avg = values.reduce((a, b) => a + b, 0) / values.length;
-                  const margin = metric === 'possession' ? 5.0 : 2.5; // Tolerance buffer
-                  
-                  if (operator === '>=' && avg < (threshold - margin)) {
-                    isMatchPromising = false;
-                  } else if (operator === '<=' && avg > (threshold + margin)) {
-                    isMatchPromising = false;
-                  }
-                }
-              }
-            } catch (e) {
-              console.error("Smart-Scraping filter evaluation failed:", e);
-            }
+            const h2hExisting = await dbQuery(`
+              SELECT * FROM scraped_predictions 
+              WHERE is_finished = 1 
+                AND ((home_team = ? AND away_team = ?) OR (home_team = ? AND away_team = ?))
+            `, [match.home_team, match.away_team, match.away_team, match.home_team]);
+            
+            isMatchPromising = evaluateSmartScrapingFilter(match, h2hExisting, targetStrategy);
           }
+
 
           if (!isMatchPromising) {
             sendEvent('log', { message: `[Smart-Scraping] Match ${match.home_team} vs ${match.away_team} écarté (stats H2H hors-cible). Gain de temps Tor appréciable.` });

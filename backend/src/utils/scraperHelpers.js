@@ -1,6 +1,7 @@
 import net from 'net';
 import fs from 'fs';
 import path from 'path';
+import { spawn, exec } from 'child_process';
 
 /**
  * Check if Tor SOCKS5 proxy port is active
@@ -138,3 +139,160 @@ export function rewriteScraperLog(line, strategy) {
 
   return line;
 }
+
+/**
+ * Spawn Go scraper to retrieve details for a single specific match page.
+ * Acts as a generic child-process spawner guard.
+ */
+export async function scrapeSingleMatch(scraperPath, link, skipOdds = false, onSpawn = null) {
+  const torActive = await isTorActive();
+  if (!torActive) {
+    console.warn(`[Predictix Scraper] Tor is inactive. Skipping scrape for: ${link}`);
+    return null;
+  }
+
+  return new Promise((resolve) => {
+    let resolved = false;
+    const tmpOutFile = path.join(scraperPath, 'data', `tmp_${Date.now()}_${Math.random().toString(36).substring(7)}.json`);
+    const exePath = path.join(scraperPath, 'cmd', 'scrapper-lite', 'examples', 'scrapper-matchendirect.exe');
+    
+    const args = ['-tor', '-url', link, '-output', tmpOutFile];
+    if (skipOdds) {
+      args.push('-skip-odds');
+    }
+
+    // Spawn Go scraper with -url and -tor options
+    const child = spawn(exePath, args);
+    
+    if (onSpawn && typeof onSpawn === 'function') {
+      onSpawn(child);
+    }
+    
+    // Security timeout guard: 20 seconds max execution
+    const timeout = setTimeout(() => {
+      if (resolved) return;
+      resolved = true;
+      console.warn(`[Predictix Scraper] Single match scraper timed out (20s) for: ${link}. Terminating process.`);
+      try {
+        if (process.platform === 'win32') {
+          exec(`taskkill /pid ${child.pid} /T /F`, (err) => {
+            if (err) console.error('Failed to taskkill timed-out child process tree:', err.message);
+          });
+        } else {
+          child.kill();
+        }
+      } catch (err) {
+        console.error('Failed to kill timed-out scraper child process:', err.message);
+        try { child.kill(); } catch (e) {}
+      }
+      if (fs.existsSync(tmpOutFile)) {
+        try { fs.unlinkSync(tmpOutFile); } catch (e) {}
+      }
+      resolve(null);
+    }, 20000);
+    
+    child.on('error', (err) => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeout);
+      console.error('[Predictix Scraper] Failed to spawn single match scraper:', err.message);
+      resolve(null);
+    });
+    
+    child.on('close', async (code) => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeout);
+      
+      if (code === 0 && fs.existsSync(tmpOutFile)) {
+        try {
+          const rawData = fs.readFileSync(tmpOutFile, 'utf-8');
+          const parsed = JSON.parse(rawData);
+          const matchData = (parsed.all_matches || parsed.matches || [])[0];
+          
+          if (fs.existsSync(tmpOutFile)) fs.unlinkSync(tmpOutFile);
+          resolve(matchData || null);
+        } catch (e) {
+          console.error('Failed to parse single match tmp JSON output:', e);
+          if (fs.existsSync(tmpOutFile)) fs.unlinkSync(tmpOutFile);
+          resolve(null);
+        }
+      } else {
+        if (fs.existsSync(tmpOutFile)) fs.unlinkSync(tmpOutFile);
+        resolve(null);
+      }
+    });
+  });
+}
+
+/**
+ * Execute discovery of matches via Go scraper batch script
+ */
+export function runDiscoveryProcess(scraperPath, scriptName, outputDirs, onSpawn = null) {
+  return new Promise((resolve, reject) => {
+    console.log(`[Predictix Discovery] Starting discovery in ${scraperPath}...`);
+    
+    const child = spawn('cmd.exe', ['/c', scriptName, 'verbose', '0', 'discover'], {
+      cwd: scraperPath,
+      env: { ...process.env, FORCE_COLOR: '1' }
+    });
+
+    if (onSpawn && typeof onSpawn === 'function') {
+      onSpawn(child);
+    }
+
+    // Discovery timeout guard: 50 seconds max execution
+    const timeoutGuard = setTimeout(() => {
+      console.warn(`[Predictix Discovery] Process timed out (50s). Killing process tree.`);
+      const pid = child.pid;
+      if (process.platform === 'win32') {
+        exec(`taskkill /pid ${pid} /T /F`, (err) => {
+          if (err) console.error('Failed to taskkill timed-out discovery:', err.message);
+        });
+      } else {
+        child.kill();
+      }
+      reject(new Error("La découverte a expiré (timeout de 50 secondes)."));
+    }, 50000);
+
+    let logOutput = '';
+    child.stdout.on('data', (data) => logOutput += data.toString());
+    child.stderr.on('data', (data) => logOutput += data.toString());
+
+    child.on('error', (err) => {
+      clearTimeout(timeoutGuard);
+      reject(err);
+    });
+
+    child.on('close', async (code) => {
+      clearTimeout(timeoutGuard);
+      console.log(`[Predictix Discovery] Process closed with code: ${code}`);
+
+      if (code !== 0) {
+        return reject(new Error(`Le scraper a échoué (Code : ${code}). Logs: ${logOutput}`));
+      }
+
+      try {
+        const newestFile = getNewestScrapedFile(outputDirs);
+        if (!newestFile) {
+          return reject(new Error("Aucun fichier de résultats de découverte trouvé."));
+        }
+
+        console.log(`[Predictix Discovery] Parsing newest file: ${newestFile}`);
+        const rawData = fs.readFileSync(newestFile, 'utf-8');
+        const parsed = JSON.parse(rawData);
+        const matches = parsed.all_matches || parsed.matches || [];
+
+        // Clean up the temporary discovery file
+        try {
+          if (fs.existsSync(newestFile)) fs.unlinkSync(newestFile);
+        } catch (e) {}
+
+        resolve(matches);
+      } catch (err) {
+        reject(err);
+      }
+    });
+  });
+}
+
