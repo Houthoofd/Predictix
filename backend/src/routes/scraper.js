@@ -132,8 +132,15 @@ router.get('/predictions', async (req, res) => {
       }
       const awayAvg = awayCount > 0 ? parseFloat((awaySum / awayCount).toFixed(1)) : null;
       
-      // Expected corners A + B in 1st half (default to standard 4.2 corners if no averages present)
-      const lambda1MT = (homeAvg || 2.2) + (awayAvg || 2.0);
+      // Apply statistical shrinkage estimation (Mean Reversion) to stabilize lambda across all matches
+      const defaultHome = 2.2;
+      const defaultAway = 2.0;
+      const teamWeight = 0.6;
+      
+      const homeRegressed = homeAvg !== null ? parseFloat((teamWeight * homeAvg + (1 - teamWeight) * defaultHome).toFixed(2)) : defaultHome;
+      const awayRegressed = awayAvg !== null ? parseFloat((teamWeight * awayAvg + (1 - teamWeight) * defaultAway).toFixed(2)) : defaultAway;
+      
+      const lambda1MT = homeRegressed + awayRegressed;
       
       // Dynamic Poisson prediction
       let dynamicBestTip = row.best_tip;
