@@ -1,7 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Plus, 
-  RefreshCcw 
+  RefreshCcw,
+  AlertCircle,
+  AlertTriangle,
+  Info,
+  CheckCircle,
+  X
 } from 'lucide-react';
 
 // Import our new components!
@@ -283,6 +288,7 @@ export default function App() {
 
   const handleCrawlHistory = async (matchId) => {
     setCrawlLoading(true);
+    showToast("Analyse de l'historique H2H démarrée...", "info");
     try {
       const res = await fetch(`/api/predictions/${matchId}/crawl-history`, {
         method: 'POST'
@@ -307,11 +313,11 @@ export default function App() {
           setCrawlLoading(false);
         }
       } else {
-        alert("Erreur lors de la récupération de l'historique : " + (json.error?.message || "Erreur inconnue"));
+        showToast("Erreur lors de la récupération de l'historique : " + (json.error?.message || "Erreur inconnue"), "error");
         setCrawlLoading(false);
       }
     } catch (err) {
-      alert("Erreur réseau : " + err.message);
+      showToast("Erreur réseau : " + err.message, "error");
       setCrawlLoading(false);
     }
   };
@@ -351,10 +357,10 @@ export default function App() {
           });
         }, 1500);
       } else {
-        alert("Erreur: " + json.error.message);
+        showToast("Erreur: " + json.error.message, "error");
       }
     } catch (err) {
-      alert("Erreur lors de l'ajout du pari: " + err.message);
+      showToast("Erreur lors de l'ajout du pari: " + err.message, "error");
     }
   };
 
@@ -404,6 +410,7 @@ export default function App() {
   // Auto-refresh a single bet outcome by scraping Matchendirect
   const handleRefreshBet = async (id) => {
     setBetRefreshLoading(prev => ({ ...prev, [id]: true }));
+    showToast("Mise à jour du pari en cours...", "info");
     try {
       const res = await fetch(`/api/bets/${id}/refresh`, { method: 'POST' });
       const json = await res.json();
@@ -415,15 +422,16 @@ export default function App() {
             settledBets: [json.data.bet]
           });
           setShowScrapeResultModal(true);
+          showToast("Pari mis à jour et résolu !", "success");
         } else {
-          alert(json.message);
+          showToast(json.message, "info");
         }
       } else {
-        alert(json.message || json.error?.message || "Impossible de rafraîchir ce pari.");
+        showToast(json.message || json.error?.message || "Impossible de rafraîchir ce pari.", "error");
       }
     } catch (err) {
       console.error("Error refreshing bet:", err);
-      alert("Une erreur est survenue lors du rafraîchissement.");
+      showToast("Une erreur est survenue lors du rafraîchissement.", "error");
     } finally {
       setBetRefreshLoading(prev => ({ ...prev, [id]: false }));
     }
@@ -433,7 +441,7 @@ export default function App() {
   const handleRefreshAllBets = async () => {
     const pendingBets = bets.filter(b => b.status === 'PENDING' && b.match_id);
     if (pendingBets.length === 0) {
-      alert("Aucun pari actif (placé depuis une prédiction) en attente à rafraîchir.");
+      showToast("Aucun pari actif (placé depuis une prédiction) en attente à rafraîchir.", "warning");
       return;
     }
     
@@ -443,6 +451,7 @@ export default function App() {
       confirmText: "Lancer la mise à jour",
       onConfirm: async () => {
         setGlobalRefreshLoading(true);
+        showToast("Lancement de la mise à jour globale...", "info");
         try {
           const res = await fetch('/api/bets/refresh-all', { method: 'POST' });
           const json = await res.json();
@@ -454,15 +463,16 @@ export default function App() {
                 settledBets: json.settledBets
               });
               setShowScrapeResultModal(true);
+              showToast(`Mise à jour globale terminée : ${json.settledBets.length} paris résolus !`, "success");
             } else {
-              alert(json.message);
+              showToast(json.message, "info");
             }
           } else {
-            alert(json.message || json.error?.message || "Impossible de rafraîchir les paris.");
+            showToast(json.message || json.error?.message || "Impossible de rafraîchir les paris.", "error");
           }
         } catch (err) {
           console.error("Error refreshing all bets:", err);
-          alert("Une erreur est survenue lors du rafraîchissement global.");
+          showToast("Une erreur est survenue lors du rafraîchissement global.", "error");
         } finally {
           setGlobalRefreshLoading(false);
         }
@@ -643,7 +653,7 @@ export default function App() {
   const handleApplyGlobalStake = () => {
     const amount = parseFloat(batchGlobalStake);
     if (isNaN(amount) || amount <= 0) {
-      alert("Veuillez saisir un montant de mise valide.");
+      showToast("Veuillez saisir un montant de mise valide.", "warning");
       return;
     }
     setBatchBetsForm(prev => prev.map(b => ({ ...b, stake: amount })));
@@ -652,7 +662,7 @@ export default function App() {
   // Apply a single bookmaker name to all bets in the batch form
   const handleApplyGlobalBookmaker = () => {
     if (!batchGlobalBookmaker.trim()) {
-      alert("Veuillez saisir un nom de bookmaker.");
+      showToast("Veuillez saisir un nom de bookmaker.", "warning");
       return;
     }
     setBatchBetsForm(prev => prev.map(b => ({ ...b, bookmaker: batchGlobalBookmaker })));
@@ -686,9 +696,9 @@ export default function App() {
       setSelectedPredIds([]);
       setShowBatchBetModal(false);
       fetchAllData();
-      alert(`${count} paris ont été enregistrés avec succès !`);
+      showToast(`${count} paris ont été enregistrés avec succès !`, "success");
     } catch (err) {
-      alert("Erreur lors de l'enregistrement du lot: " + err.message);
+      showToast("Erreur lors de l'enregistrement du lot: " + err.message, "error");
     } finally {
       setBatchLoading(false);
     }
@@ -707,6 +717,7 @@ export default function App() {
     setCurrentDeep(0);
     setTotalDeep(0);
     setScraperLogs([{ message: "[Predictix] [1-Clic] Lancement de la découverte des matchs du jour...", type: 'system' }]);
+    showToast("Découverte en 1-Clic lancée...", "info");
     
     try {
       const response = await fetch('/api/predictions/scrape/discover', { 
@@ -723,17 +734,18 @@ export default function App() {
           { message: `[Predictix] ✓ Découverte réussie : ${json.count} matchs programmés ou en direct aujourd'hui.`, type: 'success' },
           { message: `[Predictix] [1-Clic] Enchaînement automatique : Lancement de l'analyse détaillée pour les ${Math.min(scrapeLimit, json.count)} premiers matchs...`, type: 'system' }
         ]);
+        showToast(`Découverte réussie : ${json.count} matchs trouvés !`, "success");
         
         // Directly chain detailed scraping with the configured limit!
         await handleStartDetailedScraping(Math.min(scrapeLimit, json.count));
       } else {
-        alert("Erreur lors de la découverte : " + (json.error?.message || "Erreur inconnue"));
+        showToast("Erreur lors de la découverte : " + (json.error?.message || "Erreur inconnue"), "error");
         setScraping(false);
         setScrapePhase('idle');
       }
     } catch (error) {
       setScraperLogs(prev => [...prev, { message: `[ERREUR CONTEXTE] ${error.message}`, type: 'error' }]);
-      alert("Erreur lors de la communication avec le serveur de scraping : " + error.message);
+      showToast("Erreur lors de la communication avec le serveur de scraping : " + error.message, "error");
       setScraping(false);
       setScrapePhase('idle');
     }
@@ -752,6 +764,7 @@ export default function App() {
     setCurrentDeep(0);
     setTotalDeep(0);
     setScraperLogs([{ message: "[Predictix] Lancement de la découverte des matchs du jour...", type: 'system' }]);
+    showToast("Découverte des matchs lancée...", "info");
     
     try {
       const response = await fetch('/api/predictions/scrape/discover', { 
@@ -770,14 +783,15 @@ export default function App() {
           { message: `[Predictix] ✓ Découverte réussie : ${json.count} matchs programmés ou en direct aujourd'hui.`, type: 'success' },
           { message: "[Predictix] En attente de votre configuration pour démarrer l'analyse détaillée...", type: 'warn' }
         ]);
+        showToast(`Découverte réussie : ${json.count} matchs trouvés !`, "success");
       } else {
-        alert("Erreur lors de la découverte : " + (json.error?.message || "Erreur inconnue"));
+        showToast("Erreur lors de la découverte : " + (json.error?.message || "Erreur inconnue"), "error");
         setScraping(false);
         setScrapePhase('idle');
       }
     } catch (error) {
       setScraperLogs(prev => [...prev, { message: `[ERREUR CONTEXTE] ${error.message}`, type: 'error' }]);
-      alert("Erreur lors de la communication avec le serveur de scraping : " + error.message);
+      showToast("Erreur lors de la communication avec le serveur de scraping : " + error.message, "error");
       setScraping(false);
       setScrapePhase('idle');
     }
@@ -796,6 +810,7 @@ export default function App() {
       ...prev, 
       { message: `[Predictix] Lancement de l'analyse détaillée pour ${selectedLimit} matchs...`, type: 'system' }
     ]);
+    showToast("Lancement de l'analyse détaillée...", "info");
     
     let totalPrimary = selectedLimit;
     let currentPrimary = 0;
@@ -917,7 +932,7 @@ export default function App() {
                 }
               } else if (eventData.type === 'error') {
                 setScraperLogs(prev => [...prev, { message: `[ERREUR CRITIQUE] ${eventData.message}`, type: 'error' }]);
-                alert(`Erreur de scraping: ${eventData.message}`);
+                showToast(`Erreur de scraping: ${eventData.message}`, "error");
               } else if (eventData.type === 'complete') {
                 setScraperLogs(prev => [...prev, { message: `[Predictix] Scraping terminé avec succès ! ${eventData.count} prédictions synchronisées.`, type: 'success' }]);
                 setScrapePhase('completed');
@@ -929,6 +944,7 @@ export default function App() {
                   settledBets: eventData.settledBets || []
                 });
                 setShowScrapeResultModal(true);
+                showToast("Analyse de masse terminée avec succès !", "success");
                 refreshAllDataSilent();
               }
             } catch (err) {
@@ -939,7 +955,7 @@ export default function App() {
       }
     } catch (error) {
       setScraperLogs(prev => [...prev, { message: `[ERREUR DE CONTEXTE] ${error.message}`, type: 'error' }]);
-      alert("Erreur lors de la communication avec le serveur de scraping : " + error.message);
+      showToast("Erreur lors de la communication avec le serveur de scraping : " + error.message, "error");
     } finally {
       setScraping(false);
     }
@@ -957,12 +973,13 @@ export default function App() {
         setScrapeProgress(0);
         setScrapeTimeRemaining("Arrêté");
         setScraperLogs(prev => [...prev, { message: "[Predictix] ✓ Le scraper a été arrêté avec succès.", type: 'warn' }]);
+        showToast("Le scraper a été arrêté avec succès.", "warning");
         refreshAllDataSilent();
       } else {
-        alert("Impossible d'arrêter le scraper: " + data.error);
+        showToast("Impossible d'arrêter le scraper: " + data.error, "error");
       }
     } catch (err) {
-      alert("Erreur lors de la communication de fin de tâche: " + err.message);
+      showToast("Erreur lors de la communication de fin de tâche: " + err.message, "error");
     }
   };
 
