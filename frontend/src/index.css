@@ -517,31 +517,39 @@ select.form-control {
   border: none;
   outline: none;
   text-decoration: none;
-  transition: background-color var(--transition-fast), color var(--transition-fast), justify-content var(--transition-normal);
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
   width: 100%;
   text-align: left;
 }
 
 .sidebar.collapsed .nav-item {
-  width: 32px !important;
-  height: 32px !important;
+  width: 38px !important;
+  height: 38px !important;
   padding: 0 !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  margin: 0 auto 8px auto !important;
-  border-radius: var(--radius-sm) !important;
+  margin: 0 auto 10px auto !important;
+  border-radius: 10px !important;
+  position: relative !important;
+  border-left: none !important;
+  transform: none;
 }
 
 .nav-item:hover {
   background: var(--bg-tertiary);
   color: var(--text-primary);
+  transform: translateX(4px);
+}
+
+.nav-item:active {
+  transform: scale(0.97);
 }
 
 .nav-item.active {
   background: var(--bg-tertiary);
   color: var(--text-primary);
-  border-left: 2.5px solid var(--color-accent-solid);
+  border-left: 3px solid var(--color-accent-solid);
   border-radius: 0px var(--radius-sm) var(--radius-sm) 0px !important;
 }
 
@@ -551,14 +559,25 @@ select.form-control {
 
 .sidebar.collapsed .nav-item.active {
   border-left: none !important;
-  background: var(--bg-tertiary) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
   color: var(--color-accent-solid) !important;
-  box-shadow: inset 0 0 0 1px var(--color-accent-solid) !important;
-  border-radius: 0px var(--radius-sm) var(--radius-sm) 0px !important;
+  box-shadow: 0 0 14px rgba(0, 0, 0, 0.2), 0 0 8px var(--color-accent-solid) !important;
+  border-radius: 10px !important;
+  transform: none !important;
 }
 
 .sidebar.collapsed .nav-item:hover {
-  border-radius: 0px var(--radius-sm) var(--radius-sm) 0px !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: var(--text-primary) !important;
+  border-radius: 10px !important;
+  transform: scale(1.08) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+.sidebar.collapsed .nav-item:active {
+  transform: scale(0.92) !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+  transition: all 0.08s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
 .sidebar-footer {
