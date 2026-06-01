@@ -177,11 +177,15 @@ export default function MatchDetailsModal({
   const availableMetrics = React.useMemo(() => {
     const metrics = new Set(['dashboard', 'corners']);
     if (!selectedMatchDetails) return Array.from(metrics);
+    
+    // Scan both the primary upcoming match itself and all historical matches
     const allMatches = [
+      selectedMatchDetails,
       ...(selectedMatchDetails.recent_h2h_matches || []),
       ...(selectedMatchDetails.recent_home_matches || []),
       ...(selectedMatchDetails.recent_away_matches || [])
     ];
+    
     for (const m of allMatches) {
       if (m.statistics_json) {
         try {
@@ -197,7 +201,40 @@ export default function MatchDetailsModal({
         } catch (e) {}
       }
     }
-    return Array.from(metrics);
+    
+    // Curated, professional sorting order for football analytics
+    const orderedKeys = [
+      'dashboard',
+      'corners',
+      'possession',
+      'xg_buts_attendus',
+      'shots_on_target',
+      'shots',
+      'fouls',
+      'yellow_cards',
+      'red_cards',
+      'passes',
+      'passes_reussis',
+      'tacles_reussis',
+      'dribbles_reussis',
+      'duels_reussis',
+      'duels_aeriens_reussis',
+      'ballons_touches_dans_la_surface_adverse',
+      'centres',
+      'centres_reussis',
+      'degagements',
+      'rentree_de_touche',
+      'occasions_manquees',
+      'poteau'
+    ];
+    
+    return Array.from(metrics).sort((a, b) => {
+      const idxA = orderedKeys.indexOf(a);
+      const idxB = orderedKeys.indexOf(b);
+      const valA = idxA !== -1 ? idxA : 999;
+      const valB = idxB !== -1 ? idxB : 999;
+      return valA - valB;
+    });
   }, [selectedMatchDetails]);
 
   // Ensure activeMetric aligns with available metrics if dynamically changed
@@ -473,14 +510,29 @@ export default function MatchDetailsModal({
           <div style={{ display: 'flex', gap: '4px', marginBottom: '16px', background: 'var(--bg-secondary)', padding: '4px', borderRadius: '8px', border: '1px solid var(--border-color)', overflowX: 'auto', scrollbarWidth: 'none' }}>
             {availableMetrics.map(m => {
               const labels = {
+                dashboard: 'Résumé 📊',
                 corners: 'Corners 1MT',
-                fouls: 'Fautes',
-                yellow_cards: 'Cartons',
+                fouls: 'Fautes Commises',
+                yellow_cards: 'Jaunes 🟨',
+                red_cards: 'Rouges 🟥',
                 possession: 'Possession',
                 shots_on_target: 'Tirs Cad.',
                 shots: 'Tirs Glob.',
                 offsides: 'Hors-jeu',
-                red_cards: 'Cartons R.'
+                xg_buts_attendus: 'xG ⚽',
+                passes: 'Passes',
+                passes_reussis: 'Passes %',
+                tacles_reussis: 'Tacles',
+                dribbles_reussis: 'Dribbles',
+                duels_reussis: 'Duels',
+                duels_aeriens_reussis: 'Duels Aériens',
+                ballons_touches_dans_la_surface_adverse: 'Surf. Adverse',
+                centres: 'Centres',
+                centres_reussis: 'Centres %',
+                degagements: 'Dégagements',
+                rentree_de_touche: 'Touches',
+                occasions_manquees: 'Occ. Manquées',
+                poteau: 'Poteau'
               };
               const label = labels[m] || m.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
               const isActive = activeMetric === m;
