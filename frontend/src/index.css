@@ -956,3 +956,15 @@ select.form-control {
 .kebab-item:hover {
   background: rgba(255, 255, 255, 0.04) !important;
 }
+
+/* Toast Notifications Entry Animation */
+@keyframes slideInRight {
+  0% {
+    transform: translateX(125%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}

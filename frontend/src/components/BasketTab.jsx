@@ -14,7 +14,8 @@ export default function BasketTab({
   setBasketBets, 
   bankroll, 
   fetchAllData,
-  showNotification
+  showNotification,
+  showToast
 }) {
   const [basketLoading, setBasketLoading] = React.useState(false);
   const [basketGlobalBookmaker, setBasketGlobalBookmaker] = React.useState('Unibet');
@@ -22,11 +23,17 @@ export default function BasketTab({
   // Helper to remove a single bet from the basket
   const handleRemoveFromBasket = (id) => {
     setBasketBets(prev => prev.filter(b => b.id !== id));
+    if (typeof showToast === 'function') {
+      showToast("Sélection retirée du panier !", "info");
+    }
   };
 
   // Helper to clear the entire basket
   const handleClearBasket = () => {
     setBasketBets([]);
+    if (typeof showToast === 'function') {
+      showToast("Le panier a été entièrement vidé !", "info");
+    }
   };
 
   // Helper to update a field on a specific bet in the basket

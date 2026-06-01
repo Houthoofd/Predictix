@@ -84,6 +84,18 @@ export default function App() {
     });
   };
 
+  const [toasts, setToasts] = useState([]);
+
+  const showToast = (message, type = 'success') => {
+    const id = Date.now() + Math.random().toString(36).substr(2, 9);
+    setToasts(prev => [...prev, { id, message, type }]);
+    
+    // Auto-remove after 4 seconds
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 4000);
+  };
+
   // Custom Confirmation Dialog State
   const [confirmDialog, setConfirmDialog] = useState({
     show: false,
@@ -346,9 +358,12 @@ export default function App() {
       const json = await res.json();
       if (json.success) {
         fetchAllData();
+        const statusLabel = status === 'WON' ? 'gagné' : status === 'LOST' ? 'perdu' : status === 'REFUNDED' ? 'remboursé' : 'remis en jeu';
+        showToast(`Pari marqué comme ${statusLabel} !`, "success");
       }
     } catch (err) {
       console.error("Error settling bet:", err);
+      showToast("Impossible de mettre à jour le statut du pari", "error");
     }
   };
 
@@ -365,9 +380,11 @@ export default function App() {
           const json = await res.json();
           if (json.success) {
             fetchAllData();
+            showToast("Pari supprimé de votre historique !", "success");
           }
         } catch (err) {
           console.error("Error deleting bet:", err);
+          showToast("Une erreur est survenue lors de la suppression", "error");
         }
       }
     });
@@ -455,9 +472,10 @@ export default function App() {
       if (json.success) {
         setShowResetBankrollModal(false);
         fetchAllData();
+        showToast("Bankroll réinitialisée avec succès !", "success");
       }
     } catch (err) {
-      alert("Erreur de réinitialisation: " + err.message);
+      showToast("Erreur de réinitialisation : " + err.message, "error");
     }
   };
 
@@ -494,7 +512,7 @@ export default function App() {
   // Add a bet to the basket
   const handleAddToBasket = (pred) => {
     if (basketBets.some(b => b.match_id === pred.match_id && b.best_tip === pred.best_tip && b.card_line === pred.card_line)) {
-      showNotification("Déjà Ajouté", "Cette sélection est déjà dans votre panier.", "warning");
+      showToast("Cette sélection est déjà dans votre panier.", "warning");
       return;
     }
 
@@ -524,7 +542,7 @@ export default function App() {
     };
 
     setBasketBets(prev => [...prev, newBasketBet]);
-    showNotification("Panier Mis à Jour", `La sélection ${pred.home_team} vs ${pred.away_team} a été ajoutée au panier avec succès !`, "success");
+    showToast(`✓ Sélection ajoutée au panier avec succès !`, "success");
   };
 
   // Instant direct bet placement (without modal)
@@ -562,12 +580,12 @@ export default function App() {
       const json = await res.json();
       if (json.success) {
         fetchAllData(); // Refresh bankroll
-        showNotification("Pari Enregistré", `Le pari en direct pour ${pred.home_team} vs ${pred.away_team} a été enregistré avec succès et déduit de votre bankroll active !`, "success");
+        showToast("⚡ Pari direct enregistré avec succès !", "success");
       } else {
-        showNotification("Erreur de Placement", "Impossible de placer le pari en direct : " + json.error.message, "error");
+        showToast("Impossible de placer le pari : " + json.error.message, "error");
       }
     } catch (err) {
-      showNotification("Erreur Réseau", "Une erreur de communication est survenue : " + err.message, "error");
+      showToast("Une erreur réseau est survenue : " + err.message, "error");
     }
   };
 
@@ -1127,6 +1145,7 @@ export default function App() {
                   bankroll={bankroll}
                   fetchAllData={fetchAllData}
                   showNotification={showNotification}
+                  showToast={showToast}
                 />
               )}
             </>
@@ -1206,6 +1225,90 @@ export default function App() {
           message={notification.message}
           onClose={() => setNotification(prev => ({ ...prev, show: false }))}
         />
+
+        {/* Floating Toast notifications container */}
+        <div style={{
+          position: 'fixed',
+          top: '24px',
+          right: '24px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '10px',
+          zIndex: 9999,
+          pointerEvents: 'none'
+        }}>
+          {toasts.map(toast => (
+            <div 
+              key={toast.id}
+              style={{
+                pointerEvents: 'auto',
+                background: 'rgba(15, 23, 42, 0.88)',
+                backdropFilter: 'blur(12px)',
+                border: `1.5px solid rgba(${
+                  toast.type === 'error' ? '255, 69, 58' : 
+                  toast.type === 'warning' ? '255, 159, 10' : 
+                  toast.type === 'info' ? '10, 132, 255' : '48, 209, 88'
+                }, 0.22)`,
+                color: 'var(--text-primary)',
+                padding: '12px 20px 12px 24px',
+                borderRadius: '10px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                boxShadow: '0 10px 30px rgba(0, 0, 0, 0.5)',
+                fontSize: '13px',
+                fontFamily: 'Outfit',
+                fontWeight: 600,
+                minWidth: '290px',
+                maxWidth: '380px',
+                animation: 'slideInRight 0.28s cubic-bezier(0.4, 0, 0.2, 1)',
+                position: 'relative',
+                overflow: 'hidden'
+              }}
+            >
+              {/* Left accent color bar */}
+              <div style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                bottom: 0,
+                width: '4px',
+                background: toast.type === 'error' ? '#ff453a' : 
+                            toast.type === 'warning' ? '#ff9f0a' : 
+                            toast.type === 'info' ? '#0a84ff' : '#30d158'
+              }} />
+              
+              {/* Icon */}
+              {toast.type === 'error' && <AlertCircle size={16} style={{ color: '#ff453a' }} />}
+              {toast.type === 'warning' && <AlertTriangle size={16} style={{ color: '#ff9f0a' }} />}
+              {toast.type === 'info' && <Info size={16} style={{ color: '#0a84ff' }} />}
+              {toast.type === 'success' && <CheckCircle size={16} style={{ color: '#30d158' }} />}
+
+              {/* Message */}
+              <span style={{ flexGrow: 1, lineHeight: '1.4' }}>{toast.message}</span>
+
+              {/* Close button */}
+              <button 
+                onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer',
+                  padding: '2px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'color 0.15s ease'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.color = 'var(--text-primary)'}
+                onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+              >
+                <X size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
 
       </main>
     </div>
