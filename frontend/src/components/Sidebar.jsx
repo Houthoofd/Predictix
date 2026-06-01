@@ -3,16 +3,17 @@ import {
   LayoutDashboard, 
   Database, 
   TrendingUp, 
-  Award, 
   RefreshCcw,
-  Sparkles
+  Sparkles,
+  ShoppingCart
 } from 'lucide-react';
 
 export default function Sidebar({ 
   sidebarCollapsed, 
   activeTab, 
   setActiveTab, 
-  setShowResetBankrollModal 
+  setShowResetBankrollModal,
+  basketCount = 0
 }) {
   return (
     <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
@@ -32,14 +33,6 @@ export default function Sidebar({
             {!sidebarCollapsed && <span>Tableau de Bord</span>}
           </button>
           <button 
-            className={`nav-item ${activeTab === 'predictions' ? 'active' : ''}`}
-            onClick={() => setActiveTab('predictions')}
-            title={sidebarCollapsed ? "Pronostics Corners" : ""}
-          >
-            <Award size={20} />
-            {!sidebarCollapsed && <span>Pronostics Corners</span>}
-          </button>
-          <button 
             className={`nav-item ${activeTab === 'magic-predictions' ? 'active' : ''}`}
             onClick={() => setActiveTab('magic-predictions')}
             title={sidebarCollapsed ? "Pronostics Magiques" : ""}
@@ -50,6 +43,37 @@ export default function Sidebar({
           >
             <Sparkles size={20} style={{ color: activeTab === 'magic-predictions' ? '#bf5af2' : '#bf5af2' }} />
             {!sidebarCollapsed && <span style={{ fontWeight: activeTab === 'magic-predictions' ? 700 : 500 }}>Pronostics Magiques</span>}
+          </button>
+          <button 
+            className={`nav-item ${activeTab === 'basket' ? 'active' : ''}`}
+            onClick={() => setActiveTab('basket')}
+            title={sidebarCollapsed ? `Panier de Paris (${basketCount})` : ""}
+            style={{
+              position: 'relative',
+              borderLeft: activeTab === 'basket' ? '3px solid #0082ff' : undefined,
+              color: activeTab === 'basket' ? '#0082ff' : undefined
+            }}
+          >
+            <ShoppingCart size={20} style={{ color: activeTab === 'basket' ? '#0082ff' : undefined }} />
+            {!sidebarCollapsed && <span style={{ fontWeight: activeTab === 'basket' ? 700 : 500 }}>Panier de Paris</span>}
+            {basketCount > 0 && (
+              <span style={{
+                position: sidebarCollapsed ? 'absolute' : 'relative',
+                top: sidebarCollapsed ? '-4px' : 'auto',
+                right: sidebarCollapsed ? '-4px' : 'auto',
+                marginLeft: sidebarCollapsed ? 0 : '8px',
+                background: '#bf5af2',
+                color: '#fff',
+                fontSize: '9.5px',
+                fontWeight: 800,
+                borderRadius: '10px',
+                padding: '1px 5px',
+                display: 'inline-block',
+                boxShadow: '0 0 8px rgba(191, 90, 242, 0.4)'
+              }}>
+                {basketCount}
+              </span>
+            )}
           </button>
           <button 
             className={`nav-item ${activeTab === 'scraper' ? 'active' : ''}`}

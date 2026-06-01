@@ -10,15 +10,16 @@ import Header from './components/Header';
 import DashboardTab from './components/DashboardTab';
 import ScraperTab from './components/ScraperTab';
 import TrackerTab from './components/TrackerTab';
-import PredictionsTab from './components/PredictionsTab';
 import MagicPredictionsTab from './components/MagicPredictionsTab';
 import StrategiesTab from './components/StrategiesTab';
+import BasketTab from './components/BasketTab';
 import AddBetModal from './components/AddBetModal';
 import ResetBankrollModal from './components/ResetBankrollModal';
 import MatchDetailsModal from './components/MatchDetailsModal';
 import BatchBetsModal from './components/BatchBetsModal';
 import ScrapeResultModal from './components/ScrapeResultModal';
 import ConfirmModal from './components/ConfirmModal';
+import NotificationModal from './components/NotificationModal';
 
 export default function App() {
   // Theme & Navigation
@@ -66,6 +67,22 @@ export default function App() {
   const [showScrapeResultModal, setShowScrapeResultModal] = useState(false);
   const [scrapeResultStats, setScrapeResultStats] = useState(null);
   const [selectedScraperStrategyId, setSelectedScraperStrategyId] = useState('');
+  const [basketBets, setBasketBets] = useState([]); // Dynamic bet basket state
+  const [notification, setNotification] = useState({
+    show: false,
+    title: '',
+    message: '',
+    type: 'success'
+  });
+
+  const showNotification = (title, message, type = 'success') => {
+    setNotification({
+      show: true,
+      title,
+      message,
+      type
+    });
+  };
 
   // Custom Confirmation Dialog State
   const [confirmDialog, setConfirmDialog] = useState({
@@ -473,6 +490,87 @@ export default function App() {
     setPrefilledBet(pred);
     setShowAddBetModal(true);
   };
+
+  // Add a bet to the basket
+  const handleAddToBasket = (pred) => {
+    if (basketBets.some(b => b.match_id === pred.match_id && b.best_tip === pred.best_tip && b.card_line === pred.card_line)) {
+      showNotification("Déjà Ajouté", "Cette sélection est déjà dans votre panier.", "warning");
+      return;
+    }
+
+    const probNum = parseInt(pred.probability.replace('%', ''));
+    const lineNum = parseFloat(pred.card_line);
+    const oddsNum = pred.best_tip.toLowerCase() === 'over' ? parseFloat(pred.over_odds) : parseFloat(pred.under_odds);
+    const now = new Date();
+    const defaultDate = pred.date || now.toISOString().substring(0, 10);
+
+    const newBasketBet = {
+      id: `${pred.match_id}_${pred.best_tip}_${pred.card_line}`, // unique temporary key
+      match_id: pred.match_id,
+      date: defaultDate,
+      time: pred.time || '20:00',
+      league: pred.tournament || 'Football',
+      home_team: pred.home_team,
+      away_team: pred.away_team,
+      best_tip: pred.best_tip || 'Over',
+      card_line: isNaN(lineNum) ? 4.5 : lineNum,
+      odds: isNaN(oddsNum) ? 1.85 : oddsNum,
+      stake: Math.round(bankroll.balance * 0.05), // Default to 5% of bankroll
+      probability: isNaN(probNum) ? '' : probNum,
+      bookmaker: 'Unibet',
+      status: 'PENDING',
+      notes: pred.notes || `Ajouté depuis les Pronostics Magiques.`,
+      match_url: pred.match_url || ''
+    };
+
+    setBasketBets(prev => [...prev, newBasketBet]);
+    showNotification("Panier Mis à Jour", `La sélection ${pred.home_team} vs ${pred.away_team} a été ajoutée au panier avec succès !`, "success");
+  };
+
+  // Instant direct bet placement (without modal)
+  const handleInstantPlaceBet = async (pred) => {
+    const probNum = parseInt(pred.probability.replace('%', ''));
+    const lineNum = parseFloat(pred.card_line);
+    const oddsNum = pred.best_tip.toLowerCase() === 'over' ? parseFloat(pred.over_odds) : parseFloat(pred.under_odds);
+    const now = new Date();
+    const defaultDate = pred.date || now.toISOString().substring(0, 10);
+
+    const instantBet = {
+      match_id: pred.match_id,
+      date: defaultDate,
+      time: pred.time || '20:00',
+      league: pred.tournament || 'Football',
+      home_team: pred.home_team,
+      away_team: pred.away_team,
+      best_tip: pred.best_tip || 'Over',
+      card_line: isNaN(lineNum) ? 4.5 : lineNum,
+      odds: isNaN(oddsNum) ? 1.85 : oddsNum,
+      stake: Math.round(bankroll.balance * 0.05), // 5%
+      probability: isNaN(probNum) ? '' : probNum,
+      bookmaker: 'Unibet',
+      status: 'PENDING',
+      notes: pred.notes || `Placement direct depuis les Pronostics Magiques.`,
+      match_url: pred.match_url || ''
+    };
+
+    try {
+      const res = await fetch('http://localhost:5000/api/bets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(instantBet)
+      });
+      const json = await res.json();
+      if (json.success) {
+        fetchAllData(); // Refresh bankroll
+        showNotification("Pari Enregistré", `Le pari en direct pour ${pred.home_team} vs ${pred.away_team} a été enregistré avec succès et déduit de votre bankroll active !`, "success");
+      } else {
+        showNotification("Erreur de Placement", "Impossible de placer le pari en direct : " + json.error.message, "error");
+      }
+    } catch (err) {
+      showNotification("Erreur Réseau", "Une erreur de communication est survenue : " + err.message, "error");
+    }
+  };
+
 
   // Pre-fill and open batch placement modal for selected predictions
   const handleOpenBatchPlacement = () => {
@@ -907,6 +1005,7 @@ export default function App() {
         activeTab={activeTab} 
         setActiveTab={setActiveTab} 
         setShowResetBankrollModal={setShowResetBankrollModal} 
+        basketCount={basketBets.length}
       />
 
       {/* Main interface content */}
@@ -928,16 +1027,16 @@ export default function App() {
             <div className="header-title-section">
               <h2 className="page-title">
                 {activeTab === 'dashboard' && 'Tableau de Bord'}
-                {activeTab === 'predictions' && 'Pronostics Corners'}
-                {activeTab === 'magic-predictions' && 'Pronostics Magiques 🪄'}
+                {activeTab === 'magic-predictions' && 'Pronostics Magiques'}
+                {activeTab === 'basket' && 'Panier de Paris'}
                 {activeTab === 'scraper' && 'Configuration Scraper'}
                 {activeTab === 'tracker' && 'Tracker de Paris'}
                 {activeTab === 'strategies' && 'Stratégies Personnalisées'}
               </h2>
               <p className="header-subtitle">
                 {activeTab === 'dashboard' && 'Statistiques de bankroll en temps réel et performances.'}
-                {activeTab === 'predictions' && 'Visualisez, analysez et placez vos paris corners basés sur le modèle de Poisson.'}
                 {activeTab === 'magic-predictions' && 'Signaux de value-bets basés sur vos stratégies personnalisées sur-mesure.'}
+                {activeTab === 'basket' && 'Gérez, ajustez et enregistrez vos sélections de paris en masse.'}
                 {activeTab === 'scraper' && 'Gérez et exécutez le scraper de match-en-direct.fr en temps réel.'}
                 {activeTab === 'tracker' && 'Journalisez vos paris sportifs pour optimiser votre capital.'}
                 {activeTab === 'strategies' && 'Analyse et configuration de vos cibles de paris à forte espérance mathématique.'}
@@ -992,35 +1091,15 @@ export default function App() {
                 />
               )}
 
-              {activeTab === 'predictions' && (
-                <PredictionsTab 
-                  predStatusFilter={predStatusFilter}
-                  setPredStatusFilter={setPredStatusFilter}
-                  predValueBetsOnly={predValueBetsOnly}
-                  setPredValueBetsOnly={setPredValueBetsOnly}
-                  predHighProbOnly={predHighProbOnly}
-                  setPredHighProbOnly={setPredHighProbOnly}
-                  predSearch={predSearch}
-                  setPredSearch={setPredSearch}
-                  filteredPredictions={filteredPredictions}
-                  selectedPredIds={selectedPredIds}
-                  setSelectedPredIds={setSelectedPredIds}
-                  setSelectedMatchDetails={setSelectedMatchDetails}
-                  handleQuickPlaceBet={handleQuickPlaceBet}
-                  stats={stats}
-                  dateRange={dateRange}
-                  setDateRange={setDateRange}
-                  startDate={startDate}
-                  setStartDate={setStartDate}
-                  endDate={endDate}
-                  setEndDate={setEndDate}
-                />
-              )}
-
               {activeTab === 'magic-predictions' && (
                 <MagicPredictionsTab 
+                  predictions={predictions}
                   handleQuickPlaceBet={handleQuickPlaceBet}
                   setSelectedMatchDetails={setSelectedMatchDetails}
+                  handleAddToBasket={handleAddToBasket}
+                  handleInstantPlaceBet={handleInstantPlaceBet}
+                  selectedPredIds={selectedPredIds}
+                  setSelectedPredIds={setSelectedPredIds}
                 />
               )}
 
@@ -1039,6 +1118,16 @@ export default function App() {
 
               {activeTab === 'strategies' && (
                 <StrategiesTab />
+              )}
+
+              {activeTab === 'basket' && (
+                <BasketTab 
+                  basketBets={basketBets}
+                  setBasketBets={setBasketBets}
+                  bankroll={bankroll}
+                  fetchAllData={fetchAllData}
+                  showNotification={showNotification}
+                />
               )}
             </>
           )}
@@ -1108,6 +1197,14 @@ export default function App() {
           isDanger={confirmDialog.isDanger}
           onConfirm={confirmDialog.onConfirm}
           onCancel={confirmDialog.onCancel}
+        />
+
+        <NotificationModal 
+          show={notification.show}
+          type={notification.type}
+          title={notification.title}
+          message={notification.message}
+          onClose={() => setNotification(prev => ({ ...prev, show: false }))}
         />
 
       </main>

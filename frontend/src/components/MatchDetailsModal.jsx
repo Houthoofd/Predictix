@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, RefreshCcw } from 'lucide-react';
+import { X, RefreshCcw, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export default function MatchDetailsModal({
   selectedMatchDetails,
@@ -20,6 +20,155 @@ export default function MatchDetailsModal({
 
   const [activeMetric, setActiveMetric] = React.useState('dashboard');
   const [expandedRowKey, setExpandedRowKey] = React.useState(null);
+  const [showValueBetsPanel, setShowValueBetsPanel] = React.useState(false);
+  const tabsRef = React.useRef(null);
+
+  function getMetricTitle(key) {
+    const titles = {
+      corners: 'Corners 1MT',
+      fouls: 'Fautes Commises',
+      yellow_cards: 'Cartons Jaunes',
+      possession: 'Possession de Balle',
+      shots_on_target: 'Tirs Cadrés',
+      shots: 'Tirs',
+      offsides: 'Hors-jeu',
+      red_cards: 'Cartons Rouges',
+      xg_buts_attendus: 'Expected Goals (xG)',
+      passes: 'Passes Totales',
+      passes_reussis: 'Passes Réussies (%)',
+      tacles_reussis: 'Tacles Réussis',
+      dribbles_reussis: 'Dribbles Réussis',
+      duels_reussis: 'Duels Gagnés',
+      duels_aeriens_reussis: 'Duels Aériens Gagnés',
+      ballons_touches_dans_la_surface_adverse: 'Touches Surface Adverse',
+      centres: 'Centres Tentés',
+      centres_reussis: 'Centres Réussis',
+      degagements: 'Dégagements',
+      rentree_de_touche: 'Touches',
+      occasions_manquees: 'Occasions Manquées',
+      poteau: 'Tirs sur Poteau'
+    };
+    if (titles[key]) return titles[key];
+    return key
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  }
+
+  function getAverage(matches, metric, isHomeOnly = false, isAwayOnly = false) {
+    if (!matches || !Array.isArray(matches) || matches.length === 0) return null;
+    
+    let sum = 0;
+    let count = 0;
+    
+    for (const m of matches) {
+      if (metric === 'corners') {
+        if (isHomeOnly) {
+          const val = m.home_team === selectedMatchDetails.home_team ? m.first_half_corners_home : m.first_half_corners_away;
+          if (val !== null && val !== undefined) {
+            sum += val;
+            count++;
+          }
+        } else if (isAwayOnly) {
+          const val = m.away_team === selectedMatchDetails.away_team ? m.first_half_corners_away : m.first_half_corners_home;
+          if (val !== null && val !== undefined) {
+            sum += val;
+            count++;
+          }
+        } else {
+          if (m.first_half_corners_home !== null && m.first_half_corners_home !== undefined &&
+              m.first_half_corners_away !== null && m.first_half_corners_away !== undefined) {
+            sum += (m.first_half_corners_home + m.first_half_corners_away);
+            count++;
+          }
+        }
+        continue;
+      }
+      
+      let stats = null;
+      try {
+        if (m.statistics_json) {
+          stats = typeof m.statistics_json === 'string' ? JSON.parse(m.statistics_json) : m.statistics_json;
+        }
+      } catch (e) {}
+      
+      if (!stats || !stats[metric]) continue;
+      
+      if (metric === 'possession') {
+        if (stats.possession.home !== undefined) {
+          const val = (isHomeOnly || m.home_team === selectedMatchDetails.home_team)
+            ? parseFloat(stats.possession.home)
+            : parseFloat(stats.possession.away);
+          sum += val;
+          count++;
+        }
+      } else if (stats[metric].home !== undefined && stats[metric].away !== undefined) {
+        if (isHomeOnly) {
+          const val = m.home_team === selectedMatchDetails.home_team ? parseFloat(stats[metric].home) : parseFloat(stats[metric].away);
+          sum += val;
+          count++;
+        } else if (isAwayOnly) {
+          const val = m.away_team === selectedMatchDetails.away_team ? parseFloat(stats[metric].away) : parseFloat(stats[metric].home);
+          sum += val;
+          count++;
+        } else {
+          sum += (parseFloat(stats[metric].home) + parseFloat(stats[metric].away));
+          count++;
+        }
+      }
+    }
+    
+    return count > 0 ? parseFloat((sum / count).toFixed(1)) : null;
+  }
+
+  const poissonUnder = (lambda, line) => {
+    if (lambda <= 0) return 1;
+    let sum = 0;
+    let term = Math.exp(-lambda);
+    for (let i = 0; i < line; i++) {
+      sum += term;
+      term = (term * lambda) / (i + 1);
+    }
+    return sum;
+  };
+
+  const poissonOver = (lambda, line) => {
+    return 1 - poissonUnder(lambda, line);
+  };
+
+  const getStandardLine = (metric, lambda) => {
+    const lines = {
+      corners: 4.5,
+      fouls: 22.5,
+      yellow_cards: 3.5,
+      red_cards: 0.5,
+      shots_on_target: 8.5,
+      shots: 22.5,
+      offsides: 3.5,
+      xg_buts_attendus: 2.5,
+      passes: 700,
+      tacles_reussis: 30.5,
+      dribbles_reussis: 15.5,
+      duels_reussis: 90.5,
+      duels_aeriens_reussis: 30.5,
+      ballons_touches_dans_la_surface_adverse: 35.5,
+      centres: 25.5,
+      centres_reussis: 8.5,
+      degagements: 30.5,
+      rentree_de_touche: 35.5,
+      occasions_manquees: 2.5,
+      poteau: 0.5
+    };
+    if (lines[metric] !== undefined) return lines[metric];
+    return Math.round(lambda) - 0.5;
+  };
+
+  const scrollTabs = (direction) => {
+    if (tabsRef.current) {
+      const scrollAmount = direction === 'left' ? -200 : 200;
+      tabsRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+    }
+  };
 
   const toggleExpandRow = (section, idx) => {
     const key = `${section}-${idx}`;
@@ -70,7 +219,7 @@ export default function MatchDetailsModal({
         yellow_cards: 'Cartons Jaunes',
         possession: 'Possession de Balle',
         shots_on_target: 'Tirs Cadrés',
-        shots: 'Tirs Globaux',
+        shots: 'Tirs',
         offsides: 'Hors-jeu',
         red_cards: 'Cartons Rouges',
         xg_buts_attendus: 'Expected Goals (xG)',
@@ -156,7 +305,7 @@ export default function MatchDetailsModal({
         boxShadow: 'inset 0 2px 8px rgba(0, 0, 0, 0.2)'
       }} onClick={(e) => e.stopPropagation()}>
         <h5 style={{ margin: '0 0 10px 0', fontSize: '10px', fontWeight: 800, color: 'var(--color-accent-solid)', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <span>📊 STATISTIQUES COMPARATIVES DE LA CONFRONTATION</span>
+          <span>STATISTIQUES COMPARATIVES DE LA CONFRONTATION</span>
         </h5>
         <div style={{ 
           display: 'grid', 
@@ -237,6 +386,59 @@ export default function MatchDetailsModal({
     });
   }, [selectedMatchDetails]);
 
+  const valueBetsList = React.useMemo(() => {
+    if (!selectedMatchDetails) return [];
+    const list = [];
+    
+    // We scan only universally popular and widely available betting markets
+    const popularMarkets = ['corners', 'fouls', 'yellow_cards', 'red_cards', 'shots_on_target', 'shots', 'offsides'];
+    const metricsToScan = availableMetrics.filter(m => popularMarkets.includes(m));
+    
+    for (const m of metricsToScan) {
+      const homeAvg = getAverage(selectedMatchDetails.recent_home_matches, m, true);
+      const awayAvg = getAverage(selectedMatchDetails.recent_away_matches, m, false, true);
+      
+      if (homeAvg !== null && awayAvg !== null) {
+        const lambda = homeAvg + awayAvg;
+        
+        // Scan integer lines k near lambda to find the sweet spot: probability between 53% and 70%
+        // which corresponds to interesting fair odds between 1.43 and 1.89 (no small odds).
+        const startK = Math.max(0, Math.floor(lambda) - 4);
+        const endK = Math.ceil(lambda) + 4;
+        
+        for (let k = startK; k <= endK; k++) {
+          const line = k + 0.5;
+          const overProb = poissonOver(lambda, line);
+          const underProb = poissonUnder(lambda, line);
+          
+          if (overProb >= 0.53 && overProb <= 0.70) {
+            list.push({
+              metric: m,
+              metricTitle: getMetricTitle(m),
+              line,
+              tip: 'Plus de',
+              probability: Math.round(overProb * 100),
+              fairOdds: 1 / overProb
+            });
+          }
+          if (underProb >= 0.53 && underProb <= 0.70) {
+            list.push({
+              metric: m,
+              metricTitle: getMetricTitle(m),
+              line,
+              tip: 'Moins de',
+              probability: Math.round(underProb * 100),
+              fairOdds: 1 / underProb
+            });
+          }
+        }
+      }
+    }
+    
+    // We sort by probability descending so the most confident sweet spot opportunities appear first
+    return list.sort((a, b) => b.probability - a.probability);
+  }, [selectedMatchDetails, availableMetrics]);
+
   // Ensure activeMetric aligns with available metrics if dynamically changed
   React.useEffect(() => {
     if (selectedMatchDetails?.metric && availableMetrics.includes(selectedMatchDetails.metric)) {
@@ -246,77 +448,11 @@ export default function MatchDetailsModal({
     }
   }, [selectedMatchDetails, availableMetrics]);
 
-  const getAverage = (matches, metric, isHomeOnly = false, isAwayOnly = false) => {
-    if (!matches || !Array.isArray(matches) || matches.length === 0) return null;
-    
-    let sum = 0;
-    let count = 0;
-    
-    for (const m of matches) {
-      if (metric === 'corners') {
-        if (isHomeOnly) {
-          const val = m.home_team === selectedMatchDetails.home_team ? m.first_half_corners_home : m.first_half_corners_away;
-          if (val !== null && val !== undefined) {
-            sum += val;
-            count++;
-          }
-        } else if (isAwayOnly) {
-          const val = m.away_team === selectedMatchDetails.away_team ? m.first_half_corners_away : m.first_half_corners_home;
-          if (val !== null && val !== undefined) {
-            sum += val;
-            count++;
-          }
-        } else {
-          if (m.first_half_corners_home !== null && m.first_half_corners_home !== undefined &&
-              m.first_half_corners_away !== null && m.first_half_corners_away !== undefined) {
-            sum += (m.first_half_corners_home + m.first_half_corners_away);
-            count++;
-          }
-        }
-        continue;
-      }
-      
-      let stats = null;
-      try {
-        if (m.statistics_json) {
-          stats = typeof m.statistics_json === 'string' ? JSON.parse(m.statistics_json) : m.statistics_json;
-        }
-      } catch (e) {}
-      
-      if (!stats || !stats[metric]) continue;
-      
-      if (metric === 'possession') {
-        if (stats.possession.home !== undefined) {
-          const val = (isHomeOnly || m.home_team === selectedMatchDetails.home_team)
-            ? parseFloat(stats.possession.home)
-            : parseFloat(stats.possession.away);
-          sum += val;
-          count++;
-        }
-      } else if (stats[metric].home !== undefined && stats[metric].away !== undefined) {
-        if (isHomeOnly) {
-          const val = m.home_team === selectedMatchDetails.home_team ? parseFloat(stats[metric].home) : parseFloat(stats[metric].away);
-          sum += val;
-          count++;
-        } else if (isAwayOnly) {
-          const val = m.away_team === selectedMatchDetails.away_team ? parseFloat(stats[metric].away) : parseFloat(stats[metric].home);
-          sum += val;
-          count++;
-        } else {
-          sum += (parseFloat(stats[metric].home) + parseFloat(stats[metric].away));
-          count++;
-        }
-      }
-    }
-    
-    return count > 0 ? parseFloat((sum / count).toFixed(1)) : null;
-  };
-
   const renderMatchBadge = (m) => {
     if (activeMetric === 'dashboard') {
       return (
         <span style={{ fontWeight: 700, color: 'var(--color-accent-solid)', background: 'rgba(9, 132, 227, 0.08)', padding: '3px 8px', borderRadius: '4px', fontSize: '10.5px', marginLeft: '12px', flexShrink: 0, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
-          Détails 📊
+          Détails
         </span>
       );
     }
@@ -382,38 +518,6 @@ export default function MatchDetailsModal({
   
   const metricUnit = activeMetric === 'possession' ? '%' : '';
   
-  const getMetricTitle = (key) => {
-    const titles = {
-      corners: 'Corners 1MT',
-      fouls: 'Fautes Commises',
-      yellow_cards: 'Cartons Jaunes',
-      possession: 'Possession de Balle',
-      shots_on_target: 'Tirs Cadrés',
-      shots: 'Tirs Globaux',
-      offsides: 'Hors-jeu',
-      red_cards: 'Cartons Rouges',
-      xg_buts_attendus: 'Expected Goals (xG)',
-      passes: 'Passes Totales',
-      passes_reussis: 'Passes Réussies (%)',
-      tacles_reussis: 'Tacles Réussis',
-      dribbles_reussis: 'Dribbles Réussis',
-      duels_reussis: 'Duels Gagnés',
-      duels_aeriens_reussis: 'Duels Aériens Gagnés',
-      ballons_touches_dans_la_surface_adverse: 'Touches Surface Adverse',
-      centres: 'Centres Tentés',
-      centres_reussis: 'Centres Réussis',
-      degagements: 'Dégagements',
-      rentree_de_touche: 'Touches',
-      occasions_manquees: 'Occasions Manquées',
-      poteau: 'Tirs sur Poteau'
-    };
-    if (titles[key]) return titles[key];
-    return key
-      .split('_')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-  };
-  
   const metricTitle = getMetricTitle(activeMetric);
 
   return (
@@ -433,7 +537,7 @@ export default function MatchDetailsModal({
         }}>
           <div>
             <span style={{ fontSize: '9.5px', color: 'var(--text-muted)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', background: 'rgba(255,255,255,0.03)', padding: '3px 8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.02)' }}>
-              🏆 {selectedMatchDetails.tournament || 'Football'}
+              {selectedMatchDetails.tournament || 'Football'}
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '10px', flexWrap: 'wrap' }}>
               {selectedMatchDetails.home_logo ? (
@@ -460,107 +564,245 @@ export default function MatchDetailsModal({
           </button>
         </div>
 
-        {/* Futuristic Stats Summary Grid */}
-        <div className="grid-3" style={{ gap: '12px', marginBottom: '16px' }}>
-          <div style={{ 
-            background: 'linear-gradient(135deg, rgba(9, 132, 227, 0.07) 0%, rgba(9, 132, 227, 0.01) 100%)', 
-            padding: '14px 12px', 
-            borderRadius: '10px', 
-            border: '1px solid rgba(9, 132, 227, 0.15)', 
-            textAlign: 'center',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
-          }}>
-            <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>Conseil Modèle</span>
-            <p style={{ fontSize: '15px', fontWeight: 800, marginTop: '5px', color: 'var(--text-primary)', margin: 0, fontFamily: 'Outfit' }}>
-              {selectedMatchDetails.best_tip} {selectedMatchDetails.card_line}
-            </p>
+        {/* Action Buttons Bar for Value Bets Insights */}
+        {valueBetsList.length > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '16px' }}>
+            <button 
+              onClick={() => setShowValueBetsPanel(!showValueBetsPanel)}
+              style={{
+                background: showValueBetsPanel 
+                  ? 'linear-gradient(135deg, #bf5af2 0%, var(--color-accent-solid) 100%)' 
+                  : 'rgba(191, 90, 242, 0.08)',
+                border: showValueBetsPanel 
+                  ? '1px solid rgba(191, 90, 242, 0.3)' 
+                  : '1px solid rgba(191, 90, 242, 0.25)',
+                color: showValueBetsPanel ? '#fff' : '#bf5af2',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                fontSize: '11px',
+                fontFamily: 'Outfit',
+                fontWeight: 800,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                boxShadow: showValueBetsPanel ? '0 4px 15px rgba(191, 90, 242, 0.25)' : 'none',
+                transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em'
+              }}
+            >
+              <span>{showValueBetsPanel ? 'Masquer les Value Bets' : `Voir les Meilleurs Value Bets (${valueBetsList.length})`}</span>
+            </button>
           </div>
-          
-          <div style={{ 
-            background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.07) 0%, rgba(16, 185, 129, 0.01) 100%)', 
-            padding: '14px 12px', 
-            borderRadius: '10px', 
-            border: '1px solid rgba(16, 185, 129, 0.15)', 
-            textAlign: 'center',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
-          }}>
-            <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>Confiance / Win Rate</span>
-            <p style={{ fontSize: '15px', fontWeight: 800, marginTop: '5px', color: 'var(--color-success)', margin: 0, fontFamily: 'Outfit', textShadow: '0 0 10px rgba(16, 185, 129, 0.2)' }}>
-              {selectedMatchDetails.win_rate || selectedMatchDetails.probability || 'N/A'}
-            </p>
-          </div>
-          
-          <div style={{ 
-            background: 'linear-gradient(135deg, rgba(235, 94, 40, 0.06) 0%, rgba(235, 94, 40, 0.01) 100%)', 
-            padding: '14px 12px', 
-            borderRadius: '10px', 
-            border: '1px solid rgba(235, 94, 40, 0.12)', 
-            textAlign: 'center',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
-          }}>
-            <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>Cotes (Over / Under)</span>
-            <p style={{ fontSize: '15px', fontWeight: 800, marginTop: '5px', color: 'var(--text-primary)', margin: 0, fontFamily: 'Outfit' }}>
-              {selectedMatchDetails.over_odds || 'N/A'} / {selectedMatchDetails.under_odds || 'N/A'}
-            </p>
-          </div>
-        </div>
+        )}
 
-        {/* Metric Selector Tabs */}
+        {/* Dedicated Sliding Value Bets Panel */}
+        {showValueBetsPanel && valueBetsList.length > 0 && (
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(191, 90, 242, 0.08) 0%, rgba(9, 132, 227, 0.02) 100%)',
+            border: '1px solid rgba(191, 90, 242, 0.2)',
+            borderRadius: '12px',
+            padding: '16px 20px',
+            marginBottom: '20px',
+            boxShadow: '0 8px 32px rgba(191, 90, 242, 0.08), inset 0 1px 4px rgba(255,255,255,0.01)',
+            animation: 'fadeIn 0.2s ease-out'
+          }}>
+            <style>{`
+              @keyframes fadeIn {
+                from { opacity: 0; transform: translateY(-10px); }
+                to { opacity: 1; transform: translateY(0); }
+              }
+            `}</style>
+            <h4 style={{ fontSize: '11.5px', fontFamily: 'Outfit', fontWeight: 800, color: '#bf5af2', margin: '0 0 12px 0', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span>MEILLEURES OPPORTUNITÉS DE VALUE BETS DÉTECTÉES</span>
+            </h4>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {valueBetsList.map((bet, idx) => {
+                const isOver = bet.tip === 'Plus de';
+                return (
+                  <div key={idx} style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    background: 'rgba(255, 255, 255, 0.02)',
+                    border: '1px solid rgba(255, 255, 255, 0.03)',
+                    borderRadius: '8px',
+                    padding: '10px 14px',
+                    transition: 'all 0.15s ease'
+                  }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                      <span style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                        {bet.metricTitle}
+                      </span>
+                      <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
+                        Seuil : <strong style={{ color: 'var(--text-secondary)' }}>{bet.line}</strong>
+                      </span>
+                    </div>
+                    
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ 
+                          fontSize: '11px', 
+                          fontWeight: 800, 
+                          color: isOver ? 'var(--color-success)' : '#bf5af2',
+                          background: isOver ? 'rgba(16, 185, 129, 0.1)' : 'rgba(191, 90, 242, 0.1)',
+                          padding: '3px 8px',
+                          borderRadius: '4px',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.04em'
+                        }}>
+                          {bet.tip} {bet.line}
+                        </span>
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                          Probabilité : <strong>{bet.probability}%</strong>
+                        </div>
+                      </div>
+                      
+                      <div style={{ textAlign: 'right', minWidth: '90px' }}>
+                        <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)' }}>
+                          Cote Juste : <span style={{ color: isOver ? 'var(--color-success)' : '#bf5af2' }}>{bet.fairOdds.toFixed(2)}</span>
+                        </div>
+                        <div style={{ fontSize: '9.5px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                          Cote min. : {(bet.fairOdds * 1.05).toFixed(2)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+
+
+        {/* Metric Selector Tabs Carousel */}
         {availableMetrics.length > 1 && (
-          <div style={{ display: 'flex', gap: '4px', marginBottom: '16px', background: 'var(--bg-secondary)', padding: '4px', borderRadius: '8px', border: '1px solid var(--border-color)', overflowX: 'auto', scrollbarWidth: 'none' }}>
-            {availableMetrics.map(m => {
-              const labels = {
-                dashboard: 'Résumé 📊',
-                corners: 'Corners 1MT',
-                fouls: 'Fautes Commises',
-                yellow_cards: 'Jaunes 🟨',
-                red_cards: 'Rouges 🟥',
-                possession: 'Possession',
-                shots_on_target: 'Tirs Cad.',
-                shots: 'Tirs Glob.',
-                offsides: 'Hors-jeu',
-                xg_buts_attendus: 'xG ⚽',
-                passes: 'Passes',
-                passes_reussis: 'Passes %',
-                tacles_reussis: 'Tacles',
-                dribbles_reussis: 'Dribbles',
-                duels_reussis: 'Duels',
-                duels_aeriens_reussis: 'Duels Aériens',
-                ballons_touches_dans_la_surface_adverse: 'Surf. Adverse',
-                centres: 'Centres',
-                centres_reussis: 'Centres %',
-                degagements: 'Dégagements',
-                rentree_de_touche: 'Touches',
-                occasions_manquees: 'Occ. Manquées',
-                poteau: 'Poteau'
-              };
-              const label = labels[m] || m.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-              const isActive = activeMetric === m;
-              return (
-                <button
-                  key={m}
-                  onClick={() => setActiveMetric(m)}
-                  style={{
-                    flex: '1 0 auto',
-                    padding: '6px 12px',
-                    borderRadius: '6px',
-                    border: 'none',
-                    background: isActive ? 'var(--color-accent-solid)' : 'transparent',
-                    color: isActive ? '#fff' : 'var(--text-secondary)',
-                    fontSize: '10px',
-                    fontFamily: 'Outfit',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.03em',
-                    boxShadow: isActive ? '0 2px 8px rgba(9, 132, 227, 0.3)' : 'none'
-                  }}
-                >
-                  {label}
-                </button>
-              );
-            })}
+          <div style={{ 
+            position: 'relative', 
+            display: 'flex', 
+            alignItems: 'center', 
+            marginBottom: '16px', 
+            background: 'var(--bg-secondary)', 
+            borderRadius: '10px', 
+            border: '1px solid var(--border-color)', 
+            padding: '4px' 
+          }}>
+            {/* Left Scroll Button */}
+            <button 
+              onClick={() => scrollTabs('left')}
+              style={{
+                background: 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid rgba(255, 255, 255, 0.05)',
+                color: 'var(--text-secondary)',
+                cursor: 'pointer',
+                padding: '6px 8px',
+                borderRadius: '6px',
+                marginRight: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.15s ease',
+                zIndex: 2
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
+            >
+              <ChevronLeft size={14} />
+            </button>
+
+            {/* Scrollable Tabs Wrapper */}
+            <div 
+              ref={tabsRef}
+              style={{ 
+                display: 'flex', 
+                gap: '4px', 
+                overflowX: 'auto', 
+                scrollBehavior: 'smooth', 
+                width: '100%', 
+                scrollbarWidth: 'none',
+                msOverflowStyle: 'none'
+              }}
+            >
+              {availableMetrics.map(m => {
+                const labels = {
+                  dashboard: 'Résumé',
+                  corners: 'Corners 1MT',
+                  fouls: 'Fautes Commises',
+                  yellow_cards: 'Jaunes',
+                  red_cards: 'Rouges',
+                  possession: 'Possession',
+                  shots_on_target: 'Tirs Cad.',
+                  shots: 'Tirs Glob.',
+                  offsides: 'Hors-jeu',
+                  xg_buts_attendus: 'xG',
+                  passes: 'Passes',
+                  passes_reussis: 'Passes %',
+                  tacles_reussis: 'Tacles',
+                  dribbles_reussis: 'Dribbles',
+                  duels_reussis: 'Duels',
+                  duels_aeriens_reussis: 'Duels Aériens',
+                  ballons_touches_dans_la_surface_adverse: 'Surf. Adverse',
+                  centres: 'Centres',
+                  centres_reussis: 'Centres %',
+                  degagements: 'Dégagements',
+                  rentree_de_touche: 'Touches',
+                  occasions_manquees: 'Occ. Manquées',
+                  poteau: 'Poteau'
+                };
+                const label = labels[m] || m.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                const isActive = activeMetric === m;
+                return (
+                  <button
+                    key={m}
+                    onClick={() => setActiveMetric(m)}
+                    style={{
+                      flex: '0 0 auto',
+                      padding: '6px 12px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      background: isActive ? 'var(--color-accent-solid)' : 'transparent',
+                      color: isActive ? '#fff' : 'var(--text-secondary)',
+                      fontSize: '10px',
+                      fontFamily: 'Outfit',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.03em',
+                      boxShadow: isActive ? '0 2px 8px rgba(9, 132, 227, 0.3)' : 'none'
+                    }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Right Scroll Button */}
+            <button 
+              onClick={() => scrollTabs('right')}
+              style={{
+                background: 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid rgba(255, 255, 255, 0.05)',
+                color: 'var(--text-secondary)',
+                cursor: 'pointer',
+                padding: '6px 8px',
+                borderRadius: '6px',
+                marginLeft: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.15s ease',
+                zIndex: 2
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)'}
+            >
+              <ChevronRight size={14} />
+            </button>
           </div>
         )}
 
@@ -575,15 +817,15 @@ export default function MatchDetailsModal({
             boxShadow: 'inset 0 1px 4px rgba(255,255,255,0.01)'
           }}>
             <h4 style={{ fontSize: '11px', fontFamily: 'Outfit', fontWeight: 800, color: 'var(--color-accent-solid)', marginBottom: '14px', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span>📊 BILAN COMPARATIF DES MOYENNES</span>
+              <span>BILAN COMPARATIF DES MOYENNES</span>
             </h4>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
               {/* Header Row */}
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', fontWeight: 800, color: 'var(--text-muted)', borderBottom: '1px solid rgba(255,255,255,0.04)', paddingBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                <span style={{ width: '40%', minWidth: '150px' }}>Statistique</span>
-                <span style={{ width: '20%', textAlign: 'center' }}>{selectedMatchDetails.home_team} (Dom)</span>
+                <span style={{ width: '40%', minWidth: '110px' }}>Statistique</span>
+                <span style={{ width: '20%', textAlign: 'center' }}>{selectedMatchDetails.home_team}</span>
                 <span style={{ width: '20%', textAlign: 'center', color: 'var(--color-accent-solid)' }}>Moy. H2H</span>
-                <span style={{ width: '20%', textAlign: 'center' }}>{selectedMatchDetails.away_team} (Ext)</span>
+                <span style={{ width: '20%', textAlign: 'center' }}>{selectedMatchDetails.away_team}</span>
               </div>
               
               {/* Data Rows */}
@@ -608,7 +850,7 @@ export default function MatchDetailsModal({
                       borderBottom: '1px solid rgba(255, 255, 255, 0.02)'
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', alignItems: 'center' }}>
-                        <span style={{ width: '40%', minWidth: '150px', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                        <span style={{ width: '40%', minWidth: '110px', fontWeight: 700, color: 'var(--text-secondary)' }}>
                           {getMetricTitle(m)}
                         </span>
                         <span style={{ width: '20%', textAlign: 'center', fontWeight: 700, color: 'var(--color-success)' }}>
@@ -679,6 +921,100 @@ export default function MatchDetailsModal({
             </div>
           </div>
         )}
+
+        {/* Aide aux Paris & Probabilités de Poisson pour Onglets Individuels */}
+        {activeMetric !== 'dashboard' && activeMetric !== 'possession' && activeMetric !== 'passes_reussis' && (() => {
+          const homeAvg = getAverage(selectedMatchDetails.recent_home_matches, activeMetric, true);
+          const awayAvg = getAverage(selectedMatchDetails.recent_away_matches, activeMetric, false, true);
+          
+          if (homeAvg === null || awayAvg === null) return null;
+          
+          const lambda = homeAvg + awayAvg;
+          const line = getStandardLine(activeMetric, lambda);
+          const overProb = poissonOver(lambda, line);
+          const underProb = poissonUnder(lambda, line);
+          const fairOver = overProb > 0 ? 1 / overProb : 99;
+          const fairUnder = underProb > 0 ? 1 / underProb : 99;
+          
+          const isOverStrong = overProb >= 0.65;
+          const isUnderStrong = underProb >= 0.65;
+          
+          return (
+            <div style={{
+              background: 'rgba(255, 255, 255, 0.015)',
+              border: '1px solid rgba(255, 255, 255, 0.04)',
+              borderRadius: '10px',
+              padding: '16px 20px',
+              marginBottom: '16px',
+              boxShadow: 'inset 0 1px 4px rgba(255,255,255,0.01)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}>
+              <h4 style={{ fontSize: '11px', fontFamily: 'Outfit', fontWeight: 800, color: 'var(--color-accent-solid)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>ESTIMATEUR DE VALUE BET & COTES JUSTES (LOI DE POISSON)</span>
+              </h4>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                {/* Over Option */}
+                <div style={{
+                  background: isOverStrong ? 'rgba(16, 185, 129, 0.06)' : 'rgba(255, 255, 255, 0.01)',
+                  border: isOverStrong ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid rgba(255, 255, 255, 0.03)',
+                  borderRadius: '8px',
+                  padding: '12px 14px',
+                  textAlign: 'center',
+                  boxShadow: isOverStrong ? '0 0 12px rgba(16, 185, 129, 0.05)' : 'none',
+                  transition: 'all 0.2s ease'
+                }}>
+                  <span style={{ fontSize: '10px', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 700 }}>Plus de {line} {metricTitle}</span>
+                  <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--color-success)', marginTop: '6px' }}>
+                    {Math.round(overProb * 100)}% <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500 }}>probabilité</span>
+                  </div>
+                  <div style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--text-primary)', marginTop: '4px' }}>
+                    Cote Juste : <span style={{ color: 'var(--color-success)', fontSize: '13.5px', fontWeight: 800 }}>{fairOver.toFixed(2)}</span>
+                  </div>
+                  {isOverStrong ? (
+                    <span style={{ display: 'inline-block', fontSize: '9px', background: 'rgba(16, 185, 129, 0.15)', color: 'var(--color-success)', padding: '2px 6px', borderRadius: '4px', fontWeight: 800, marginTop: '8px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Signal Fort (Value Potentielle)
+                    </span>
+                  ) : (
+                    <span style={{ display: 'inline-block', fontSize: '9px', color: 'var(--text-muted)', marginTop: '8px' }}>
+                      Cote min. conseillée : {(fairOver * 1.05).toFixed(2)}
+                    </span>
+                  )}
+                </div>
+                
+                {/* Under Option */}
+                <div style={{
+                  background: isUnderStrong ? 'rgba(191, 90, 242, 0.06)' : 'rgba(255, 255, 255, 0.01)',
+                  border: isUnderStrong ? '1px solid rgba(191, 90, 242, 0.25)' : '1px solid rgba(255, 255, 255, 0.03)',
+                  borderRadius: '8px',
+                  padding: '12px 14px',
+                  textAlign: 'center',
+                  boxShadow: isUnderStrong ? '0 0 12px rgba(191, 90, 242, 0.05)' : 'none',
+                  transition: 'all 0.2s ease'
+                }}>
+                  <span style={{ fontSize: '10px', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 700 }}>Moins de {line} {metricTitle}</span>
+                  <div style={{ fontSize: '18px', fontWeight: 800, color: '#bf5af2', marginTop: '6px' }}>
+                    {Math.round(underProb * 100)}% <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500 }}>probabilité</span>
+                  </div>
+                  <div style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--text-primary)', marginTop: '4px' }}>
+                    Cote Juste : <span style={{ color: '#bf5af2', fontSize: '13.5px', fontWeight: 800 }}>{fairUnder.toFixed(2)}</span>
+                  </div>
+                  {isUnderStrong ? (
+                    <span style={{ display: 'inline-block', fontSize: '9px', background: 'rgba(191, 90, 242, 0.15)', color: '#bf5af2', padding: '2px 6px', borderRadius: '4px', fontWeight: 800, marginTop: '8px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Signal Fort (Value Potentielle)
+                    </span>
+                  ) : (
+                    <span style={{ display: 'inline-block', fontSize: '9px', color: 'var(--text-muted)', marginTop: '8px' }}>
+                      Cote min. conseillée : {(fairUnder * 1.05).toFixed(2)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Historical Lists */}
         {(crawlLoading || selectedMatchDetails?.isCrawling) ? (

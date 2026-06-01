@@ -224,7 +224,7 @@ export default function StrategiesTab() {
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', fontWeight: 700, color: '#bf5af2', textTransform: 'uppercase' }}>
                   <span>Conception Magique en cours</span>
-                  <span className="spin-animation" style={{ display: 'inline-block' }}>🔮</span>
+                  <Sparkles size={12} className="spin-animation" style={{ color: '#bf5af2' }} />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '12.5px', color: 'var(--text-secondary)' }}>
                   {creationSteps.map((step, idx) => (

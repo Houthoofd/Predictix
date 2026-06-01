@@ -163,7 +163,7 @@ export default function AddBetModal({
 
             <div className="grid-3" style={{ gap: '12px' }}>
               <div className="form-group">
-                <label className="form-label" style={{ minHeight: '16px', display: 'flex', alignItems: 'center' }}>Conseil</label>
+                <label className="form-label" style={{ minHeight: '16px', display: 'flex', alignItems: 'center' }}>Pronostic</label>
                 <select 
                   className="form-control"
                   value={newBetForm.best_tip}
@@ -174,7 +174,7 @@ export default function AddBetModal({
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label" style={{ minHeight: '16px', display: 'flex', alignItems: 'center' }}>Ligne Cartons</label>
+                <label className="form-label" style={{ minHeight: '16px', display: 'flex', alignItems: 'center' }}>Ligne du Pari</label>
                 <input 
                   type="number" 
                   step="0.5"
@@ -272,7 +272,7 @@ export default function AddBetModal({
                       display: 'inline-block',
                       boxShadow: valueEdge > 0 ? '0 0 8px var(--color-success)' : 'none'
                     }}></span>
-                    {valueEdge > 0 ? '🔥 VALUE BET DÉTECTÉ' : '❌ EDGE NÉGATIF / PAS DE VALUE'}
+                    {valueEdge > 0 ? 'VALUE BET DÉTECTÉ' : 'EDGE NÉGATIF / PAS DE VALUE'}
                   </span>
                   <span style={{ 
                     fontSize: '14px', 
@@ -306,7 +306,7 @@ export default function AddBetModal({
               <textarea 
                 className="form-control" 
                 rows="2"
-                placeholder="Commentaires sur l'arbitre, météo, blessures..."
+                placeholder="Spécifiez la statistique (ex: Fautes commises, tirs, cartons) ou saisissez vos notes (arbitre, météo...)"
                 value={newBetForm.notes}
                 onChange={(e) => setNewBetForm({ ...newBetForm, notes: e.target.value })}
               />

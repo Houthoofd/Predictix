@@ -406,6 +406,96 @@ router.post('/bets', async (req, res) => {
   }
 });
 
+// Add multiple bets at once (batch mode)
+router.post('/bets/batch', async (req, res) => {
+  const { bets } = req.body;
+
+  if (!bets || !Array.isArray(bets) || bets.length === 0) {
+    return res.status(400).json({ success: false, error: { message: 'Missing or invalid bets array' } });
+  }
+
+  try {
+    const insertedBets = [];
+    
+    for (const bet of bets) {
+      const {
+        match_id,
+        date,
+        time,
+        league,
+        home_team,
+        away_team,
+        best_tip,
+        card_line,
+        odds,
+        stake,
+        probability,
+        bookmaker,
+        status,
+        notes,
+        match_url
+      } = bet;
+
+      // Validation for required fields inside batch
+      if (!date || !time || !league || !home_team || !away_team || !best_tip || card_line === undefined || odds === undefined || stake === undefined) {
+        continue; // Skip invalid records inside batch to remain resilient
+      }
+
+      const cleanCardLine = parseFloat(card_line);
+      const cleanOdds = parseFloat(odds);
+      const cleanStake = parseFloat(stake);
+      const cleanProb = probability ? parseInt(probability) : null;
+      const cleanStatus = status || 'PENDING';
+      
+      let payout = 0;
+      if (cleanStatus === 'WON') {
+        payout = cleanStake * cleanOdds;
+      } else if (cleanStatus === 'REFUNDED') {
+        payout = cleanStake;
+      }
+
+      const sql = `
+        INSERT INTO bets (
+          match_id, date, time, league, home_team, away_team,
+          best_tip, card_line, odds, stake, probability,
+          bookmaker, status, payout, notes, match_url
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `;
+
+      const params = [
+        match_id || null,
+        date,
+        time,
+        league,
+        home_team,
+        away_team,
+        best_tip,
+        cleanCardLine,
+        cleanOdds,
+        cleanStake,
+        cleanProb,
+        bookmaker || 'Unibet',
+        cleanStatus,
+        payout,
+        notes || null,
+        match_url || null
+      ];
+
+      const result = await dbRun(sql, params);
+      const newBet = await dbGet('SELECT * FROM bets WHERE id = ?', [result.id]);
+      insertedBets.push(newBet);
+    }
+
+    // Sync bankroll after inserting all bets!
+    await syncBankroll();
+
+    res.status(201).json({ success: true, data: insertedBets, count: insertedBets.length });
+  } catch (error) {
+    res.status(500).json({ success: false, error: { message: error.message } });
+  }
+});
+
+
 // Update an existing bet
 router.put('/bets/:id', async (req, res) => {
   const { id } = req.params;

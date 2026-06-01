@@ -116,7 +116,7 @@ export function rewriteScraperLog(line, strategy) {
     yellow_cards: 'Cartons Jaunes',
     possession: 'Possession de balle',
     shots_on_target: 'Tirs Cadrés',
-    shots: 'Tirs globaux',
+    shots: 'Tirs',
     offsides: 'Hors-jeu',
     corners: 'Corners 1ère MT'
   };

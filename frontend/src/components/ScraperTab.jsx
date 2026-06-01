@@ -144,7 +144,7 @@ export default function ScraperTab({
                   title="Automatique: Découvrir les matchs puis lancer l'analyse détaillée en 1 clic!"
                 >
                   <Sparkles size={14} />
-                  <span>Analyse en 1-Clic 🪄</span>
+                  <span>Analyse en 1-Clic</span>
                 </button>
               </>
             ) : (
