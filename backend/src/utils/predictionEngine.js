@@ -396,7 +396,7 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
   
   for (const row of rows) {
     const h2hMatches = await dbQueryFn(`
-      SELECT first_half_corners_home, first_half_corners_away, home_team, away_team, home_logo, away_logo, score, date, time, tournament
+      SELECT first_half_corners_home, first_half_corners_away, home_team, away_team, home_logo, away_logo, score, date, time, tournament, statistics_json
       FROM scraped_predictions 
       WHERE is_finished = 1 
         AND ((home_team = ? AND away_team = ?) OR (home_team = ? AND away_team = ?))
@@ -416,7 +416,7 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
     const normalizedH2H = h2hMatches.map(normalizeMatchRow);
     
     const homeMatches = await dbQueryFn(`
-      SELECT first_half_corners_home, first_half_corners_away, home_team, away_team, home_logo, away_logo, score, date, time, tournament
+      SELECT first_half_corners_home, first_half_corners_away, home_team, away_team, home_logo, away_logo, score, date, time, tournament, statistics_json
       FROM scraped_predictions 
       WHERE is_finished = 1 
         AND home_team = ?
@@ -426,7 +426,7 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
     const normalizedHome = homeMatches.map(normalizeMatchRow);
     
     const awayMatches = await dbQueryFn(`
-      SELECT first_half_corners_home, first_half_corners_away, home_team, away_team, home_logo, away_logo, score, date, time, tournament
+      SELECT first_half_corners_home, first_half_corners_away, home_team, away_team, home_logo, away_logo, score, date, time, tournament, statistics_json
       FROM scraped_predictions 
       WHERE is_finished = 1 
         AND away_team = ?
