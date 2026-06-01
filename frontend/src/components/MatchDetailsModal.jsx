@@ -26,6 +26,26 @@ export default function MatchDetailsModal({
     setExpandedRowKey(expandedRowKey === key ? null : key);
   };
 
+  const getOutcomeIndicator = (match, targetTeam) => {
+    if (!match.score || !match.score.includes('-')) return null;
+    const parts = match.score.split('-');
+    const scoreHome = parseInt(parts[0].trim(), 10);
+    const scoreAway = parseInt(parts[1].trim(), 10);
+    
+    if (isNaN(scoreHome) || isNaN(scoreAway)) return null;
+    
+    const isHome = match.home_team === targetTeam;
+    if (scoreHome === scoreAway) {
+      return { label: 'N', color: '#ffb020', bg: 'rgba(255, 176, 32, 0.08)', border: '1px solid rgba(255, 176, 32, 0.2)' };
+    }
+    const isWin = isHome ? (scoreHome > scoreAway) : (scoreAway > scoreHome);
+    if (isWin) {
+      return { label: 'V', color: '#10b981', bg: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.2)' };
+    } else {
+      return { label: 'D', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)' };
+    }
+  };
+
   const renderExpandedStats = (m) => {
     let stats = null;
     try {
@@ -34,7 +54,6 @@ export default function MatchDetailsModal({
       }
     } catch (e) {}
     
-    // Also include corners in the sub-grid if available
     const hasCorners = m.first_half_corners_home !== null && m.first_half_corners_away !== null;
     
     if ((!stats || Object.keys(stats).length === 0) && !hasCorners) {
@@ -73,48 +92,82 @@ export default function MatchDetailsModal({
       return key.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
     };
     
+    const renderStatGauge = (label, hVal, aVal, key) => {
+      const hNum = parseFloat(String(hVal).replace('%', ''));
+      const aNum = parseFloat(String(aVal).replace('%', ''));
+      
+      let pctH = 50;
+      let pctA = 50;
+      if (!isNaN(hNum) && !isNaN(aNum) && (hNum + aNum) > 0) {
+        pctH = (hNum / (hNum + aNum)) * 100;
+        pctA = 100 - pctH;
+      }
+      
+      const isPoss = key === 'possession';
+      const isPassesReussis = key === 'passes_reussis';
+      const formattedH = hVal !== undefined ? (isPoss || isPassesReussis ? `${hVal}%` : hVal) : '-';
+      const formattedA = aVal !== undefined ? (isPoss || isPassesReussis ? `${aVal}%` : aVal) : '-';
+      
+      return (
+        <div key={key} style={{ 
+          display: 'flex', 
+          flexDirection: 'column', 
+          background: 'rgba(255, 255, 255, 0.015)', 
+          padding: '8px 12px', 
+          borderRadius: '6px', 
+          border: '1px solid rgba(255, 255, 255, 0.03)',
+          gap: '5px'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--color-success)' }}>{formattedH}</span>
+            <span style={{ fontSize: '9px', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', textAlign: 'center', width: '80%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={label}>
+              {label}
+            </span>
+            <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--color-danger)' }}>{formattedA}</span>
+          </div>
+          
+          <div style={{ height: '3px', width: '100%', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '1.5px', overflow: 'hidden', display: 'flex' }}>
+            <div style={{ 
+              width: `${pctH}%`, 
+              background: 'linear-gradient(90deg, var(--color-success) 0%, #10b981 100%)', 
+              height: '100%',
+              transition: 'width 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
+            }} />
+            <div style={{ 
+              width: `${pctA}%`, 
+              background: 'linear-gradient(90deg, #f97316 0%, var(--color-danger) 100%)', 
+              height: '100%',
+              transition: 'width 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
+            }} />
+          </div>
+        </div>
+      );
+    };
+    
     return (
       <div style={{
-        background: 'rgba(0, 0, 0, 0.25)',
-        border: '1px solid rgba(255, 255, 255, 0.03)',
+        background: 'rgba(0, 0, 0, 0.35)',
+        border: '1px solid rgba(255, 255, 255, 0.04)',
         borderRadius: '8px',
         padding: '12px 14px',
         marginTop: '8px',
         width: '100%',
-        boxSizing: 'border-box'
+        boxSizing: 'border-box',
+        boxShadow: 'inset 0 2px 8px rgba(0, 0, 0, 0.2)'
       }} onClick={(e) => e.stopPropagation()}>
-        <h5 style={{ margin: '0 0 10px 0', fontSize: '10.5px', fontWeight: 800, color: 'var(--color-accent-solid)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          📊 STATISTIQUES DÉTAILLÉES DU MATCH
+        <h5 style={{ margin: '0 0 10px 0', fontSize: '10px', fontWeight: 800, color: 'var(--color-accent-solid)', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <span>📊 STATISTIQUES COMPARATIVES DE LA CONFRONTATION</span>
         </h5>
         <div style={{ 
           display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', 
+          gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', 
           gap: '8px' 
         }}>
-          {hasCorners && (
-            <div style={{ display: 'flex', flexDirection: 'column', background: 'rgba(255,255,255,0.01)', padding: '5px 8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.02)' }}>
-              <span style={{ fontSize: '9.5px', color: 'var(--text-muted)', fontWeight: 600 }}>Corners 1MT</span>
-              <strong style={{ fontSize: '11px', color: 'var(--color-success)', marginTop: '2px' }}>
-                {m.first_half_corners_home} - {m.first_half_corners_away}
-              </strong>
-            </div>
-          )}
-          {stats && Object.keys(stats).map(key => {
+          {hasCorners && renderStatGauge('Corners 1MT', m.first_half_corners_home, m.first_half_corners_away, 'corners')}
+          {stats && Object.keys(stats).filter(k => k !== 'corners').map(key => {
             const s = stats[key];
             if (s.home === undefined && s.away === undefined) return null;
-            const isPoss = key === 'possession';
-            const valH = s.home !== undefined ? (isPoss ? `${s.home}%` : s.home) : '-';
-            const valA = s.away !== undefined ? (isPoss ? `${s.away}%` : s.away) : '-';
-            return (
-              <div key={key} style={{ display: 'flex', flexDirection: 'column', background: 'rgba(255,255,255,0.01)', padding: '5px 8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.02)' }}>
-                <span style={{ fontSize: '9.5px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }} title={formatKeyLabel(key)}>
-                  {formatKeyLabel(key)}
-                </span>
-                <strong style={{ fontSize: '11px', color: 'var(--text-primary)', marginTop: '2px' }}>
-                  {valH} - {valA}
-                </strong>
-              </div>
-            );
+            return renderStatGauge(formatKeyLabel(key), s.home, s.away, key);
           })}
         </div>
       </div>
@@ -328,62 +381,96 @@ export default function MatchDetailsModal({
 
   return (
     <div className="modal-overlay" onClick={() => setSelectedMatchDetails(null)}>
-      <div className="modal-content glass-card" style={{ maxWidth: '650px', width: '90%', padding: '24px 30px', maxHeight: '85vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', borderBottom: '1px solid var(--border-color)', paddingBottom: '14px' }}>
+      <div className="modal-content glass-card" style={{ maxWidth: '650px', width: '90%', padding: '26px 32px', maxHeight: '85vh', overflowY: 'auto', border: '1px solid rgba(255, 255, 255, 0.05)', boxShadow: '0 20px 50px rgba(0, 0, 0, 0.3)' }} onClick={(e) => e.stopPropagation()}>
+        
+        {/* Glowing Header Container */}
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'flex-start', 
+          marginBottom: '20px', 
+          borderBottom: '1px solid rgba(255,255,255,0.04)', 
+          paddingBottom: '16px',
+          position: 'relative',
+          background: 'radial-gradient(circle at 35% 50%, rgba(9, 132, 227, 0.05) 0%, transparent 60%)'
+        }}>
           <div>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              {selectedMatchDetails.tournament || 'Football'}
+            <span style={{ fontSize: '9.5px', color: 'var(--text-muted)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', background: 'rgba(255,255,255,0.03)', padding: '3px 8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.02)' }}>
+              🏆 {selectedMatchDetails.tournament || 'Football'}
             </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '6px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '10px', flexWrap: 'wrap' }}>
               {selectedMatchDetails.home_logo ? (
-                <img src={selectedMatchDetails.home_logo} alt="" referrerPolicy="no-referrer" style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
+                <img src={selectedMatchDetails.home_logo} alt="" referrerPolicy="no-referrer" style={{ width: '34px', height: '34px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.02)', padding: '2px', filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.06))', flexShrink: 0 }} />
               ) : (
-                <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--bg-tertiary)', flexShrink: 0 }} />
+                <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: 'var(--bg-tertiary)', flexShrink: 0 }} />
               )}
-              <h3 style={{ fontSize: '20px', fontFamily: 'Outfit', color: 'var(--text-primary)', margin: 0, fontWeight: 700 }}>
+              <h3 style={{ fontSize: '19px', fontFamily: 'Outfit', color: 'var(--text-primary)', margin: 0, fontWeight: 800, letterSpacing: '-0.02em' }}>
                 {selectedMatchDetails.home_team}
               </h3>
-              <span style={{ color: 'var(--text-muted)', fontSize: '15px', fontWeight: 600 }}>vs</span>
+              <span style={{ color: 'var(--text-muted)', fontSize: '11px', fontFamily: 'Outfit', fontWeight: 800, background: 'rgba(255,255,255,0.04)', padding: '3px 8px', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>vs</span>
               {selectedMatchDetails.away_logo ? (
-                <img src={selectedMatchDetails.away_logo} alt="" referrerPolicy="no-referrer" style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.03)', flexShrink: 0 }} />
+                <img src={selectedMatchDetails.away_logo} alt="" referrerPolicy="no-referrer" style={{ width: '34px', height: '34px', borderRadius: '50%', objectFit: 'contain', background: 'rgba(255,255,255,0.02)', padding: '2px', filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.06))', flexShrink: 0 }} />
               ) : (
-                <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--bg-tertiary)', flexShrink: 0 }} />
+                <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: 'var(--bg-tertiary)', flexShrink: 0 }} />
               )}
-              <h3 style={{ fontSize: '20px', fontFamily: 'Outfit', color: 'var(--text-primary)', margin: 0, fontWeight: 700 }}>
+              <h3 style={{ fontSize: '19px', fontFamily: 'Outfit', color: 'var(--text-primary)', margin: 0, fontWeight: 800, letterSpacing: '-0.02em' }}>
                 {selectedMatchDetails.away_team}
               </h3>
             </div>
           </div>
-          <button className="modal-close" onClick={() => setSelectedMatchDetails(null)} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '4px' }}>
-            <X size={18} />
+          <button className="modal-close" onClick={() => setSelectedMatchDetails(null)} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)', color: 'var(--text-secondary)', cursor: 'pointer', padding: '6px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}>
+            <X size={15} />
           </button>
         </div>
 
-        {/* Stats Summary Grid */}
-        <div className="grid-3" style={{ gap: '12px', marginBottom: '14px' }}>
-          <div style={{ background: 'var(--bg-tertiary)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', textAlign: 'center' }}>
-            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Conseil Modèle</span>
-            <p style={{ fontSize: '15px', fontWeight: 700, marginTop: '4px', color: 'var(--text-primary)' }}>
+        {/* Futuristic Stats Summary Grid */}
+        <div className="grid-3" style={{ gap: '12px', marginBottom: '16px' }}>
+          <div style={{ 
+            background: 'linear-gradient(135deg, rgba(9, 132, 227, 0.07) 0%, rgba(9, 132, 227, 0.01) 100%)', 
+            padding: '14px 12px', 
+            borderRadius: '10px', 
+            border: '1px solid rgba(9, 132, 227, 0.15)', 
+            textAlign: 'center',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+          }}>
+            <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>Conseil Modèle</span>
+            <p style={{ fontSize: '15px', fontWeight: 800, marginTop: '5px', color: 'var(--text-primary)', margin: 0, fontFamily: 'Outfit' }}>
               {selectedMatchDetails.best_tip} {selectedMatchDetails.card_line}
             </p>
           </div>
-          <div style={{ background: 'var(--bg-tertiary)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', textAlign: 'center' }}>
-            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Confiance / Win Rate</span>
-            <p style={{ fontSize: '15px', fontWeight: 700, marginTop: '4px', color: 'var(--color-accent-solid)' }}>
+          
+          <div style={{ 
+            background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.07) 0%, rgba(16, 185, 129, 0.01) 100%)', 
+            padding: '14px 12px', 
+            borderRadius: '10px', 
+            border: '1px solid rgba(16, 185, 129, 0.15)', 
+            textAlign: 'center',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+          }}>
+            <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>Confiance / Win Rate</span>
+            <p style={{ fontSize: '15px', fontWeight: 800, marginTop: '5px', color: 'var(--color-success)', margin: 0, fontFamily: 'Outfit', textShadow: '0 0 10px rgba(16, 185, 129, 0.2)' }}>
               {selectedMatchDetails.win_rate || selectedMatchDetails.probability || 'N/A'}
             </p>
           </div>
-          <div style={{ background: 'var(--bg-tertiary)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', textAlign: 'center' }}>
-            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Cotes de Base (O/U)</span>
-            <p style={{ fontSize: '15px', fontWeight: 700, marginTop: '4px', color: 'var(--text-primary)' }}>
-              {selectedMatchDetails.over_odds} / {selectedMatchDetails.under_odds}
+          
+          <div style={{ 
+            background: 'linear-gradient(135deg, rgba(235, 94, 40, 0.06) 0%, rgba(235, 94, 40, 0.01) 100%)', 
+            padding: '14px 12px', 
+            borderRadius: '10px', 
+            border: '1px solid rgba(235, 94, 40, 0.12)', 
+            textAlign: 'center',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+          }}>
+            <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>Cotes (Over / Under)</span>
+            <p style={{ fontSize: '15px', fontWeight: 800, marginTop: '5px', color: 'var(--text-primary)', margin: 0, fontFamily: 'Outfit' }}>
+              {selectedMatchDetails.over_odds || 'N/A'} / {selectedMatchDetails.under_odds || 'N/A'}
             </p>
           </div>
         </div>
 
         {/* Metric Selector Tabs */}
         {availableMetrics.length > 1 && (
-          <div style={{ display: 'flex', gap: '4px', marginBottom: '14px', background: 'var(--bg-secondary)', padding: '3px', borderRadius: '8px', border: '1px solid var(--border-color)', overflowX: 'auto', scrollbarWidth: 'none' }}>
+          <div style={{ display: 'flex', gap: '4px', marginBottom: '16px', background: 'var(--bg-secondary)', padding: '4px', borderRadius: '8px', border: '1px solid var(--border-color)', overflowX: 'auto', scrollbarWidth: 'none' }}>
             {availableMetrics.map(m => {
               const labels = {
                 corners: 'Corners 1MT',
@@ -403,18 +490,19 @@ export default function MatchDetailsModal({
                   onClick={() => setActiveMetric(m)}
                   style={{
                     flex: '1 0 auto',
-                    padding: '5px 10px',
+                    padding: '6px 12px',
                     borderRadius: '6px',
                     border: 'none',
                     background: isActive ? 'var(--color-accent-solid)' : 'transparent',
                     color: isActive ? '#fff' : 'var(--text-secondary)',
-                    fontSize: '10.5px',
+                    fontSize: '10px',
                     fontFamily: 'Outfit',
                     fontWeight: 700,
                     cursor: 'pointer',
-                    transition: 'all 0.15s ease',
+                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                     textTransform: 'uppercase',
-                    letterSpacing: '0.02em'
+                    letterSpacing: '0.03em',
+                    boxShadow: isActive ? '0 2px 8px rgba(9, 132, 227, 0.3)' : 'none'
                   }}
                 >
                   {label}
@@ -427,18 +515,19 @@ export default function MatchDetailsModal({
         {/* Dynamic Averages Section */}
         {activeMetric === 'dashboard' ? (
           <div style={{ 
-            background: 'rgba(255, 255, 255, 0.02)', 
-            border: '1px solid var(--border-color)', 
+            background: 'rgba(255, 255, 255, 0.015)', 
+            border: '1px solid rgba(255, 255, 255, 0.03)', 
             borderRadius: '10px', 
             padding: '16px 20px', 
-            marginBottom: '24px' 
+            marginBottom: '24px',
+            boxShadow: 'inset 0 1px 4px rgba(255,255,255,0.01)'
           }}>
-            <h4 style={{ fontSize: '13.5px', fontFamily: 'Outfit', fontWeight: 800, color: 'var(--color-accent-solid)', marginBottom: '14px', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <h4 style={{ fontSize: '11px', fontFamily: 'Outfit', fontWeight: 800, color: 'var(--color-accent-solid)', marginBottom: '14px', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span>📊 BILAN COMPARATIF DES MOYENNES</span>
             </h4>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
               {/* Header Row */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', fontWeight: 800, color: 'var(--text-muted)', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', fontWeight: 800, color: 'var(--text-muted)', borderBottom: '1px solid rgba(255,255,255,0.04)', paddingBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                 <span style={{ width: '40%', minWidth: '150px' }}>Statistique</span>
                 <span style={{ width: '20%', textAlign: 'center' }}>{selectedMatchDetails.home_team} (Dom)</span>
                 <span style={{ width: '20%', textAlign: 'center', color: 'var(--color-accent-solid)' }}>Moy. H2H</span>
@@ -446,30 +535,48 @@ export default function MatchDetailsModal({
               </div>
               
               {/* Data Rows */}
-              <div style={{ maxHeight: '250px', overflowY: 'auto', paddingRight: '4px', scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
+              <div style={{ maxHeight: '280px', overflowY: 'auto', paddingRight: '4px', scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
                 {availableMetrics.filter(m => m !== 'dashboard').map((m) => {
                   const h2hAvg = getAverage(selectedMatchDetails.recent_h2h_matches, m);
                   const homeAvg = getAverage(selectedMatchDetails.recent_home_matches, m, true);
                   const awayAvg = getAverage(selectedMatchDetails.recent_away_matches, m, false, true);
                   const unit = m === 'possession' ? '%' : '';
                   
-                  // Skip keys that have no cached values at all to prevent empty clutter rows
                   if (h2hAvg === null && homeAvg === null && awayAvg === null) return null;
+                  
+                  const totalVal = (homeAvg || 0) + (awayAvg || 0);
+                  const pctH = totalVal > 0 ? ((homeAvg || 0) / totalVal) * 100 : 50;
+                  const pctA = 100 - pctH;
 
                   return (
-                    <div key={m} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', padding: '7px 0', borderBottom: '1px solid rgba(255,255,255,0.02)', alignItems: 'center' }}>
-                      <span style={{ width: '40%', minWidth: '150px', fontWeight: 700, color: 'var(--text-secondary)' }}>
-                        {getMetricTitle(m)}
-                      </span>
-                      <span style={{ width: '20%', textAlign: 'center', fontWeight: 700, color: 'var(--color-success)' }}>
-                        {homeAvg !== null ? `${homeAvg}${unit}` : 'N/A'}
-                      </span>
-                      <span style={{ width: '20%', textAlign: 'center', fontWeight: 800, color: 'var(--color-accent-solid)' }}>
-                        {h2hAvg !== null ? `${h2hAvg}${unit}` : 'N/A'}
-                      </span>
-                      <span style={{ width: '20%', textAlign: 'center', fontWeight: 700, color: 'var(--color-danger)' }}>
-                        {awayAvg !== null ? `${awayAvg}${unit}` : 'N/A'}
-                      </span>
+                    <div key={m} style={{ 
+                      display: 'flex', 
+                      flexDirection: 'column',
+                      padding: '8px 0', 
+                      borderBottom: '1px solid rgba(255, 255, 255, 0.02)'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', alignItems: 'center' }}>
+                        <span style={{ width: '40%', minWidth: '150px', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                          {getMetricTitle(m)}
+                        </span>
+                        <span style={{ width: '20%', textAlign: 'center', fontWeight: 700, color: 'var(--color-success)' }}>
+                          {homeAvg !== null ? `${homeAvg}${unit}` : 'N/A'}
+                        </span>
+                        <span style={{ width: '20%', textAlign: 'center', fontWeight: 800, color: 'var(--color-accent-solid)' }}>
+                          {h2hAvg !== null ? `${h2hAvg}${unit}` : 'N/A'}
+                        </span>
+                        <span style={{ width: '20%', textAlign: 'center', fontWeight: 700, color: 'var(--color-danger)' }}>
+                          {awayAvg !== null ? `${awayAvg}${unit}` : 'N/A'}
+                        </span>
+                      </div>
+                      
+                      {/* Mini inline split progress line */}
+                      {homeAvg !== null && awayAvg !== null && (
+                        <div style={{ height: '2px', width: '100%', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '1px', overflow: 'hidden', display: 'flex', marginTop: '5px' }}>
+                          <div style={{ width: `${pctH}%`, background: 'var(--color-success)', opacity: 0.6, height: '100%' }} />
+                          <div style={{ width: `${pctA}%`, background: 'var(--color-danger)', opacity: 0.6, height: '100%' }} />
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -479,21 +586,42 @@ export default function MatchDetailsModal({
         ) : (
           /* Dynamic Averages Grid */
           <div className="grid-3" style={{ gap: '12px', marginBottom: '24px' }}>
-            <div style={{ background: 'rgba(9, 132, 227, 0.05)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(9, 132, 227, 0.15)', textAlign: 'center' }}>
-              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Moy. {metricTitle} H2H</span>
-              <p style={{ fontSize: '17px', fontWeight: 800, marginTop: '4px', color: 'var(--color-accent-solid)' }}>
+            <div style={{ 
+              background: 'linear-gradient(135deg, rgba(9, 132, 227, 0.08) 0%, rgba(9, 132, 227, 0.01) 100%)', 
+              padding: '14px 12px', 
+              borderRadius: '10px', 
+              border: '1px solid rgba(9, 132, 227, 0.18)', 
+              textAlign: 'center',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+            }}>
+              <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Moy. {metricTitle} H2H</span>
+              <p style={{ fontSize: '18px', fontWeight: 800, marginTop: '4px', color: 'var(--color-accent-solid)', margin: 0, fontFamily: 'Outfit' }}>
                 {h2hAvg !== null ? `${h2hAvg}${metricUnit}` : 'N/A'}
               </p>
             </div>
-            <div style={{ background: 'rgba(16, 185, 129, 0.05)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.15)', textAlign: 'center' }}>
-              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Moy. {selectedMatchDetails.home_team}</span>
-              <p style={{ fontSize: '17px', fontWeight: 800, marginTop: '4px', color: 'var(--color-success)' }}>
+            <div style={{ 
+              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(16, 185, 129, 0.01) 100%)', 
+              padding: '14px 12px', 
+              borderRadius: '10px', 
+              border: '1px solid rgba(16, 185, 129, 0.18)', 
+              textAlign: 'center',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+            }}>
+              <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Moy. {selectedMatchDetails.home_team}</span>
+              <p style={{ fontSize: '18px', fontWeight: 800, marginTop: '4px', color: 'var(--color-success)', margin: 0, fontFamily: 'Outfit' }}>
                 {homeAvg !== null ? `${homeAvg}${metricUnit}` : 'N/A'}
               </p>
             </div>
-            <div style={{ background: 'rgba(235, 94, 40, 0.05)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(235, 94, 40, 0.15)', textAlign: 'center' }}>
-              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Moy. {selectedMatchDetails.away_team}</span>
-              <p style={{ fontSize: '17px', fontWeight: 800, marginTop: '4px', color: 'var(--color-danger)' }}>
+            <div style={{ 
+              background: 'linear-gradient(135deg, rgba(235, 94, 40, 0.08) 0%, rgba(235, 94, 40, 0.01) 100%)', 
+              padding: '14px 12px', 
+              borderRadius: '10px', 
+              border: '1px solid rgba(235, 94, 40, 0.15)', 
+              textAlign: 'center',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+            }}>
+              <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Moy. {selectedMatchDetails.away_team}</span>
+              <p style={{ fontSize: '18px', fontWeight: 800, marginTop: '4px', color: 'var(--color-danger)', margin: 0, fontFamily: 'Outfit' }}>
                 {awayAvg !== null ? `${awayAvg}${metricUnit}` : 'N/A'}
               </p>
             </div>
@@ -563,6 +691,7 @@ export default function MatchDetailsModal({
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px', scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
                   {selectedMatchDetails.recent_h2h_matches.map((m, idx) => {
                     const isExpanded = expandedRowKey === `h2h-${idx}`;
+                    const outcome = getOutcomeIndicator(m, selectedMatchDetails.home_team);
                     return (
                       <div 
                         key={idx} 
@@ -581,11 +710,32 @@ export default function MatchDetailsModal({
                         }}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', width: '85px', flexShrink: 0 }}>
-                            <span style={{ color: 'var(--text-secondary)', fontSize: '11px', fontWeight: 600 }}>{m.date}</span>
-                            {m.time && m.time !== 'Finished' && (
-                              <span style={{ color: 'var(--text-muted)', fontSize: '9.5px', fontFamily: 'Outfit' }}>{m.time}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', width: '115px', flexShrink: 0 }}>
+                            {outcome && (
+                              <span style={{ 
+                                display: 'inline-flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center', 
+                                width: '18px', 
+                                height: '18px', 
+                                borderRadius: '4px', 
+                                fontSize: '10px', 
+                                fontWeight: 800, 
+                                color: outcome.color, 
+                                background: outcome.bg, 
+                                border: outcome.border, 
+                                marginRight: '8px', 
+                                flexShrink: 0 
+                              }}>
+                                {outcome.label}
+                              </span>
                             )}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                              <span style={{ color: 'var(--text-secondary)', fontSize: '11px', fontWeight: 600 }}>{m.date}</span>
+                              {m.time && m.time !== 'Finished' && (
+                                <span style={{ color: 'var(--text-muted)', fontSize: '9.5px', fontFamily: 'Outfit' }}>{m.time}</span>
+                              )}
+                            </div>
                           </div>
                           
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexGrow: 1, justifyContent: 'center', padding: '0 8px' }}>
@@ -627,6 +777,7 @@ export default function MatchDetailsModal({
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px', scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
                   {selectedMatchDetails.recent_home_matches.map((m, idx) => {
                     const isExpanded = expandedRowKey === `home-${idx}`;
+                    const outcome = getOutcomeIndicator(m, selectedMatchDetails.home_team);
                     return (
                       <div 
                         key={idx} 
@@ -645,11 +796,32 @@ export default function MatchDetailsModal({
                         }}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', width: '85px', flexShrink: 0 }}>
-                            <span style={{ color: 'var(--text-secondary)', fontSize: '11px', fontWeight: 600 }}>{m.date}</span>
-                            {m.time && m.time !== 'Finished' && (
-                              <span style={{ color: 'var(--text-muted)', fontSize: '9.5px', fontFamily: 'Outfit' }}>{m.time}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', width: '115px', flexShrink: 0 }}>
+                            {outcome && (
+                              <span style={{ 
+                                display: 'inline-flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center', 
+                                width: '18px', 
+                                height: '18px', 
+                                borderRadius: '4px', 
+                                fontSize: '10px', 
+                                fontWeight: 800, 
+                                color: outcome.color, 
+                                background: outcome.bg, 
+                                border: outcome.border, 
+                                marginRight: '8px', 
+                                flexShrink: 0 
+                              }}>
+                                {outcome.label}
+                              </span>
                             )}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                              <span style={{ color: 'var(--text-secondary)', fontSize: '11px', fontWeight: 600 }}>{m.date}</span>
+                              {m.time && m.time !== 'Finished' && (
+                                <span style={{ color: 'var(--text-muted)', fontSize: '9.5px', fontFamily: 'Outfit' }}>{m.time}</span>
+                              )}
+                            </div>
                           </div>
                           
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexGrow: 1, justifyContent: 'center', padding: '0 8px' }}>
@@ -691,6 +863,7 @@ export default function MatchDetailsModal({
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px', scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
                   {selectedMatchDetails.recent_away_matches.map((m, idx) => {
                     const isExpanded = expandedRowKey === `away-${idx}`;
+                    const outcome = getOutcomeIndicator(m, selectedMatchDetails.away_team);
                     return (
                       <div 
                         key={idx} 
@@ -709,11 +882,32 @@ export default function MatchDetailsModal({
                         }}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', width: '85px', flexShrink: 0 }}>
-                            <span style={{ color: 'var(--text-secondary)', fontSize: '11px', fontWeight: 600 }}>{m.date}</span>
-                            {m.time && m.time !== 'Finished' && (
-                              <span style={{ color: 'var(--text-muted)', fontSize: '9.5px', fontFamily: 'Outfit' }}>{m.time}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', width: '115px', flexShrink: 0 }}>
+                            {outcome && (
+                              <span style={{ 
+                                display: 'inline-flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center', 
+                                width: '18px', 
+                                height: '18px', 
+                                borderRadius: '4px', 
+                                fontSize: '10px', 
+                                fontWeight: 800, 
+                                color: outcome.color, 
+                                background: outcome.bg, 
+                                border: outcome.border, 
+                                marginRight: '8px', 
+                                flexShrink: 0 
+                              }}>
+                                {outcome.label}
+                              </span>
                             )}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                              <span style={{ color: 'var(--text-secondary)', fontSize: '11px', fontWeight: 600 }}>{m.date}</span>
+                              {m.time && m.time !== 'Finished' && (
+                                <span style={{ color: 'var(--text-muted)', fontSize: '9.5px', fontFamily: 'Outfit' }}>{m.time}</span>
+                              )}
+                            </div>
                           </div>
                           
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexGrow: 1, justifyContent: 'center', padding: '0 8px' }}>
