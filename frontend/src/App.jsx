@@ -85,10 +85,21 @@ export default function App() {
   };
 
   const [toasts, setToasts] = useState([]);
+  const [notifications, setNotifications] = useState([
+    { id: 'init', message: 'Bienvenue sur votre tableau de bord Predictix !', type: 'info', timestamp: 'À l\'instant', read: false }
+  ]);
 
   const showToast = (message, type = 'success') => {
     const id = Date.now() + Math.random().toString(36).substr(2, 9);
     setToasts(prev => [...prev, { id, message, type }]);
+    
+    // Add to notification history
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    setNotifications(prev => [
+      { id, message, type, timestamp: timeStr, read: false },
+      ...prev
+    ]);
     
     // Auto-remove after 4 seconds
     setTimeout(() => {
@@ -1037,6 +1048,8 @@ export default function App() {
           theme={theme}
           setTheme={setTheme}
           bankroll={bankroll}
+          notifications={notifications}
+          setNotifications={setNotifications}
         />
 
         <div className="page-body">
