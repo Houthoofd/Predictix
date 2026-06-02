@@ -228,11 +228,16 @@ export async function scrapeSingleMatch(scraperPath, link, skipOdds = false, onS
 /**
  * Execute discovery of matches via Go scraper batch script
  */
-export function runDiscoveryProcess(scraperPath, scriptName, outputDirs, onSpawn = null) {
+export function runDiscoveryProcess(scraperPath, scriptName, outputDirs, targetDate = null, onSpawn = null) {
   return new Promise((resolve, reject) => {
-    console.log(`[Predictix Discovery] Starting discovery in ${scraperPath}...`);
+    console.log(`[Predictix Discovery] Starting discovery in ${scraperPath} for date: ${targetDate || 'today'}...`);
     
-    const child = spawn('cmd.exe', ['/c', scriptName, 'verbose', '0', 'discover'], {
+    const args = ['/c', scriptName, 'verbose', '0', 'discover'];
+    if (targetDate) {
+      args.push(targetDate);
+    }
+    
+    const child = spawn('cmd.exe', args, {
       cwd: scraperPath,
       env: { ...process.env, FORCE_COLOR: '1' }
     });
@@ -306,7 +311,8 @@ export async function crawlH2HLinksBatch(linksToScrape, scraperPath, options = {
     shouldStop = () => false, 
     log = console.log,
     importHistoricalMatch,
-    importSkippedMatch
+    importSkippedMatch,
+    onH2HScraped
   } = options;
   
   for (let i = 0; i < linksToScrape.length; i += concurrency) {
@@ -317,14 +323,20 @@ export async function crawlH2HLinksBatch(linksToScrape, scraperPath, options = {
       if (shouldStop()) return;
       
       const histMatch = await scrapeSingleMatch(scraperPath, link, true, onSpawn);
-
+ 
       if (histMatch && histMatch.home_team && histMatch.away_team) {
         if (importHistoricalMatch) await importHistoricalMatch(link, histMatch);
+        if (onH2HScraped) {
+          onH2HScraped({ ...histMatch, match_url: histMatch.match_url || link });
+        }
         const homeClean = histMatch.home_team.replace(/[▲▼]/g, '').trim();
         const awayClean = histMatch.away_team.replace(/[▲▼]/g, '').trim();
         const scoreText = histMatch.score ? ` (Score: ${histMatch.score})` : '';
         const dateText = histMatch.date ? ` (Date: ${histMatch.date})` : '';
-        log(`✓ Confrontation importée : ${homeClean} vs ${awayClean}${dateText}${scoreText}`);
+        const cornersText = (histMatch.first_half_corners_home !== null && histMatch.first_half_corners_home !== undefined) 
+          ? ` (Corners 1ère MT: ${histMatch.first_half_corners_home} - ${histMatch.first_half_corners_away})` 
+          : '';
+        log(`✓ Confrontation importée : ${homeClean} vs ${awayClean}${dateText}${scoreText}${cornersText}`);
       } else {
         if (importSkippedMatch) await importSkippedMatch(link);
         log(`✓ Confrontation sautée (échec du crawl) : ${link}`);

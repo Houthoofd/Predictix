@@ -11,7 +11,9 @@ import {
   RefreshCw,
   MoreVertical,
   ShoppingCart,
-  Zap
+  Zap,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 // Pure Poisson CDF calculations and helper functions
@@ -30,23 +32,98 @@ const poissonOver = (lambda, line) => {
   return 1 - poissonUnder(lambda, line);
 };
 
-function getMetricExplanation(key) {
+const factCache = [1, 1];
+const factorial = (n) => {
+  if (n < 0) return 0;
+  if (factCache[n] !== undefined) return factCache[n];
+  let res = factCache[factCache.length - 1];
+  for (let i = factCache.length; i <= n; i++) {
+    res *= i;
+    factCache[i] = res;
+  }
+  return res;
+};
+
+const choose = (n, k) => {
+  if (k < 0 || k > n) return 0;
+  return factorial(n) / (factorial(k) * factorial(n - k));
+};
+
+const bivariatePoissonPMF = (x, y, meanHome, meanAway, cov) => {
+  const l3 = Math.max(0, Math.min(cov, Math.min(meanHome, meanAway) - 0.05));
+  const l1 = Math.max(0.05, meanHome - l3);
+  const l2 = Math.max(0.05, meanAway - l3);
+
+  const expPart = Math.exp(-(l1 + l2 + l3));
+  const term1 = Math.pow(l1, x) / factorial(x);
+  const term2 = Math.pow(l2, y) / factorial(y);
+
+  let sum = 0;
+  const minXY = Math.min(x, y);
+  for (let k = 0; k <= minXY; k++) {
+    const c1 = choose(x, k);
+    const c2 = choose(y, k);
+    const factK = factorial(k);
+    const mult = Math.pow(l3 / (l1 * l2), k);
+    sum += c1 * c2 * factK * mult;
+  }
+
+  return expPart * term1 * term2 * sum;
+};
+
+const bivariatePoissonUnder = (meanHome, meanAway, cov, line) => {
+  const maxVal = Math.floor(line);
+  let totalProb = 0;
+  for (let x = 0; x <= maxVal; x++) {
+    for (let y = 0; y <= maxVal - x; y++) {
+      totalProb += bivariatePoissonPMF(x, y, meanHome, meanAway, cov);
+    }
+  }
+  return totalProb;
+};
+
+const bivariatePoissonOver = (meanHome, meanAway, cov, line) => {
+  return 1 - bivariatePoissonUnder(meanHome, meanAway, cov, line);
+};
+
+const getMetricPeriodRatio = (metric, period) => {
+  if (period === 'full_time') return 1.0;
+  if (period === 'first_half') {
+    if (metric === 'yellow_cards' || metric === 'red_cards') return 0.30;
+    if (metric === 'fouls') return 0.48;
+    if (metric === 'offsides') return 0.50;
+    if (metric === 'xg_buts_attendus') return 0.45;
+    if (metric === 'corners') return 0.46;
+    return 0.47;
+  }
+  if (period === 'second_half') {
+    if (metric === 'yellow_cards' || metric === 'red_cards') return 0.70;
+    if (metric === 'fouls') return 0.52;
+    if (metric === 'offsides') return 0.50;
+    if (metric === 'xg_buts_attendus') return 0.55;
+    if (metric === 'corners') return 0.54;
+    return 0.53;
+  }
+  return 1.0;
+};
+
+const getMetricExplanation = (key) => {
   const explanations = {
-    corners: 'Corners cumulés des deux équipes tirés durant la première mi-temps uniquement. Exclut les corners accordés mais non tirés avant le coup de sifflet de l\'arbitre.',
-    fouls: 'Nombre total de fautes commises et sifflées par l\'arbitre durant le temps réglementaire (hors prolongations). Cumule les fautes des deux équipes sur le terrain.',
-    yellow_cards: 'Total des cartons jaunes attribués aux joueurs actifs sur le terrain pendant le temps réglementaire. Exclut les cartons distribués aux remplaçants ou au staff.',
-    red_cards: 'Total des cartons rouges (directs ou par second jaune consécutif) distribués aux joueurs actifs sur le terrain durant le temps réglementaire de la rencontre.',
-    shots_on_target: 'Tentatives de tirs de part et d\'autre qui entrent directement dans le but ou qui auraient franchi la ligne sans l\'intervention décisive du gardien ou du défenseur.',
-    shots: 'Somme cumulée de toutes les tentatives de tirs des deux clubs durant le match : inclut les tirs cadrés, tirs non-cadrés (hors-cadre) et tirs bloqués ou contrés.',
-    offsides: 'Total des positions de hors-jeu signalées par le corps arbitral durant la rencontre et ayant entraîné un coup franc indirect pour l\'équipe adverse.',
-    possession: 'Pourcentage moyen du temps de contrôle effectif du ballon par l\'équipe à domicile durant la rencontre, calculé sur les phases actives de passes.'
+    corners: 'Corners cumulés des deux équipes tirés durant la période spécifiée uniquement. Exclut les corners accordés mais non tirés.',
+    fouls: 'Nombre total de fautes commises et sifflées par l\'arbitre durant la période spécifiée.',
+    yellow_cards: 'Total des cartons jaunes attribués aux joueurs actifs sur le terrain pendant la période spécifiée.',
+    red_cards: 'Total des cartons rouges (directs ou par second jaune consécutif) distribués pendant la période spécifiée.',
+    shots_on_target: 'Tentatives de tirs de part et d\'autre qui entrent directement dans le but ou qui auraient franchi la ligne sans intervention décisive.',
+    shots: 'Somme cumulée de toutes les tentatives de tirs des deux clubs (cadrés, hors-cadre et contrés) durant la période.',
+    offsides: 'Total des positions de hors-jeu signalées par le corps arbitral durant la période spécifiée.',
+    possession: 'Pourcentage moyen du temps de contrôle effectif du ballon par l\'équipe à domicile.'
   };
   return explanations[key] || 'Indicateur statistique officiel de la rencontre évalué pour cette opportunité.';
-}
+};
 
-function getMetricTitle(key) {
+const getMetricTitle = (key) => {
   const titles = {
-    corners: 'Corners 1MT',
+    corners: 'Corners',
     fouls: 'Fautes Commises',
     yellow_cards: 'Cartons Jaunes',
     possession: 'Possession de Balle',
@@ -74,9 +151,9 @@ function getMetricTitle(key) {
     .split('_')
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
-}
+};
 
-function getAverage(matches, metric, isHomeOnly = false, isAwayOnly = false, homeTeam, awayTeam) {
+const getAverage = (matches, metric, isHomeOnly = false, isAwayOnly = false, homeTeam, awayTeam) => {
   if (!matches || !Array.isArray(matches) || matches.length === 0) return null;
   
   let sum = 0;
@@ -140,7 +217,69 @@ function getAverage(matches, metric, isHomeOnly = false, isAwayOnly = false, hom
   }
   
   return count > 0 ? parseFloat((sum / count).toFixed(1)) : null;
-}
+};
+
+const getMetricParameters = (matchDetails, metric, period) => {
+  if (!matchDetails) return null;
+  let meanHome = 0;
+  let meanAway = 0;
+  let cov = 0;
+  let isGBDT = false;
+
+  if (metric === 'corners' && matchDetails.gbdt_predictions) {
+    let gbdt = matchDetails.gbdt_predictions;
+    if (typeof gbdt === 'string') {
+      try { gbdt = JSON.parse(gbdt); } catch (e) {}
+    }
+    const pred = gbdt && gbdt[period];
+    if (pred) {
+      meanHome = parseFloat(pred.home_expected || pred.home_expected_corners || 0);
+      meanAway = parseFloat(pred.away_expected || pred.away_expected_corners || 0);
+      cov = parseFloat(pred.covariance || 0);
+      isGBDT = true;
+      return { meanHome, meanAway, cov, isGBDT };
+    }
+  }
+
+  // Fallback to historical averages
+  const hAvg = getAverage(matchDetails.recent_home_matches, metric, true, false, matchDetails.home_team, matchDetails.away_team);
+  const aAvg = getAverage(matchDetails.recent_away_matches, metric, false, true, matchDetails.home_team, matchDetails.away_team);
+
+  if (hAvg === null || aAvg === null) {
+    return null;
+  }
+
+  if (metric === 'corners') {
+    // Historical corners is 1st half. Scale it to the target period.
+    if (period === 'first_half') {
+      meanHome = hAvg;
+      meanAway = aAvg;
+    } else if (period === 'second_half') {
+      meanHome = hAvg * (0.54 / 0.46);
+      meanAway = aAvg * (0.54 / 0.46);
+    } else { // full_time
+      meanHome = hAvg / 0.46;
+      meanAway = aAvg / 0.46;
+    }
+  } else {
+    // Other metrics are full-time. Multiply by the ratio.
+    const ratio = getMetricPeriodRatio(metric, period);
+    meanHome = hAvg * ratio;
+    meanAway = aAvg * ratio;
+  }
+
+  return { meanHome, meanAway, cov: 0, isGBDT: false };
+};
+
+const getLinesToScan = (metric, period, lambda) => {
+  if (metric === 'corners') {
+    return period === 'full_time' ? [7.5, 8.5, 9.5, 10.5, 11.5] : [2.5, 3.5, 4.5, 5.5];
+  }
+  let standardLine = Math.round(lambda);
+  if (standardLine <= 0) standardLine = 1;
+  standardLine = standardLine - 0.5;
+  return [standardLine - 2, standardLine - 1, standardLine, standardLine + 1, standardLine + 2].filter(v => v >= 0.5);
+};
 
 const getValueBetsForMatch = (matchDetails) => {
   if (!matchDetails) return [];
@@ -170,36 +309,54 @@ const getValueBetsForMatch = (matchDetails) => {
   }
   
   const metricsToScan = Array.from(availableMetricsSet).filter(m => popularMarkets.includes(m));
-  
+  const periods = ['first_half', 'second_half', 'full_time'];
+  const periodLabels = {
+    first_half: '1ère MT',
+    second_half: '2ème MT',
+    full_time: 'Match'
+  };
+
   for (const m of metricsToScan) {
-    const homeAvg = getAverage(matchDetails.recent_home_matches, m, true, false, matchDetails.home_team, matchDetails.away_team);
-    const awayAvg = getAverage(matchDetails.recent_away_matches, m, false, true, matchDetails.home_team, matchDetails.away_team);
-    
-    if (homeAvg !== null && awayAvg !== null) {
-      const lambda = homeAvg + awayAvg;
+    for (const p of periods) {
+      const params = getMetricParameters(matchDetails, m, p);
+      if (!params) continue;
+      const { meanHome, meanAway, cov } = params;
+      const lambda = meanHome + meanAway;
       
-      const startK = Math.max(0, Math.floor(lambda) - 4);
-      const endK = Math.ceil(lambda) + 4;
-      
-      for (let k = startK; k <= endK; k++) {
-        const line = k + 0.5;
-        const overProb = poissonOver(lambda, line);
-        const underProb = poissonUnder(lambda, line);
+      const lines = getLinesToScan(m, p, lambda);
+      for (const line of lines) {
+        let overProb = 0;
+        let underProb = 0;
         
-        if (overProb >= 0.53 && overProb <= 0.70) {
+        if (cov === 0) {
+          underProb = poissonUnder(lambda, line);
+          overProb = 1 - underProb;
+        } else {
+          underProb = bivariatePoissonUnder(meanHome, meanAway, cov, line);
+          overProb = 1 - underProb;
+        }
+        
+        const overBookieOdds = overProb > 0 ? 0.93 / overProb : 99;
+        const underBookieOdds = underProb > 0 ? 0.93 / underProb : 99;
+        
+        if (overBookieOdds >= 1.45 && overBookieOdds <= 1.90) {
           list.push({
             metric: m,
-            metricTitle: getMetricTitle(m),
+            metricTitle: `${getMetricTitle(m)} (${periodLabels[p]})`,
+            period: p,
+            periodLabel: periodLabels[p],
             line,
             tip: 'Plus de',
             probability: Math.round(overProb * 100),
             fairOdds: 1 / overProb
           });
         }
-        if (underProb >= 0.53 && underProb <= 0.70) {
+        if (underBookieOdds >= 1.45 && underBookieOdds <= 1.90) {
           list.push({
             metric: m,
-            metricTitle: getMetricTitle(m),
+            metricTitle: `${getMetricTitle(m)} (${periodLabels[p]})`,
+            period: p,
+            periodLabel: periodLabels[p],
             line,
             tip: 'Moins de',
             probability: Math.round(underProb * 100),
@@ -211,6 +368,31 @@ const getValueBetsForMatch = (matchDetails) => {
   }
   
   return list.sort((a, b) => b.probability - a.probability);
+};
+
+const scanAllValueBets = (predictions) => {
+  if (!predictions || !Array.isArray(predictions)) return [];
+  
+  const allBets = [];
+  for (const match of predictions) {
+    const valueBets = getValueBetsForMatch(match);
+    for (const vb of valueBets) {
+      allBets.push({
+        ...vb,
+        match_id: match.match_id,
+        home_team: match.home_team,
+        away_team: match.away_team,
+        home_logo: match.home_logo,
+        away_logo: match.away_logo,
+        date: match.date,
+        time: match.time,
+        tournament: match.tournament,
+        match_url: match.match_url
+      });
+    }
+  }
+  
+  return allBets.sort((a, b) => b.probability - a.probability);
 };
 
 const formatHumanDate = (dateStr) => {
@@ -246,6 +428,18 @@ export default function MagicPredictionsTab({
   const [filterMetric, setFilterMetric] = React.useState('all');
   const [selectedBets, setSelectedBets] = React.useState({});
   const [activeKebabId, setActiveKebabId] = React.useState(null);
+  const [sortBy, setSortBy] = React.useState('date'); // 'date' or 'confidence'
+  const scannerCarouselRef = React.useRef(null);
+
+  const scrollScanner = (direction) => {
+    if (scannerCarouselRef.current) {
+      const scrollAmount = 306; // Card width (290) + gap (16)
+      scannerCarouselRef.current.scrollBy({
+        left: direction === 'left' ? -scrollAmount : scrollAmount,
+        behavior: 'smooth'
+      });
+    }
+  };
 
   React.useEffect(() => {
     const handleOutsideClick = () => {
@@ -320,6 +514,596 @@ export default function MagicPredictionsTab({
     ? signals 
     : signals.filter(s => s.metric === filterMetric);
 
+  // Helper card renderer
+  const renderSignalCard = (sig) => {
+    const isPossession = sig.metric === 'possession';
+    const isSelected = selectedPredIds && selectedPredIds.includes(sig.match_id);
+
+    const matchDetails = (predictions || []).find(p => p.match_id === sig.match_id);
+    const valueBets = getValueBetsForMatch(matchDetails);
+    
+    const defaultBet = valueBets.find(b => b.metric === sig.metric) || (valueBets.length > 0 ? valueBets[0] : null);
+    const currentBet = selectedBets[sig.id] || defaultBet;
+    const activeBetMetric = currentBet ? currentBet.metric : sig.metric;
+
+    const simulatedOddsStr = currentBet ? (currentBet.fairOdds * 0.93).toFixed(2) : '1.90';
+
+    const mappedPred = currentBet ? {
+      match_id: sig.match_id,
+      date: sig.date,
+      time: sig.time,
+      tournament: sig.tournament,
+      home_team: sig.home_team,
+      away_team: sig.away_team,
+      best_tip: currentBet.tip === 'Plus de' ? 'Over' : 'Under',
+      card_line: String(currentBet.line),
+      probability: `${currentBet.probability}%`,
+      win_rate: `${currentBet.probability}%`,
+      over_odds: simulatedOddsStr,
+      under_odds: simulatedOddsStr,
+      notes: `Placé depuis les Pronostics Magiques. Marché: ${currentBet.metricTitle} (${currentBet.tip} ${currentBet.line})`,
+      match_url: sig.match_url || ''
+    } : {
+      match_id: sig.match_id,
+      date: sig.date,
+      time: sig.time,
+      tournament: sig.tournament,
+      home_team: sig.home_team,
+      away_team: sig.away_team,
+      best_tip: isPossession ? 'Possession' : `Plus de`,
+      card_line: isPossession ? `${sig.threshold}%` : `${sig.threshold}`,
+      odds_corners: [],
+      probability: '75%',
+      win_rate: '65%',
+      over_odds: isPossession ? '1.85' : '1.90',
+      under_odds: '1.80',
+      notes: `Placé depuis les Pronostics Magiques. Règle: ${sig.strategy_name}`,
+      match_url: sig.match_url || ''
+    };
+
+    return (
+      <div 
+        key={sig.id} 
+        className="glass-card magic-signal-card"
+        onClick={() => {
+          if (typeof setSelectedMatchDetails === 'function') {
+            setSelectedMatchDetails(matchDetails || mappedPred);
+          }
+        }}
+        style={{ 
+          display: 'flex', 
+          flexDirection: 'column', 
+          justifyContent: 'space-between', 
+          gap: '20px',
+          position: 'relative',
+          overflow: 'visible',
+          border: isSelected 
+            ? '1.5px solid #bf5af2' 
+            : '1px solid var(--border-color)',
+          boxShadow: 'none',
+          transform: isSelected ? 'translateY(-2px)' : 'translateY(0)',
+          cursor: 'pointer',
+          borderRadius: '16px',
+          transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.borderColor = isSelected ? '#bf5af2' : 'rgba(191, 90, 242, 0.5)';
+          e.currentTarget.style.transform = 'translateY(-4px)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.borderColor = isSelected ? '#bf5af2' : 'var(--border-color)';
+          e.currentTarget.style.transform = isSelected ? 'translateY(-2px)' : 'translateY(0)';
+        }}
+      >
+        {/* Glow Badge for Recommended Bet */}
+        {valueBets.length > 0 && currentBet && currentBet.probability === valueBets[0].probability && (
+          <div style={{
+            position: 'absolute',
+            top: '-10px',
+            left: '20px',
+            background: 'linear-gradient(135deg, #bf5af2 0%, #0082ff 100%)',
+            color: '#fff',
+            padding: '3px 10px',
+            borderRadius: '12px',
+            fontSize: '10.5px',
+            fontWeight: 800,
+            boxShadow: '0 4px 12px rgba(191, 90, 242, 0.35)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            zIndex: 2,
+            border: '1px solid rgba(255,255,255,0.1)'
+          }}>
+            <span>Pari Recommandé</span>
+          </div>
+        )}
+
+        <div style={{ zIndex: 1 }}>
+          {/* Top line with Tournament & Metric Badge */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }} onClick={(e) => e.stopPropagation()}>
+              <input 
+                type="checkbox" 
+                checked={isSelected}
+                onChange={() => {
+                  if (isSelected) {
+                    setSelectedPredIds(prev => prev.filter(id => id !== sig.match_id));
+                  } else {
+                    setSelectedPredIds(prev => [...prev, sig.match_id]);
+                  }
+                }}
+                style={{ 
+                  width: '16px', 
+                  height: '16px', 
+                  cursor: 'pointer',
+                  accentColor: '#bf5af2'
+                }}
+              />
+              <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                {sig.tournament}
+              </span>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span className="badge" style={getMetricBadgeStyle(activeBetMetric)}>
+                  {getMetricLabel(activeBetMetric)}
+                </span>
+                <div className="tooltip-container" onClick={(e) => e.stopPropagation()}>
+                  <Info 
+                    size={13} 
+                    style={{ color: '#bf5af2', opacity: 0.8, cursor: 'help' }} 
+                  />
+                  <div className="tooltip-content" style={{
+                    position: 'absolute',
+                    bottom: '100%',
+                    right: '0',
+                    marginBottom: '8px',
+                    background: 'rgba(20, 20, 22, 0.97)',
+                    border: '1px solid rgba(191, 90, 242, 0.35)',
+                    color: 'var(--text-primary)',
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    fontSize: '11.5px',
+                    fontFamily: 'Outfit',
+                    fontWeight: 500,
+                    whiteSpace: 'normal',
+                    width: '260px',
+                    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.05)',
+                    zIndex: 100,
+                    pointerEvents: 'none',
+                    opacity: 0,
+                    transform: 'translateY(6px)',
+                    transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
+                    textAlign: 'left',
+                    lineHeight: '1.45'
+                  }}>
+                    <div style={{ fontWeight: 700, color: '#bf5af2', marginBottom: '4px', fontSize: '12px' }}>
+                      {getMetricLabel(activeBetMetric)}
+                    </div>
+                    {getMetricExplanation(activeBetMetric)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Teams info */}
+          <h4 style={{ fontSize: '16px', fontFamily: 'Outfit', lineHeight: 1.3, marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {sig.home_logo ? (
+              <img src={sig.home_logo} alt="" referrerPolicy="no-referrer" style={{ width: '20px', height: '20px', borderRadius: '50%', objectFit: 'contain' }} />
+            ) : (
+              <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'var(--bg-tertiary)' }} />
+            )}
+            <span>{sig.home_team}</span>
+          </h4>
+          <h4 style={{ fontSize: '16px', fontFamily: 'Outfit', lineHeight: 1.3, marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {sig.away_logo ? (
+              <img src={sig.away_logo} alt="" referrerPolicy="no-referrer" style={{ width: '20px', height: '20px', borderRadius: '50%', objectFit: 'contain' }} />
+            ) : (
+              <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'var(--bg-tertiary)' }} />
+            )}
+            <span>{sig.away_team}</span>
+          </h4>
+
+          {/* Date & Time metadata */}
+          <div style={{ display: 'flex', gap: '12px', fontSize: '11.5px', color: 'var(--text-muted)', marginBottom: '16px', alignItems: 'center' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Calendar size={12} style={{ opacity: 0.6 }} />
+              {sig.date}
+            </span>
+            <span>•</span>
+            <span>{sig.time}</span>
+          </div>
+        </div>
+
+        {/* Bottom section with statistics detail & Action button */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', zIndex: 1 }}>
+          
+          {/* Dynamic sweet-spot Value Bets Dropdown Selector */}
+          {valueBets.length > 0 && (() => {
+            const activeBet = currentBet || valueBets[0];
+            const activeBetMetric = activeBet.metric;
+            const activePeriod = activeBet.period || 'full_time';
+            
+            const params = getMetricParameters(matchDetails, activeBetMetric, activePeriod);
+            const meanHome = params ? params.meanHome : 0;
+            const meanAway = params ? params.meanAway : 0;
+            const lambda = params ? (meanHome + meanAway) : null;
+            
+            const h2hAvg = matchDetails 
+              ? getAverage(matchDetails.recent_h2h_matches, activeBetMetric, false, false, matchDetails.home_team, matchDetails.away_team) 
+              : null;
+
+            return (
+              <div style={{ 
+                background: 'rgba(191, 90, 242, 0.05)',
+                border: '1px solid rgba(191, 90, 242, 0.22)',
+                padding: '10px 12px',
+                borderRadius: '10px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '6px',
+                boxShadow: 'inset 0 1px 4px rgba(191, 90, 242, 0.01)'
+              }} onClick={(e) => e.stopPropagation()}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '9px', fontWeight: 800, color: '#bf5af2', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span>VALUE BETS CALIBRÉS</span>
+                  </span>
+                  <span style={{ fontSize: '9px', color: 'var(--text-muted)', fontWeight: 600 }}>
+                    {valueBets.length} opportunité{valueBets.length > 1 ? 's' : ''}
+                  </span>
+                </div>
+                
+                {valueBets.length > 1 ? (
+                  <select
+                    value={JSON.stringify(activeBet)}
+                    onChange={(e) => {
+                      const chosen = JSON.parse(e.target.value);
+                      setSelectedBets(prev => ({ ...prev, [sig.id]: chosen }));
+                    }}
+                    style={{
+                      width: '100%',
+                      background: 'rgba(0, 0, 0, 0.25)',
+                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                      color: 'var(--text-primary)',
+                      borderRadius: '6px',
+                      padding: '5px 8px',
+                      fontSize: '11.5px',
+                      fontFamily: 'Outfit',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      outline: 'none'
+                    }}
+                  >
+                    {valueBets.map((bet, idx) => (
+                      <option key={idx} value={JSON.stringify(bet)} style={{ background: '#1c1c1e', color: '#fff' }}>
+                        {bet.tip} {bet.line} {bet.metricTitle} @ {(bet.fairOdds * 0.93).toFixed(2)} ({bet.probability}%)
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div style={{ 
+                    fontSize: '12px', 
+                    fontWeight: 700, 
+                    color: 'var(--text-primary)', 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center',
+                    padding: '2px 0'
+                  }}>
+                    <span>{activeBet.tip} {activeBet.line} {activeBet.metricTitle}</span>
+                    <span style={{ color: 'var(--color-success)', fontSize: '11px', background: 'rgba(16, 185, 129, 0.08)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(16, 185, 129, 0.12)' }}>
+                      @{(activeBet.fairOdds * 0.93).toFixed(2)}
+                    </span>
+                  </div>
+                )}
+
+                {/* Premium Poisson Statistical Explanation Box */}
+                {activeBetMetric === 'corners' && matchDetails && matchDetails.gbdt_predictions ? (
+                  <div style={{
+                    background: 'rgba(191, 90, 242, 0.04)',
+                    border: '1px solid rgba(191, 90, 242, 0.15)',
+                    borderRadius: '10px',
+                    padding: '12px',
+                    marginTop: '6px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '10px', fontWeight: 800, color: '#bf5af2', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Sparkles size={11} /> Prédictions GBDT (Poisson Bivarié)
+                      </span>
+                      <span style={{ fontSize: '9px', color: 'var(--text-muted)', fontWeight: 600 }}>
+                        3 périodes modélisées
+                      </span>
+                    </div>
+
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr 1fr',
+                      gap: '8px',
+                    }}>
+                      {/* 1ère Mi-Temps */}
+                      <div style={{
+                        background: 'rgba(0, 0, 0, 0.25)',
+                        border: '1px solid rgba(255, 255, 255, 0.04)',
+                        borderRadius: '8px',
+                        padding: '8px',
+                        textAlign: 'center',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '4px'
+                      }}>
+                        <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-secondary)' }}>1ère MT</div>
+                        <div style={{ fontSize: '15px', fontWeight: 800, color: '#bf5af2' }}>
+                          {(() => {
+                            let gbdt = matchDetails.gbdt_predictions;
+                            if (typeof gbdt === 'string') {
+                              try { gbdt = JSON.parse(gbdt); } catch(e) {}
+                            }
+                            return gbdt?.first_half?.expected || 'N/A';
+                          })()}
+                          <span style={{ fontSize: '9px', color: 'var(--text-muted)', marginLeft: '2px', fontWeight: 500 }}>corn.</span>
+                        </div>
+                      </div>
+
+                      {/* 2ème Mi-Temps */}
+                      <div style={{
+                        background: 'rgba(0, 0, 0, 0.25)',
+                        border: '1px solid rgba(255, 255, 255, 0.04)',
+                        borderRadius: '8px',
+                        padding: '8px',
+                        textAlign: 'center',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '4px'
+                      }}>
+                        <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-secondary)' }}>2ème MT</div>
+                        <div style={{ fontSize: '15px', fontWeight: 800, color: '#bf5af2' }}>
+                          {(() => {
+                            let gbdt = matchDetails.gbdt_predictions;
+                            if (typeof gbdt === 'string') {
+                              try { gbdt = JSON.parse(gbdt); } catch(e) {}
+                            }
+                            return gbdt?.second_half?.expected || 'N/A';
+                          })()}
+                          <span style={{ fontSize: '9px', color: 'var(--text-muted)', marginLeft: '2px', fontWeight: 500 }}>corn.</span>
+                        </div>
+                      </div>
+
+                      {/* Match Entier */}
+                      <div style={{
+                        background: 'rgba(0, 0, 0, 0.25)',
+                        border: '1px solid rgba(255, 255, 255, 0.04)',
+                        borderRadius: '8px',
+                        padding: '8px',
+                        textAlign: 'center',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '4px'
+                      }}>
+                        <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-secondary)' }}>Match</div>
+                        <div style={{ fontSize: '15px', fontWeight: 800, color: '#bf5af2' }}>
+                          {(() => {
+                            let gbdt = matchDetails.gbdt_predictions;
+                            if (typeof gbdt === 'string') {
+                              try { gbdt = JSON.parse(gbdt); } catch(e) {}
+                            }
+                            return gbdt?.full_time?.expected || 'N/A';
+                          })()}
+                          <span style={{ fontSize: '9px', color: 'var(--text-muted)', marginLeft: '2px', fontWeight: 500 }}>corn.</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  lambda !== null && (
+                    <div style={{
+                      fontSize: '11px',
+                      color: 'var(--text-secondary)',
+                      background: 'rgba(0, 0, 0, 0.2)',
+                      border: '1px solid rgba(255, 255, 255, 0.04)',
+                      borderRadius: '6px',
+                      padding: '8px 10px',
+                      marginTop: '4px',
+                      lineHeight: '1.45'
+                    }}>
+                      Loi de Poisson estime <strong style={{ color: 'var(--color-success)' }}>{activeBet.probability}%</strong> de probabilité de voir {activeBet.tip.toLowerCase()} {activeBet.line} {getMetricLabel(activeBetMetric).toLowerCase()} ({activeBet.periodLabel}). 
+                      Moyenne cumulée : <strong style={{ color: '#bf5af2' }}>{lambda.toFixed(1)}</strong> ({meanHome.toFixed(1)} Dom, {meanAway.toFixed(1)} Ext). 
+                      {h2hAvg !== null && ` Confrontations H2H: ${h2hAvg.toFixed(1)} en moyenne.`}
+                    </div>
+                  )
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Detailed average metrics */}
+          {(() => {
+            const activeBetMetric = currentBet ? currentBet.metric : sig.metric;
+            const activeH2hAvg = matchDetails 
+              ? getAverage(matchDetails.recent_h2h_matches, activeBetMetric, false, false, matchDetails.home_team, matchDetails.away_team) 
+              : null;
+            const displayAvg = (activeBetMetric === sig.metric && sig.avg_value !== undefined)
+              ? sig.avg_value
+              : (activeH2hAvg !== null ? activeH2hAvg : 'N/A');
+            const activeIsPossession = activeBetMetric === 'possession';
+
+            return (
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                background: 'var(--bg-tertiary)', 
+                padding: '10px 14px', 
+                borderRadius: '8px',
+                border: '1px solid var(--border-color)',
+                fontSize: '12.5px',
+                alignItems: 'center'
+              }}>
+                <span style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <TrendingUp size={13} style={{ color: 'var(--color-success)' }} />
+                  Moyenne H2H ({getMetricLabel(activeBetMetric)}) :
+                </span>
+                <strong style={{ fontSize: '14px', color: 'var(--text-primary)' }}>
+                  {displayAvg}{activeIsPossession ? '%' : ''}
+                </strong>
+              </div>
+            );
+          })()}
+
+          <div style={{ display: 'flex', gap: '10px' }}>
+            {/* View Details on click */}
+            <button 
+              className="btn btn-secondary"
+              style={{ padding: '0 12px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              title="Inspecter le match"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (typeof setSelectedMatchDetails === 'function') {
+                  setSelectedMatchDetails(matchDetails || mappedPred);
+                }
+              }}
+            >
+              <Eye size={16} />
+            </button>
+
+            {/* Quick Place Bet button */}
+            <button 
+              className="btn btn-primary" 
+              style={{ 
+                flexGrow: 1, 
+                height: '36px',
+                background: 'linear-gradient(135deg, #7f00ff 0%, #0082ff 100%)',
+                border: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px'
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleQuickPlaceBet(mappedPred);
+              }}
+            >
+              <Plus size={16} />
+              <span style={{ fontSize: '12.5px', fontWeight: 600 }}>Placer ce Pari</span>
+            </button>
+
+            {/* Kebab action dropdown */}
+            <div style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+              <button 
+                className="btn btn-secondary"
+                style={{ 
+                  padding: '0 8px', 
+                  height: '36px', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  borderColor: activeKebabId === sig.id ? '#bf5af2' : undefined,
+                  background: activeKebabId === sig.id ? 'rgba(191, 90, 242, 0.15)' : undefined
+                }}
+                title="Plus d'actions"
+                onClick={(e) => toggleKebab(e, sig.id)}
+              >
+                <MoreVertical size={16} />
+              </button>
+
+              {activeKebabId === sig.id && (
+                <div style={{
+                  position: 'absolute',
+                  bottom: '100%',
+                  right: 0,
+                  marginBottom: '8px',
+                  background: 'rgba(20, 20, 22, 0.97)',
+                  backdropFilter: 'blur(10px)',
+                  border: '1px solid rgba(191, 90, 242, 0.35)',
+                  borderRadius: '10px',
+                  padding: '6px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px',
+                  width: '180px',
+                  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.05)',
+                  zIndex: 1000,
+                  animation: 'fadeIn 0.15s ease-out'
+                }}>
+                  <button
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '8px 12px',
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--text-primary)',
+                      textAlign: 'left',
+                      fontSize: '12.5px',
+                      fontFamily: 'Outfit',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      borderRadius: '6px',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                      e.currentTarget.style.color = '#bf5af2';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent';
+                      e.currentTarget.style.color = 'var(--text-primary)';
+                    }}
+                    onClick={() => {
+                      handleAddToBasket(mappedPred);
+                      setActiveKebabId(null);
+                    }}
+                  >
+                    <ShoppingCart size={14} />
+                    Ajouter au Panier
+                  </button>
+                  <button
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '8px 12px',
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--text-primary)',
+                      textAlign: 'left',
+                      fontSize: '12.5px',
+                      fontFamily: 'Outfit',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      borderRadius: '6px',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                      e.currentTarget.style.color = '#bf5af2';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent';
+                      e.currentTarget.style.color = 'var(--text-primary)';
+                    }}
+                    onClick={() => {
+                      handleInstantPlaceBet(mappedPred);
+                      setActiveKebabId(null);
+                    }}
+                  >
+                    <Zap size={14} style={{ color: '#ffb300' }} />
+                    Placement Direct
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
       
@@ -337,8 +1121,7 @@ export default function MagicPredictionsTab({
             </h3>
             <p style={{ color: 'var(--text-secondary)', lineHeight: 1.6, maxWidth: '900px' }}>
               Découvrez les opportunités de paris sportifs basées sur vos **stratégies sur-mesure**. 
-              Notre Screener réactif scrute en continu les statistiques des confrontations directes H2H pour repérer 
-              automatiquement les prochains matchs remplissant rigoureusement vos critères personnalisés (fautes, cartons, possession, tirs).
+              Pour tous les types de statistiques (corners, fautes, cartons, tirs), notre algorithme estime précisément les probabilités sur 3 périodes : **1ère Mi-Temps, 2ème Mi-Temps et Match Complet** grâce à la **distribution de Poisson Bivariée**.
             </p>
           </div>
           <button 
@@ -352,6 +1135,287 @@ export default function MagicPredictionsTab({
           </button>
         </div>
       </div>
+
+      {/* Top Value Bet Leaderboard Carousel */}
+      {predictions && predictions.length > 0 && (() => {
+        const allValueBets = scanAllValueBets(predictions);
+        const topBets = allValueBets.slice(0, 12);
+
+        if (topBets.length === 0) return null;
+
+        return (
+          <div className="glass-card" style={{
+            padding: '24px',
+            background: 'linear-gradient(135deg, rgba(20, 20, 22, 0.7) 0%, rgba(28, 28, 30, 0.7) 100%)',
+            border: '1px solid rgba(255, 255, 255, 0.05)',
+            borderRadius: '16px',
+            boxShadow: '0 12px 40px rgba(0, 0, 0, 0.4)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+              <div>
+                <h4 style={{ fontSize: '16px', fontFamily: 'Outfit', fontWeight: 800, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Sparkles size={18} style={{ color: '#bf5af2' }} />
+                  Scanner de Cibles Prioritaires (Côtes 1.45 - 1.90)
+                </h4>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
+                  Les opportunités les plus rentables classées par taux de réussite (probabilité décroissante).
+                </p>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)', background: 'rgba(191, 90, 242, 0.1)', padding: '4px 10px', borderRadius: '12px', border: '1px solid rgba(191, 90, 242, 0.2)', fontWeight: 700 }}>
+                  {allValueBets.length} opportunités scannées
+                </span>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button 
+                    onClick={() => scrollScanner('left')}
+                    className="btn btn-secondary"
+                    style={{ 
+                      padding: 0, 
+                      width: '32px', 
+                      height: '32px', 
+                      borderRadius: '50%', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center',
+                      background: 'rgba(255, 255, 255, 0.03)',
+                      border: '1px solid rgba(255, 255, 255, 0.06)',
+                      cursor: 'pointer'
+                    }}
+                    title="Précédent"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <button 
+                    onClick={() => scrollScanner('right')}
+                    className="btn btn-secondary"
+                    style={{ 
+                      padding: 0, 
+                      width: '32px', 
+                      height: '32px', 
+                      borderRadius: '50%', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center',
+                      background: 'rgba(255, 255, 255, 0.03)',
+                      border: '1px solid rgba(255, 255, 255, 0.06)',
+                      cursor: 'pointer'
+                    }}
+                    title="Suivant"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div 
+              ref={scannerCarouselRef}
+              className="no-scrollbar"
+              style={{
+                display: 'flex',
+                gap: '16px',
+                overflowX: 'auto',
+                paddingBottom: '8px',
+                scrollBehavior: 'smooth'
+              }}
+            >
+              {topBets.map((bet, idx) => {
+                const isOver = bet.tip === 'Plus de';
+                const calculatedBookieOdds = (bet.fairOdds * 0.93).toFixed(2);
+                
+                // Prepare mapped pred for basket/placement
+                const mappedPred = {
+                  match_id: bet.match_id,
+                  date: bet.date,
+                  time: bet.time,
+                  tournament: bet.tournament,
+                  home_team: bet.home_team,
+                  away_team: bet.away_team,
+                  best_tip: bet.tip === 'Plus de' ? 'Over' : 'Under',
+                  card_line: String(bet.line),
+                  probability: `${bet.probability}%`,
+                  win_rate: `${bet.probability}%`,
+                  over_odds: calculatedBookieOdds,
+                  under_odds: calculatedBookieOdds,
+                  notes: `Target Prioritaire #${idx+1} (${bet.metricTitle} - ${bet.tip} ${bet.line})`,
+                  match_url: bet.match_url || ''
+                };
+
+                return (
+                  <div key={idx} className="leaderboard-card" style={{
+                    flex: '0 0 290px',
+                    background: 'rgba(255, 255, 255, 0.02)',
+                    border: '1px solid rgba(255, 255, 255, 0.04)',
+                    borderRadius: '12px',
+                    padding: '16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    gap: '14px',
+                    transition: 'all 0.2s ease',
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = 'rgba(191, 90, 242, 0.4)';
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.04)';
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}>
+                    
+                    {/* Badge Rank */}
+                    <div style={{
+                      position: 'absolute',
+                      top: 0,
+                      right: 0,
+                      background: 'linear-gradient(135deg, #7f00ff 0%, #0082ff 100%)',
+                      color: '#fff',
+                      fontSize: '10px',
+                      fontWeight: 900,
+                      padding: '2px 8px 4px 8px',
+                      borderBottomLeftRadius: '8px'
+                    }}>
+                      #{idx + 1}
+                    </div>
+
+                    {/* Match Header info */}
+                    <div>
+                      <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 800, marginBottom: '6px', letterSpacing: '0.05em' }}>
+                        {bet.tournament}
+                      </div>
+                      
+                      {/* Team logos & names */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {bet.home_logo ? (
+                            <img src={bet.home_logo} alt="" referrerPolicy="no-referrer" style={{ width: '16px', height: '16px', borderRadius: '50%', objectFit: 'contain' }} />
+                          ) : (
+                            <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: 'rgba(255,255,255,0.05)' }} />
+                          )}
+                          <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '180px' }}>
+                            {bet.home_team}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {bet.away_logo ? (
+                            <img src={bet.away_logo} alt="" referrerPolicy="no-referrer" style={{ width: '16px', height: '16px', borderRadius: '50%', objectFit: 'contain' }} />
+                          ) : (
+                            <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: 'rgba(255,255,255,0.05)' }} />
+                          )}
+                          <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '180px' }}>
+                            {bet.away_team}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
+                        {bet.date} à {bet.time}
+                      </div>
+                    </div>
+
+                    {/* Prediction details & Prob ring */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.15)', padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.02)' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                        <span style={{ 
+                          fontSize: '11px', 
+                          fontWeight: 800, 
+                          color: isOver ? 'var(--color-success)' : '#bf5af2',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.04em'
+                        }}>
+                          {bet.tip} {bet.line}
+                        </span>
+                        <span style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                          {getMetricLabel(bet.metric)} ({bet.periodLabel})
+                        </span>
+                        <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--text-primary)', marginTop: '2px' }}>
+                          Cote : <span style={{ color: 'var(--color-success)' }}>@{calculatedBookieOdds}</span>
+                        </span>
+                      </div>
+
+                      {/* Circular indicator ring */}
+                      <div style={{
+                        position: 'relative',
+                        width: '46px',
+                        height: '46px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: '50%',
+                        background: `conic-gradient(#bf5af2 0% ${bet.probability}%, rgba(255, 255, 255, 0.05) ${bet.probability}% 100%)`,
+                        padding: '2.5px',
+                        boxShadow: '0 0 10px rgba(191, 90, 242, 0.15)'
+                      }}>
+                        <div style={{
+                          width: '100%',
+                          height: '100%',
+                          borderRadius: '50%',
+                          background: '#1c1c1e',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '10.5px',
+                          fontWeight: 800,
+                          color: '#fff'
+                        }}>
+                          {bet.probability}%
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        className="btn btn-secondary"
+                        style={{
+                          flex: 1,
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          height: '32px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '4px',
+                          padding: 0
+                        }}
+                        onClick={() => handleAddToBasket(mappedPred)}
+                      >
+                        <ShoppingCart size={13} />
+                        <span>Panier</span>
+                      </button>
+                      <button
+                        className="btn btn-primary"
+                        style={{
+                          flex: 1,
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          height: '32px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '4px',
+                          background: 'linear-gradient(135deg, #7f00ff 0%, #0082ff 100%)',
+                          border: 'none',
+                          padding: 0,
+                          cursor: 'pointer'
+                        }}
+                        onClick={() => handleQuickPlaceBet(mappedPred)}
+                      >
+                        <Plus size={13} />
+                        <span>Placer</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Filter and stats row */}
       {signals.length > 0 && (
@@ -375,7 +1439,31 @@ export default function MagicPredictionsTab({
             ))}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
+            {/* Global Sort Selector */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>Trier par :</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                style={{
+                  background: 'rgba(0, 0, 0, 0.25)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  color: 'var(--text-primary)',
+                  borderRadius: '8px',
+                  padding: '6px 12px',
+                  fontSize: '12.5px',
+                  fontFamily: 'Outfit',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  outline: 'none'
+                }}
+              >
+                <option value="date" style={{ background: '#1c1c1e', color: '#fff' }}>Date & Heure</option>
+                <option value="confidence" style={{ background: '#1c1c1e', color: '#fff' }}>Confiance (Probabilité %)</option>
+              </select>
+            </div>
+
             <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 600 }}>
               Signaux détectés : <strong style={{ color: '#bf5af2' }}>{filteredSignals.length}</strong>
             </span>
@@ -397,21 +1485,60 @@ export default function MagicPredictionsTab({
         </div>
       ) : filteredSignals.length > 0 ? (
         (() => {
-          const dateGroups = {};
-          filteredSignals.forEach(sig => {
-            const dateVal = sig.date || 'Date inconnue';
-            if (!dateGroups[dateVal]) dateGroups[dateVal] = [];
-            dateGroups[dateVal].push(sig);
-          });
+          if (sortBy === 'date') {
+            const dateGroups = {};
+            filteredSignals.forEach(sig => {
+              const dateVal = sig.date || 'Date inconnue';
+              if (!dateGroups[dateVal]) dateGroups[dateVal] = [];
+              dateGroups[dateVal].push(sig);
+            });
 
-          const sortedDates = Object.keys(dateGroups).sort((a, b) => b.localeCompare(a));
+            const sortedDates = Object.keys(dateGroups).sort((a, b) => b.localeCompare(a));
 
-          return sortedDates.map((dateStr, dIdx) => {
-            const signalsInDate = dateGroups[dateStr];
+            return sortedDates.map((dateStr, dIdx) => {
+              const signalsInDate = dateGroups[dateStr];
+
+              return (
+                <div key={dIdx} style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
+                  {/* Date Section Header */}
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '8px', 
+                    padding: '8px 0', 
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                    fontFamily: 'Outfit',
+                    fontSize: '15px',
+                    fontWeight: 800,
+                    color: 'var(--text-primary)'
+                  }}>
+                    <Calendar size={16} style={{ color: '#bf5af2' }} />
+                    <span>{formatHumanDate(dateStr)}</span>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500, background: 'rgba(255, 255, 255, 0.05)', padding: '2px 8px', borderRadius: '10px', marginLeft: '6px' }}>
+                      {signalsInDate.length} signal{signalsInDate.length > 1 ? 'aux' : ''}
+                    </span>
+                  </div>
+
+                  <div className="grid-3" style={{ animation: 'fadeIn 0.3s ease-out' }}>
+                    {signalsInDate.map((sig) => renderSignalCard(sig))}
+                  </div>
+                </div>
+              );
+            });
+          } else {
+            // Sort by confidence
+            const sortedSignals = [...filteredSignals].sort((a, b) => {
+              const matchA = (predictions || []).find(p => p.match_id === a.match_id);
+              const matchB = (predictions || []).find(p => p.match_id === b.match_id);
+              const betsA = getValueBetsForMatch(matchA);
+              const betsAProb = betsA.length > 0 ? betsA[0].probability : 0;
+              const betsB = getValueBetsForMatch(matchB);
+              const betsBProb = betsB.length > 0 ? betsB[0].probability : 0;
+              return betsBProb - betsAProb;
+            });
 
             return (
-              <div key={dIdx} style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
-                {/* Date Section Header */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
                 <div style={{ 
                   display: 'flex', 
                   alignItems: 'center', 
@@ -423,489 +1550,15 @@ export default function MagicPredictionsTab({
                   fontWeight: 800,
                   color: 'var(--text-primary)'
                 }}>
-                  <Calendar size={16} style={{ color: '#bf5af2' }} />
-                  <span>{formatHumanDate(dateStr)}</span>
-                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500, background: 'rgba(255, 255, 255, 0.05)', padding: '2px 8px', borderRadius: '10px', marginLeft: '6px' }}>
-                    {signalsInDate.length} signal{signalsInDate.length > 1 ? 'aux' : ''}
-                  </span>
+                  <Sparkles size={16} style={{ color: '#bf5af2' }} />
+                  <span>Tous les signaux triés par Confiance (Probabilité décroissante)</span>
                 </div>
-
                 <div className="grid-3" style={{ animation: 'fadeIn 0.3s ease-out' }}>
-                  {signalsInDate.map((sig) => {
-                    const isPossession = sig.metric === 'possession';
-                    const isSelected = selectedPredIds && selectedPredIds.includes(sig.match_id);
-
-                    // Find full prediction details from props predictions
-                    const matchDetails = (predictions || []).find(p => p.match_id === sig.match_id);
-                    const valueBets = getValueBetsForMatch(matchDetails);
-                    
-                    // Selected value bet for this card:
-                    // 1. If manually selected, use it.
-                    // 2. Otherwise, prefer the value bet corresponding to the strategy's target metric (sig.metric).
-                    // 3. Otherwise, fallback to the top calculated value bet.
-                    const defaultBet = valueBets.find(b => b.metric === sig.metric) || (valueBets.length > 0 ? valueBets[0] : null);
-                    const currentBet = selectedBets[sig.id] || defaultBet;
-                    const activeBetMetric = currentBet ? currentBet.metric : sig.metric;
-
-                    // Adapt prediction format to match what AddBetModal/handleQuickPlaceBet expects
-                    const mappedPred = currentBet ? {
-                      match_id: sig.match_id,
-                      date: sig.date,
-                      time: sig.time,
-                      tournament: sig.tournament,
-                      home_team: sig.home_team,
-                      away_team: sig.away_team,
-                      best_tip: currentBet.tip === 'Plus de' ? 'Over' : 'Under',
-                      card_line: String(currentBet.line),
-                      probability: `${currentBet.probability}%`,
-                      win_rate: `${currentBet.probability}%`,
-                      over_odds: currentBet.fairOdds.toFixed(2),
-                      under_odds: currentBet.fairOdds.toFixed(2),
-                      notes: `Placé depuis les Pronostics Magiques. Marché: ${currentBet.metricTitle} (${currentBet.tip} ${currentBet.line})`,
-                      match_url: sig.match_url || ''
-                    } : {
-                      match_id: sig.match_id,
-                      date: sig.date,
-                      time: sig.time,
-                      tournament: sig.tournament,
-                      home_team: sig.home_team,
-                      away_team: sig.away_team,
-                      best_tip: isPossession ? 'Possession' : `Plus de`,
-                      card_line: isPossession ? `${sig.threshold}%` : `${sig.threshold}`,
-                      odds_corners: [],
-                      probability: '75%',
-                      win_rate: '65%',
-                      over_odds: isPossession ? '1.85' : '1.90',
-                      under_odds: '1.80',
-                      notes: `Placé depuis les Pronostics Magiques. Règle: ${sig.strategy_name}`,
-                      match_url: sig.match_url || ''
-                    };
-
-                    return (
-                      <div 
-                        key={sig.id} 
-                        className="glass-card magic-signal-card"
-                        onClick={() => {
-                          if (typeof setSelectedMatchDetails === 'function') {
-                            setSelectedMatchDetails(matchDetails || mappedPred);
-                          }
-                        }}
-                        style={{ 
-                          display: 'flex', 
-                          flexDirection: 'column', 
-                          justifyContent: 'space-between', 
-                          gap: '20px',
-                          position: 'relative',
-                          overflow: 'visible',
-                          border: isSelected 
-                            ? '1.5px solid #bf5af2' 
-                            : '1px solid var(--border-color)',
-                          boxShadow: 'none',
-                          transform: isSelected ? 'translateY(-2px)' : 'translateY(0)',
-                          cursor: 'pointer',
-                          borderRadius: '16px',
-                          transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)'
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.borderColor = isSelected ? '#bf5af2' : 'rgba(191, 90, 242, 0.5)';
-                          e.currentTarget.style.transform = 'translateY(-4px)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.borderColor = isSelected ? '#bf5af2' : 'var(--border-color)';
-                          e.currentTarget.style.transform = isSelected ? 'translateY(-2px)' : 'translateY(0)';
-                        }}
-                      >
-
-                        <div style={{ zIndex: 1 }}>
-                          {/* Top line with Tournament & Metric Badge */}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px', gap: '10px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }} onClick={(e) => e.stopPropagation()}>
-                              <input 
-                                type="checkbox" 
-                                checked={isSelected}
-                                onChange={() => {
-                                  if (isSelected) {
-                                    setSelectedPredIds(prev => prev.filter(id => id !== sig.match_id));
-                                  } else {
-                                    setSelectedPredIds(prev => [...prev, sig.match_id]);
-                                  }
-                                }}
-                                style={{ 
-                                  width: '16px', 
-                                  height: '16px', 
-                                  cursor: 'pointer',
-                                  accentColor: '#bf5af2'
-                                }}
-                              />
-                              <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                {sig.tournament}
-                              </span>
-                            </div>
-                            
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span className="badge" style={getMetricBadgeStyle(activeBetMetric)}>
-                                  {getMetricLabel(activeBetMetric)}
-                                </span>
-                                <div className="tooltip-container" onClick={(e) => e.stopPropagation()}>
-                                  <Info 
-                                    size={13} 
-                                    style={{ color: '#bf5af2', opacity: 0.8, cursor: 'help' }} 
-                                  />
-                                  <div className="tooltip-content" style={{
-                                    position: 'absolute',
-                                    bottom: '100%',
-                                    right: '0',
-                                    marginBottom: '8px',
-                                    background: 'rgba(20, 20, 22, 0.97)',
-                                    border: '1px solid rgba(191, 90, 242, 0.35)',
-                                    color: 'var(--text-primary)',
-                                    padding: '10px 14px',
-                                    borderRadius: '8px',
-                                    fontSize: '11.5px',
-                                    fontFamily: 'Outfit',
-                                    fontWeight: 500,
-                                    whiteSpace: 'normal',
-                                    width: '260px',
-                                    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.05)',
-                                    zIndex: 100,
-                                    pointerEvents: 'none',
-                                    opacity: 0,
-                                    transform: 'translateY(6px)',
-                                    transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
-                                    textAlign: 'left',
-                                    lineHeight: '1.45'
-                                  }}>
-                                    <div style={{ fontWeight: 700, color: '#bf5af2', marginBottom: '4px', fontSize: '12px' }}>
-                                      {getMetricLabel(activeBetMetric)}
-                                    </div>
-                                    {getMetricExplanation(activeBetMetric)}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Teams info */}
-                          <h4 style={{ fontSize: '16px', fontFamily: 'Outfit', lineHeight: 1.3, marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            {sig.home_logo ? (
-                              <img src={sig.home_logo} alt="" referrerPolicy="no-referrer" style={{ width: '20px', height: '20px', borderRadius: '50%', objectFit: 'contain' }} />
-                            ) : (
-                              <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'var(--bg-tertiary)' }} />
-                            )}
-                            <span>{sig.home_team}</span>
-                          </h4>
-                          <h4 style={{ fontSize: '16px', fontFamily: 'Outfit', lineHeight: 1.3, marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            {sig.away_logo ? (
-                              <img src={sig.away_logo} alt="" referrerPolicy="no-referrer" style={{ width: '20px', height: '20px', borderRadius: '50%', objectFit: 'contain' }} />
-                            ) : (
-                              <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'var(--bg-tertiary)' }} />
-                            )}
-                            <span>{sig.away_team}</span>
-                          </h4>
-
-                          {/* Date & Time metadata */}
-                          <div style={{ display: 'flex', gap: '12px', fontSize: '11.5px', color: 'var(--text-muted)', marginBottom: '16px', alignItems: 'center' }}>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <Calendar size={12} style={{ opacity: 0.6 }} />
-                              {dateStr}
-                            </span>
-                            <span>•</span>
-                            <span>{sig.time}</span>
-                          </div>
-                        </div>
-
-                        {/* Bottom section with statistics detail & Action button */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', zIndex: 1 }}>
-                          
-                          {/* Dynamic sweet-spot Value Bets Dropdown Selector */}
-                          {valueBets.length > 0 && (() => {
-                            const activeBet = currentBet || valueBets[0];
-                            const activeBetMetric = activeBet.metric;
-                            const homeAvg = matchDetails 
-                              ? getAverage(matchDetails.recent_home_matches, activeBetMetric, true, false, matchDetails.home_team, matchDetails.away_team) 
-                              : null;
-                            const awayAvg = matchDetails 
-                              ? getAverage(matchDetails.recent_away_matches, activeBetMetric, false, true, matchDetails.home_team, matchDetails.away_team) 
-                              : null;
-                            const lambda = (homeAvg !== null && awayAvg !== null) ? (homeAvg + awayAvg) : null;
-                            const h2hAvg = matchDetails 
-                              ? getAverage(matchDetails.recent_h2h_matches, activeBetMetric, false, false, matchDetails.home_team, matchDetails.away_team) 
-                              : null;
-
-                            return (
-                              <div style={{ 
-                                background: 'rgba(191, 90, 242, 0.05)',
-                                border: '1px solid rgba(191, 90, 242, 0.22)',
-                                padding: '10px 12px',
-                                borderRadius: '10px',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: '6px',
-                                boxShadow: 'inset 0 1px 4px rgba(191, 90, 242, 0.01)'
-                              }} onClick={(e) => e.stopPropagation()}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <span style={{ fontSize: '9px', fontWeight: 800, color: '#bf5af2', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    <span>VALUE BETS CALIBRÉS</span>
-                                  </span>
-                                  <span style={{ fontSize: '9px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                                    {valueBets.length} opportunité{valueBets.length > 1 ? 's' : ''}
-                                  </span>
-                                </div>
-                                
-                                {valueBets.length > 1 ? (
-                                  <select
-                                    value={JSON.stringify(activeBet)}
-                                    onChange={(e) => {
-                                      const chosen = JSON.parse(e.target.value);
-                                      setSelectedBets(prev => ({ ...prev, [sig.id]: chosen }));
-                                    }}
-                                    style={{
-                                      width: '100%',
-                                      background: 'rgba(0, 0, 0, 0.25)',
-                                      border: '1px solid rgba(255, 255, 255, 0.08)',
-                                      color: 'var(--text-primary)',
-                                      borderRadius: '6px',
-                                      padding: '5px 8px',
-                                      fontSize: '11.5px',
-                                      fontFamily: 'Outfit',
-                                      fontWeight: 600,
-                                      cursor: 'pointer',
-                                      outline: 'none'
-                                    }}
-                                  >
-                                    {valueBets.map((bet, idx) => (
-                                      <option key={idx} value={JSON.stringify(bet)} style={{ background: '#1c1c1e', color: '#fff' }}>
-                                        {bet.tip} {bet.line} {bet.metricTitle} @ {bet.fairOdds.toFixed(2)} ({bet.probability}%)
-                                      </option>
-                                    ))}
-                                  </select>
-                                ) : (
-                                  <div style={{ 
-                                    fontSize: '12px', 
-                                    fontWeight: 700, 
-                                    color: 'var(--text-primary)', 
-                                    display: 'flex', 
-                                    justifyContent: 'space-between', 
-                                    alignItems: 'center',
-                                    padding: '2px 0'
-                                  }}>
-                                    <span>{activeBet.tip} {activeBet.line} {activeBet.metricTitle}</span>
-                                    <span style={{ color: 'var(--color-success)', fontSize: '11px', background: 'rgba(16, 185, 129, 0.08)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(16, 185, 129, 0.12)' }}>
-                                      @{activeBet.fairOdds.toFixed(2)}
-                                    </span>
-                                  </div>
-                                )}
-
-                                {/* Premium Poisson Statistical Explanation Box */}
-                                {lambda !== null && (
-                                  <div style={{
-                                    fontSize: '11px',
-                                    color: 'var(--text-secondary)',
-                                    background: 'rgba(0, 0, 0, 0.2)',
-                                    border: '1px solid rgba(255, 255, 255, 0.04)',
-                                    borderRadius: '6px',
-                                    padding: '8px 10px',
-                                    marginTop: '4px',
-                                    lineHeight: '1.45'
-                                  }}>
-                                    Loi de Poisson estime <strong style={{ color: 'var(--color-success)' }}>{activeBet.probability}%</strong> de probabilité de voir {activeBet.tip.toLowerCase()} {activeBet.line} {getMetricLabel(activeBetMetric).toLowerCase()}. 
-                                    Moyenne cumulée de lambda: <strong style={{ color: '#bf5af2' }}>{lambda.toFixed(1)}</strong> ({homeAvg.toFixed(1)} Dom, {awayAvg.toFixed(1)} Ext). 
-                                    {h2hAvg !== null && ` Confrontations directes H2H: ${h2hAvg.toFixed(1)} en moyenne.`}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })()}
-
-                          {/* Detailed average metrics */}
-                          {(() => {
-                            const activeBetMetric = currentBet ? currentBet.metric : sig.metric;
-                            const activeH2hAvg = matchDetails 
-                              ? getAverage(matchDetails.recent_h2h_matches, activeBetMetric, false, false, matchDetails.home_team, matchDetails.away_team) 
-                              : null;
-                            const displayAvg = (activeBetMetric === sig.metric && sig.avg_value !== undefined)
-                              ? sig.avg_value
-                              : (activeH2hAvg !== null ? activeH2hAvg : 'N/A');
-                            const activeIsPossession = activeBetMetric === 'possession';
-
-                            return (
-                              <div style={{ 
-                                display: 'flex', 
-                                justifyContent: 'space-between', 
-                                background: 'var(--bg-tertiary)', 
-                                padding: '10px 14px', 
-                                borderRadius: '8px',
-                                border: '1px solid var(--border-color)',
-                                fontSize: '12.5px',
-                                alignItems: 'center'
-                              }}>
-                                <span style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                  <TrendingUp size={13} style={{ color: 'var(--color-success)' }} />
-                                  Moyenne H2H ({getMetricLabel(activeBetMetric)}) :
-                                </span>
-                                <strong style={{ fontSize: '14px', color: 'var(--text-primary)' }}>
-                                  {displayAvg}{activeIsPossession ? '%' : ''}
-                                </strong>
-                              </div>
-                            );
-                          })()}
-
-                          <div style={{ display: 'flex', gap: '10px' }}>
-                            {/* View Details on click */}
-                            <button 
-                              className="btn btn-secondary"
-                              style={{ padding: '0 12px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                              title="Inspecter le match"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (typeof setSelectedMatchDetails === 'function') {
-                                  setSelectedMatchDetails(matchDetails || mappedPred);
-                                }
-                              }}
-                            >
-                              <Eye size={16} />
-                            </button>
-
-                            {/* Quick Place Bet button */}
-                            <button 
-                              className="btn btn-primary" 
-                              style={{ 
-                                flexGrow: 1, 
-                                height: '36px',
-                                background: 'linear-gradient(135deg, #7f00ff 0%, #0082ff 100%)',
-                                border: 'none',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '6px'
-                              }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleQuickPlaceBet(mappedPred);
-                              }}
-                            >
-                              <Plus size={16} />
-                              <span style={{ fontSize: '12.5px', fontWeight: 600 }}>Placer ce Pari</span>
-                            </button>
-
-                            {/* Kebab action dropdown */}
-                            <div style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
-                              <button 
-                                className="btn btn-secondary"
-                                style={{ 
-                                  padding: '0 8px', 
-                                  height: '36px', 
-                                  display: 'flex', 
-                                  alignItems: 'center', 
-                                  justifyContent: 'center',
-                                  borderColor: activeKebabId === sig.id ? '#bf5af2' : undefined,
-                                  background: activeKebabId === sig.id ? 'rgba(191, 90, 242, 0.15)' : undefined
-                                }}
-                                title="Plus d'actions"
-                                onClick={(e) => toggleKebab(e, sig.id)}
-                              >
-                                <MoreVertical size={16} />
-                              </button>
-
-                              {activeKebabId === sig.id && (
-                                <div style={{
-                                  position: 'absolute',
-                                  bottom: '100%',
-                                  right: 0,
-                                  marginBottom: '8px',
-                                  background: 'rgba(20, 20, 22, 0.97)',
-                                  backdropFilter: 'blur(10px)',
-                                  border: '1px solid rgba(191, 90, 242, 0.35)',
-                                  borderRadius: '10px',
-                                  padding: '6px',
-                                  display: 'flex',
-                                  flexDirection: 'column',
-                                  gap: '4px',
-                                  width: '180px',
-                                  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.05)',
-                                  zIndex: 1000,
-                                  animation: 'fadeIn 0.15s ease-out'
-                                }}>
-                                  <button
-                                    style={{
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '8px',
-                                      padding: '8px 12px',
-                                      background: 'transparent',
-                                      border: 'none',
-                                      color: 'var(--text-primary)',
-                                      textAlign: 'left',
-                                      fontSize: '12.5px',
-                                      fontFamily: 'Outfit',
-                                      fontWeight: 600,
-                                      cursor: 'pointer',
-                                      borderRadius: '6px',
-                                      transition: 'all 0.15s ease'
-                                    }}
-                                    onMouseEnter={(e) => {
-                                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                                      e.currentTarget.style.color = '#bf5af2';
-                                    }}
-                                    onMouseLeave={(e) => {
-                                      e.currentTarget.style.background = 'transparent';
-                                      e.currentTarget.style.color = 'var(--text-primary)';
-                                    }}
-                                    onClick={() => {
-                                      handleAddToBasket(mappedPred);
-                                      setActiveKebabId(null);
-                                    }}
-                                  >
-                                    <ShoppingCart size={14} />
-                                    Ajouter au Panier
-                                  </button>
-                                  <button
-                                    style={{
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '8px',
-                                      padding: '8px 12px',
-                                      background: 'transparent',
-                                      border: 'none',
-                                      color: 'var(--text-primary)',
-                                      textAlign: 'left',
-                                      fontSize: '12.5px',
-                                      fontFamily: 'Outfit',
-                                      fontWeight: 600,
-                                      cursor: 'pointer',
-                                      borderRadius: '6px',
-                                      transition: 'all 0.15s ease'
-                                    }}
-                                    onMouseEnter={(e) => {
-                                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                                      e.currentTarget.style.color = '#bf5af2';
-                                    }}
-                                    onMouseLeave={(e) => {
-                                      e.currentTarget.style.background = 'transparent';
-                                      e.currentTarget.style.color = 'var(--text-primary)';
-                                    }}
-                                    onClick={() => {
-                                      handleInstantPlaceBet(mappedPred);
-                                      setActiveKebabId(null);
-                                    }}
-                                  >
-                                    <Zap size={14} style={{ color: '#ffb300' }} />
-                                    Placement Direct
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                      </div>
-                    );
-                  })}
+                  {sortedSignals.map((sig) => renderSignalCard(sig))}
                 </div>
               </div>
             );
-          });
+          }
         })()
       ) : (
         <div className="glass-card" style={{ textAlign: 'center', padding: '70px 20px', color: 'var(--text-muted)' }}>
@@ -936,6 +1589,13 @@ export default function MagicPredictionsTab({
           opacity: 1 !important;
           pointer-events: auto !important;
           transform: translateY(0) !important;
+        }
+        .no-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+        .no-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
         }
       `}</style>
 

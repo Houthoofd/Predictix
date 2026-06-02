@@ -205,6 +205,17 @@ function initDb() {
       // Ignore if exists
     });
     
+    // Retroactive status repair for finished matches currently marked as Planned
+    db.run(`
+      UPDATE scraped_predictions 
+      SET is_finished = 1, status = 'Finished' 
+      WHERE is_historical = 0 
+        AND is_finished = 0 
+        AND (LOWER(TRIM(time)) = 'ter' OR LOWER(TRIM(time)) = 'ter.' OR LOWER(time) LIKE '%terminé%')
+    `, (err) => {
+      if (err) console.error("Error running database retroactive repair query:", err.message);
+    });
+    
     console.log("Database tables initialized successfully");
   });
 }

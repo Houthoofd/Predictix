@@ -195,8 +195,8 @@ router.get('/predictions/magic', async (req, res) => {
       return res.json({ success: true, data: [] });
     }
 
-    // 2. Get all upcoming matches
-    const upcomingMatches = await dbQuery("SELECT * FROM scraped_predictions WHERE is_historical = 0 AND is_finished = 0 ORDER BY date ASC, time ASC");
+    // 2. Get all matches (including finished ones)
+    const upcomingMatches = await dbQuery("SELECT * FROM scraped_predictions WHERE is_historical = 0 ORDER BY date ASC, time ASC");
     
     const signals = [];
 

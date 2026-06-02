@@ -1,4 +1,18 @@
 import { poissonOver, poissonUnder, findPoissonMean } from './poisson.js';
+import { GradientBoostingRegressor, bivariatePoissonOver, bivariatePoissonUnder } from './gradientBoosting.js';
+
+// Cache for trained GBDT models and covariances
+let model1MT = null;
+let model2MT = null;
+let modelFT = null;
+let teamAverages = null;
+let covariance1MT = 0.15; // default fallback
+let covariance2MT = 0.20; // default fallback
+let covarianceFT = 0.35; // default fallback
+let leagueAveragesCache = null;
+let lastTrainTime = 0;
+const TRAIN_COOLDOWN = 120000; // 2 minutes cooldown
+
 
 /**
  * Normalizes tournament strings into clean league keys
@@ -271,6 +285,63 @@ export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatc
     finalUnderOdds = String(activeOddsRow.under_decimal);
   }
   
+  // Default expected counts (lambda values)
+  let gbdt1MTExpected = lambda1MT;
+  let gbdt2MTExpected = lambda1MT * 1.15;
+  let gbdtFTExpected = lambda1MT * 2.15;
+
+  if (model1MT && teamAverages) {
+    const home = row.home_team;
+    const away = row.away_team;
+    const homeAvg1MT = teamAverages[home]?.count1MT > 0 ? (teamAverages[home].sum1MT / teamAverages[home].count1MT) : 2.2;
+    const awayAvg1MT = teamAverages[away]?.count1MT > 0 ? (teamAverages[away].sum1MT / teamAverages[away].count1MT) : 2.0;
+
+    const leagueKey = getLeagueKey(row.tournament);
+    const league1MTHome = leagueAveragesCache[leagueKey]?.home || 2.2;
+    const league1MTAway = leagueAveragesCache[leagueKey]?.away || 2.0;
+
+    const feats1MT = {
+      home_avg: homeAvg1MT,
+      away_avg: awayAvg1MT,
+      league_home: league1MTHome,
+      league_away: league1MTAway,
+      sum_avg: homeAvg1MT + awayAvg1MT
+    };
+    gbdt1MTExpected = model1MT.predictRow(feats1MT);
+
+    if (modelFT && model2MT) {
+      const homeAvgFT = teamAverages[home]?.countFT > 0 ? (teamAverages[home].sumFT / teamAverages[home].countFT) : 4.8;
+      const awayAvgFT = teamAverages[away]?.countFT > 0 ? (teamAverages[away].sumFT / teamAverages[away].countFT) : 4.4;
+      const featsFT = {
+        home_avg_1mt: homeAvg1MT,
+        away_avg_1mt: awayAvg1MT,
+        home_avg_ft: homeAvgFT,
+        away_avg_ft: awayAvgFT,
+        league_home: league1MTHome,
+        league_away: league1MTAway,
+        sum_avg: homeAvgFT + awayAvgFT
+      };
+      gbdtFTExpected = modelFT.predictRow(featsFT);
+      gbdt2MTExpected = model2MT.predictRow(featsFT);
+    }
+  }
+
+  // Parameterize Bivariate Poisson models using GBDT lambdas
+  const splitRatio = homeRegressed / (homeRegressed + awayRegressed || 1);
+  const gbdt1MTExpectedHome = gbdt1MTExpected * splitRatio;
+  const gbdt1MTExpectedAway = gbdt1MTExpected * (1 - splitRatio);
+
+  const gbdtFTExpectedHome = gbdtFTExpected * splitRatio;
+  const gbdtFTExpectedAway = gbdtFTExpected * (1 - splitRatio);
+
+  const gbdt2MTExpectedHome = gbdt2MTExpected * splitRatio;
+  const gbdt2MTExpectedAway = gbdt2MTExpected * (1 - splitRatio);
+
+  // Compute over/under probabilities using Bivariate Poisson
+  const bp1MTOver4_5 = Math.round(bivariatePoissonOver(gbdt1MTExpectedHome, gbdt1MTExpectedAway, covariance1MT, 4.5) * 100);
+  const bp2MTOver4_5 = Math.round(bivariatePoissonOver(gbdt2MTExpectedHome, gbdt2MTExpectedAway, covariance2MT, 4.5) * 100);
+  const bpFTOver9_5 = Math.round(bivariatePoissonOver(gbdtFTExpectedHome, gbdtFTExpectedAway, covarianceFT, 9.5) * 100);
+
   return {
     ...row,
     best_tip: dynamicBestTip,
@@ -286,7 +357,30 @@ export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatc
     recent_home_matches: homeMatches,
     recent_away_matches: awayMatches,
     recent_h2h_matches: h2hMatches,
-    isCrawling: activeCrawlHistoryMatches.has(row.match_id)
+    isCrawling: activeCrawlHistoryMatches.has(row.match_id),
+    gbdt_predictions: {
+      first_half: {
+        expected: parseFloat(gbdt1MTExpected.toFixed(2)),
+        home_expected: parseFloat(gbdt1MTExpectedHome.toFixed(2)),
+        away_expected: parseFloat(gbdt1MTExpectedAway.toFixed(2)),
+        covariance: parseFloat(covariance1MT.toFixed(4)),
+        over_4_5_prob: bp1MTOver4_5
+      },
+      second_half: {
+        expected: parseFloat(gbdt2MTExpected.toFixed(2)),
+        home_expected: parseFloat(gbdt2MTExpectedHome.toFixed(2)),
+        away_expected: parseFloat(gbdt2MTExpectedAway.toFixed(2)),
+        covariance: parseFloat(covariance2MT.toFixed(4)),
+        over_4_5_prob: bp2MTOver4_5
+      },
+      full_time: {
+        expected: parseFloat(gbdtFTExpected.toFixed(2)),
+        home_expected: parseFloat(gbdtFTExpectedHome.toFixed(2)),
+        away_expected: parseFloat(gbdtFTExpectedAway.toFixed(2)),
+        covariance: parseFloat(covarianceFT.toFixed(4)),
+        over_9_5_prob: bpFTOver9_5
+      }
+    }
   };
 }
 
@@ -336,10 +430,192 @@ export function evaluateSmartScrapingFilter(match, h2hExisting, targetStrategy) 
   return true;
 }
 
+export async function trainGBDTModels(dbQueryFn) {
+  const now = Date.now();
+  if (model1MT && now - lastTrainTime < TRAIN_COOLDOWN) {
+    return;
+  }
+  lastTrainTime = now;
+
+  try {
+    // 1. Get all matches with 1st half corners
+    const matches = await dbQueryFn(`
+      SELECT home_team, away_team, tournament, first_half_corners_home, first_half_corners_away, statistics_json
+      FROM scraped_predictions
+      WHERE first_half_corners_home IS NOT NULL AND first_half_corners_away IS NOT NULL
+    `);
+
+    if (matches.length < 10) {
+      console.log("[GBDT Train] Not enough data to train models");
+      return;
+    }
+
+    // 2. Pre-calculate global team averages
+    teamAverages = {};
+    for (const m of matches) {
+      const home = m.home_team;
+      const away = m.away_team;
+      
+      if (!teamAverages[home]) teamAverages[home] = { sum1MT: 0, count1MT: 0, sumFT: 0, countFT: 0 };
+      if (!teamAverages[away]) teamAverages[away] = { sum1MT: 0, count1MT: 0, sumFT: 0, countFT: 0 };
+
+      teamAverages[home].sum1MT += m.first_half_corners_home;
+      teamAverages[home].count1MT++;
+      teamAverages[away].sum1MT += m.first_half_corners_away;
+      teamAverages[away].count1MT++;
+
+      try {
+        if (m.statistics_json) {
+          const stats = JSON.parse(m.statistics_json);
+          if (stats && stats.corners) {
+            teamAverages[home].sumFT += parseFloat(stats.corners.home || 0);
+            teamAverages[home].countFT++;
+            teamAverages[away].sumFT += parseFloat(stats.corners.away || 0);
+            teamAverages[away].countFT++;
+          }
+        }
+      } catch (e) {}
+    }
+
+    // 3. Compute league averages
+    leagueAveragesCache = computeLeagueAverages(matches);
+
+    // 4. Compute covariance for Bivariate Poisson
+    let covSum1MT = 0;
+    let covSumFT = 0;
+    let covSum2MT = 0;
+    let count1MT = 0;
+    let countFT = 0;
+
+    const homeVals1MT = [];
+    const awayVals1MT = [];
+    const homeValsFT = [];
+    const awayValsFT = [];
+    const homeVals2MT = [];
+    const awayVals2MT = [];
+
+    const X1MT = [];
+    const y1MT = [];
+    const X2MT = [];
+    const y2MT = [];
+    const XFT = [];
+    const yFT = [];
+
+    for (const m of matches) {
+      const home = m.home_team;
+      const away = m.away_team;
+      
+      const homeAvg1MT = teamAverages[home]?.count1MT > 0 ? (teamAverages[home].sum1MT / teamAverages[home].count1MT) : 2.2;
+      const awayAvg1MT = teamAverages[away]?.count1MT > 0 ? (teamAverages[away].sum1MT / teamAverages[away].count1MT) : 2.0;
+
+      const homeAvgFT = teamAverages[home]?.countFT > 0 ? (teamAverages[home].sumFT / teamAverages[home].countFT) : 4.8;
+      const awayAvgFT = teamAverages[away]?.countFT > 0 ? (teamAverages[away].sumFT / teamAverages[away].countFT) : 4.4;
+
+      const leagueKey = getLeagueKey(m.tournament);
+      const league1MTHome = leagueAveragesCache[leagueKey]?.home || 2.2;
+      const league1MTAway = leagueAveragesCache[leagueKey]?.away || 2.0;
+
+      const features1MT = {
+        home_avg: homeAvg1MT,
+        away_avg: awayAvg1MT,
+        league_home: league1MTHome,
+        league_away: league1MTAway,
+        sum_avg: homeAvg1MT + awayAvg1MT
+      };
+
+      X1MT.push(features1MT);
+      const sum1MT = m.first_half_corners_home + m.first_half_corners_away;
+      y1MT.push(sum1MT);
+
+      homeVals1MT.push(m.first_half_corners_home);
+      awayVals1MT.push(m.first_half_corners_away);
+      count1MT++;
+
+      // If FT corners are available
+      try {
+        if (m.statistics_json) {
+          const stats = JSON.parse(m.statistics_json);
+          if (stats && stats.corners) {
+            const ftHome = parseFloat(stats.corners.home || 0);
+            const ftAway = parseFloat(stats.corners.away || 0);
+            const ftTotal = ftHome + ftAway;
+            const shHome = Math.max(0, ftHome - m.first_half_corners_home);
+            const shAway = Math.max(0, ftAway - m.first_half_corners_away);
+            const shTotal = shHome + shAway;
+
+            const featuresFT = {
+              home_avg_1mt: homeAvg1MT,
+              away_avg_1mt: awayAvg1MT,
+              home_avg_ft: homeAvgFT,
+              away_avg_ft: awayAvgFT,
+              league_home: league1MTHome,
+              league_away: league1MTAway,
+              sum_avg: homeAvgFT + awayAvgFT
+            };
+
+            XFT.push(featuresFT);
+            yFT.push(ftTotal);
+            homeValsFT.push(ftHome);
+            awayValsFT.push(ftAway);
+
+            X2MT.push(featuresFT);
+            y2MT.push(shTotal);
+            homeVals2MT.push(shHome);
+            awayVals2MT.push(shAway);
+
+            countFT++;
+          }
+        }
+      } catch (e) {}
+    }
+
+    // GBDT Training
+    model1MT = new GradientBoostingRegressor({ nEstimators: 15, maxDepth: 3, learningRate: 0.1 });
+    model1MT.fit(X1MT, y1MT);
+
+    if (XFT.length > 10) {
+      modelFT = new GradientBoostingRegressor({ nEstimators: 15, maxDepth: 3, learningRate: 0.1 });
+      modelFT.fit(XFT, yFT);
+
+      model2MT = new GradientBoostingRegressor({ nEstimators: 15, maxDepth: 3, learningRate: 0.1 });
+      model2MT.fit(X2MT, y2MT);
+    }
+
+    // Calculate Covariances
+    const calcCov = (homeArr, awayArr) => {
+      const n = homeArr.length;
+      if (n === 0) return 0.15;
+      const mHome = homeArr.reduce((a, b) => a + b, 0) / n;
+      const mAway = awayArr.reduce((a, b) => a + b, 0) / n;
+      let prodSum = 0;
+      for (let i = 0; i < n; i++) {
+        prodSum += homeArr[i] * awayArr[i];
+      }
+      return Math.max(0.01, (prodSum / n) - (mHome * mAway));
+    };
+
+    covariance1MT = calcCov(homeVals1MT, awayVals1MT);
+    if (countFT > 0) {
+      covarianceFT = calcCov(homeValsFT, awayValsFT);
+      covariance2MT = calcCov(homeVals2MT, awayVals2MT);
+    }
+
+    console.log(`[GBDT & Bivariate Poisson] Models trained successfully. 1MT cov: ${covariance1MT.toFixed(3)}, FT cov: ${covarianceFT.toFixed(3)}`);
+  } catch (error) {
+    console.error("[GBDT Train] Error training GBDT models:", error);
+  }
+}
+
 /**
  * Fetch and enrich predictions based on date query parameters
  */
 export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistoryMatches = new Set()) {
+  try {
+    await trainGBDTModels(dbQueryFn);
+  } catch (err) {
+    console.error("[Prediction Engine] Failed to auto-train GBDT models:", err);
+  }
+
   let sql = 'SELECT * FROM scraped_predictions WHERE is_historical = 0';
   const params = [];
   

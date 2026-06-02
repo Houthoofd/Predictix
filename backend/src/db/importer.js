@@ -16,9 +16,10 @@ export async function importScrapedMatches(matches, scrapedAt) {
 
     let status = match.status || 'Planned';
     const matchTime = String(match.time || '');
-    if (matchTime.includes("'") || matchTime.toLowerCase().includes('mi-temps') || matchTime.toLowerCase().includes('mt') || matchTime.toLowerCase().includes('prol.')) {
+    const lowerTime = matchTime.toLowerCase().trim();
+    if (matchTime.includes("'") || lowerTime.includes('mi-temps') || lowerTime.includes('mt') || lowerTime.includes('prol.')) {
       status = 'Live';
-    } else if (matchTime.toLowerCase().includes('fin') || matchTime.toLowerCase().includes('terminé') || matchTime.toLowerCase().includes('ft')) {
+    } else if (lowerTime.includes('fin') || lowerTime.includes('terminé') || lowerTime.includes('ft') || lowerTime === 'ter' || lowerTime === 'ter.') {
       status = 'Finished';
     }
 

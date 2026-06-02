@@ -54,6 +54,8 @@ export default function App() {
   const [totalPrimary, setTotalPrimary] = useState(0);
   const [currentDeep, setCurrentDeep] = useState(0);
   const [totalDeep, setTotalDeep] = useState(0);
+  const [scraperTargetDate, setScraperTargetDate] = useState('');
+  const [liveScrapedMatches, setLiveScrapedMatches] = useState([]);
   
   // Modals state
   const [showAddBetModal, setShowAddBetModal] = useState(false);
@@ -154,31 +156,12 @@ export default function App() {
   const [betRefreshLoading, setBetRefreshLoading] = useState({});
   const [globalRefreshLoading, setGlobalRefreshLoading] = useState(false);
   
-  // Predictions Filter States
-  const [predSearch, setPredSearch] = useState('');
-  const [predHighProbOnly, setPredHighProbOnly] = useState(false);
-  const [predValueBetsOnly, setPredValueBetsOnly] = useState(false);
-  const [predStatusFilter, setPredStatusFilter] = useState('all'); // all, live, planned, finished
-  const [dateRange, setDateRange] = useState('all'); // all, today, yesterday, week, month, year, custom
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-
   const consoleEndRef = useRef(null);
-  const isFirstMount = useRef(true);
 
   // Sync theme to body element
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
-
-  // Fetch predictions whenever date range parameters change
-  useEffect(() => {
-    if (isFirstMount.current) {
-      isFirstMount.current = false;
-      return;
-    }
-    fetchPredictions(dateRange, startDate, endDate);
-  }, [dateRange, startDate, endDate]);
 
   // Initial Data Fetch
   useEffect(() => {
@@ -238,7 +221,7 @@ export default function App() {
       await Promise.all([
         fetchBankroll(),
         fetchBets(),
-        fetchPredictions(dateRange, startDate, endDate),
+        fetchPredictions(),
         fetchStats()
       ]);
     } catch (error) {
@@ -253,7 +236,7 @@ export default function App() {
       await Promise.all([
         fetchBankroll(),
         fetchBets(),
-        fetchPredictions(dateRange, startDate, endDate),
+        fetchPredictions(),
         fetchStats()
       ]);
     } catch (error) {
@@ -601,7 +584,7 @@ export default function App() {
       const json = await res.json();
       if (json.success) {
         fetchAllData(); // Refresh bankroll
-        showToast("⚡ Pari direct enregistré avec succès !", "success");
+        showToast("Pari direct enregistré avec succès !", "success");
       } else {
         showToast("Impossible de placer le pari : " + json.error.message, "error");
       }
@@ -716,11 +699,14 @@ export default function App() {
     setTotalPrimary(0);
     setCurrentDeep(0);
     setTotalDeep(0);
-    setScraperLogs([{ message: "[Predictix] [1-Clic] Lancement de la découverte des matchs du jour...", type: 'system' }]);
+    setLiveScrapedMatches([]);
+    const dateLogSuffix = scraperTargetDate ? ` pour la date ${scraperTargetDate}` : " du jour";
+    setScraperLogs([{ message: `[Predictix] [1-Clic] Lancement de la découverte des matchs${dateLogSuffix}...`, type: 'system' }]);
     showToast("Découverte en 1-Clic lancée...", "info");
     
     try {
-      const response = await fetch('/api/predictions/scrape/discover', { 
+      const queryParams = scraperTargetDate ? `?date=${scraperTargetDate}` : '';
+      const response = await fetch(`/api/predictions/scrape/discover${queryParams}`, { 
         method: 'POST'
       });
       const json = await response.json();
@@ -731,7 +717,7 @@ export default function App() {
         setScrapeProgress(25);
         setScraperLogs(prev => [
           ...prev, 
-          { message: `[Predictix] ✓ Découverte réussie : ${json.count} matchs programmés ou en direct aujourd'hui.`, type: 'success' },
+          { message: `[Predictix] ✓ Découverte réussie : ${json.count} matchs trouvés${dateLogSuffix}.`, type: 'success' },
           { message: `[Predictix] [1-Clic] Enchaînement automatique : Lancement de l'analyse détaillée pour les ${Math.min(scrapeLimit, json.count)} premiers matchs...`, type: 'system' }
         ]);
         showToast(`Découverte réussie : ${json.count} matchs trouvés !`, "success");
@@ -763,11 +749,14 @@ export default function App() {
     setTotalPrimary(0);
     setCurrentDeep(0);
     setTotalDeep(0);
-    setScraperLogs([{ message: "[Predictix] Lancement de la découverte des matchs du jour...", type: 'system' }]);
+    setLiveScrapedMatches([]);
+    const dateLogSuffix = scraperTargetDate ? ` pour la date ${scraperTargetDate}` : " du jour";
+    setScraperLogs([{ message: `[Predictix] Lancement de la découverte des matchs${dateLogSuffix}...`, type: 'system' }]);
     showToast("Découverte des matchs lancée...", "info");
     
     try {
-      const response = await fetch('/api/predictions/scrape/discover', { 
+      const queryParams = scraperTargetDate ? `?date=${scraperTargetDate}` : '';
+      const response = await fetch(`/api/predictions/scrape/discover${queryParams}`, { 
         method: 'POST'
       });
       const json = await response.json();
@@ -780,7 +769,7 @@ export default function App() {
         setScrapeProgress(25);
         setScraperLogs(prev => [
           ...prev, 
-          { message: `[Predictix] ✓ Découverte réussie : ${json.count} matchs programmés ou en direct aujourd'hui.`, type: 'success' },
+          { message: `[Predictix] ✓ Découverte réussie : ${json.count} matchs trouvés${dateLogSuffix}.`, type: 'success' },
           { message: "[Predictix] En attente de votre configuration pour démarrer l'analyse détaillée...", type: 'warn' }
         ]);
         showToast(`Découverte réussie : ${json.count} matchs trouvés !`, "success");
@@ -824,7 +813,8 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           limit: selectedLimit,
-          strategyId: selectedScraperStrategyId || null
+          strategyId: selectedScraperStrategyId || null,
+          date: scraperTargetDate || null
         })
       });
       if (!response.body) {
@@ -900,7 +890,7 @@ export default function App() {
                 }
 
                 // 3. Deep crawl phase step: Deep crawling over Tor:
-                if ((msg.includes("Deep crawling over Tor") || msg.includes("Scraping de l'historique sur Tor")) && inDeepCrawl) {
+                if ((msg.includes("✓ Confrontation") || msg.includes("Deep crawling over Tor") || msg.includes("Scraping de l'historique sur Tor")) && inDeepCrawl) {
                   currentDeep++;
                   setCurrentDeep(currentDeep);
                   const progressVal = Math.round(75 + (Math.min(currentDeep, totalDeep) / totalDeep) * 20);
@@ -930,6 +920,32 @@ export default function App() {
                   setMatchesRemaining(0);
                   setScrapeTimeRemaining("Annulé");
                 }
+              } else if (eventData.type === 'match_scraped') {
+                setLiveScrapedMatches(prev => {
+                  const idx = prev.findIndex(m => m.match_id === eventData.match.match_id);
+                  if (idx >= 0) {
+                    const next = [...prev];
+                    next[idx] = { ...next[idx], ...eventData.match, h2hList: next[idx].h2hList || [] };
+                    return next;
+                  }
+                  return [...prev, { ...eventData.match, h2hList: [] }];
+                });
+              } else if (eventData.type === 'h2h_scraped') {
+                setLiveScrapedMatches(prev => {
+                  return prev.map(m => {
+                    let links = m.historical_links || [];
+                    if (typeof links === 'string') {
+                      try { links = JSON.parse(links); } catch(e) { links = []; }
+                    }
+                    if (Array.isArray(links) && links.includes(eventData.h2h.match_url)) {
+                      const exists = m.h2hList.some(h => h.match_url === eventData.h2h.match_url);
+                      if (!exists) {
+                        return { ...m, h2hList: [...m.h2hList, eventData.h2h] };
+                      }
+                    }
+                    return m;
+                  });
+                });
               } else if (eventData.type === 'error') {
                 setScraperLogs(prev => [...prev, { message: `[ERREUR CRITIQUE] ${eventData.message}`, type: 'error' }]);
                 showToast(`Erreur de scraping: ${eventData.message}`, "error");
@@ -983,65 +999,7 @@ export default function App() {
     }
   };
 
-  // Predictions Filtering Logic
-  const filteredPredictions = predictions.filter(pred => {
-    // 1. Text Search
-    const searchString = `${pred.home_team} ${pred.away_team} ${pred.tournament}`.toLowerCase();
-    if (predSearch && !searchString.includes(predSearch.toLowerCase())) return false;
 
-    // 2. High Probability Only (>= 60%)
-    if (predHighProbOnly) {
-      const probValue = parseInt(pred.probability.replace('%', ''));
-      if (isNaN(probValue) || probValue < 60) return false;
-    }
-
-    // 3. Value Bets Only
-    if (predValueBetsOnly) {
-      let hasValueBet = false;
-      try {
-        if (pred.odds_corners && pred.odds_corners.length > 0) {
-          hasValueBet = pred.odds_corners.some(o => o.over_value_bet || o.under_value_bet);
-        }
-        
-        if (!hasValueBet) {
-          let rawProb = pred.win_rate || pred.probability || '';
-          let cleanProb = String(rawProb).replace('%', '').trim();
-          let probPct = parseInt(cleanProb, 10);
-          
-          let rawOdds = '';
-          const tipLower = String(pred.best_tip).toLowerCase();
-          if (tipLower.includes('plus') || tipLower.includes('over')) {
-            rawOdds = pred.over_odds;
-          } else if (tipLower.includes('moins') || tipLower.includes('under')) {
-            rawOdds = pred.under_odds;
-          }
-          let oddsVal = parseFloat(String(rawOdds).trim());
-          
-          if (!isNaN(probPct) && !isNaN(oddsVal) && probPct > 0 && oddsVal > 0) {
-            const ev = (probPct / 100) * oddsVal;
-            if (ev >= 1.05) {
-              hasValueBet = true;
-            }
-          }
-        }
-      } catch (e) {}
-      if (!hasValueBet) return false;
-    }
-
-    // 4. Status tab filter
-    const statusLower = String(pred.status).toLowerCase();
-    if (predStatusFilter === 'live') {
-      return pred.is_live === 1 || statusLower === 'live';
-    }
-    if (predStatusFilter === 'finished') {
-      return pred.is_finished === 1 || statusLower === 'finished' || statusLower === 'completed';
-    }
-    if (predStatusFilter === 'planned') {
-      return (pred.is_live === 0 && pred.is_finished === 0) && (statusLower === 'planned' || statusLower === 'scheduled');
-    }
-
-    return true;
-  });
 
   return (
     <div className="app-container">
@@ -1136,8 +1094,13 @@ export default function App() {
                   consoleEndRef={consoleEndRef}
                   selectedScraperStrategyId={selectedScraperStrategyId}
                   setSelectedScraperStrategyId={setSelectedScraperStrategyId}
+                  scraperTargetDate={scraperTargetDate}
+                  setScraperTargetDate={setScraperTargetDate}
+                  liveScrapedMatches={liveScrapedMatches}
                 />
               )}
+
+
 
               {activeTab === 'magic-predictions' && (
                 <MagicPredictionsTab 

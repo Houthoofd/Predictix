@@ -23,6 +23,13 @@ export default function MatchDetailsModal({
   const [showValueBetsPanel, setShowValueBetsPanel] = React.useState(false);
   const tabsRef = React.useRef(null);
 
+  // Odds Simulator & Value Calculator States
+  const [simPeriod, setSimPeriod] = React.useState('first_half');
+  const [payoutRatio, setPayoutRatio] = React.useState(0.93);
+  const [userOdds, setUserOdds] = React.useState({});
+  const [customLineInput, setCustomLineInput] = React.useState('');
+  const [customLines, setCustomLines] = React.useState([]);
+
   function getMetricTitle(key) {
     const titles = {
       corners: 'Corners 1MT',
@@ -134,6 +141,60 @@ export default function MatchDetailsModal({
 
   const poissonOver = (lambda, line) => {
     return 1 - poissonUnder(lambda, line);
+  };
+
+  const factCache = [1, 1];
+  const factorial = (n) => {
+    if (n < 0) return 0;
+    if (factCache[n] !== undefined) return factCache[n];
+    let res = factCache[factCache.length - 1];
+    for (let i = factCache.length; i <= n; i++) {
+      res *= i;
+      factCache[i] = res;
+    }
+    return res;
+  };
+
+  const choose = (n, k) => {
+    if (k < 0 || k > n) return 0;
+    return factorial(n) / (factorial(k) * factorial(n - k));
+  };
+
+  const bivariatePoissonPMF = (x, y, meanHome, meanAway, cov) => {
+    const l3 = Math.max(0, Math.min(cov, Math.min(meanHome, meanAway) - 0.05));
+    const l1 = Math.max(0.05, meanHome - l3);
+    const l2 = Math.max(0.05, meanAway - l3);
+
+    const expPart = Math.exp(-(l1 + l2 + l3));
+    const term1 = Math.pow(l1, x) / factorial(x);
+    const term2 = Math.pow(l2, y) / factorial(y);
+
+    let sum = 0;
+    const minXY = Math.min(x, y);
+    for (let k = 0; k <= minXY; k++) {
+      const c1 = choose(x, k);
+      const c2 = choose(y, k);
+      const factK = factorial(k);
+      const mult = Math.pow(l3 / (l1 * l2), k);
+      sum += c1 * c2 * factK * mult;
+    }
+
+    return expPart * term1 * term2 * sum;
+  };
+
+  const bivariatePoissonUnder = (meanHome, meanAway, cov, line) => {
+    const maxVal = Math.floor(line);
+    let totalProb = 0;
+    for (let x = 0; x <= maxVal; x++) {
+      for (let y = 0; y <= maxVal - x; y++) {
+        totalProb += bivariatePoissonPMF(x, y, meanHome, meanAway, cov);
+      }
+    }
+    return totalProb;
+  };
+
+  const bivariatePoissonOver = (meanHome, meanAway, cov, line) => {
+    return 1 - bivariatePoissonUnder(meanHome, meanAway, cov, line);
   };
 
   const getStandardLine = (metric, lambda) => {
@@ -924,94 +985,398 @@ export default function MatchDetailsModal({
 
         {/* Aide aux Paris & Probabilités de Poisson pour Onglets Individuels */}
         {activeMetric !== 'dashboard' && activeMetric !== 'possession' && activeMetric !== 'passes_reussis' && (() => {
-          const homeAvg = getAverage(selectedMatchDetails.recent_home_matches, activeMetric, true);
-          const awayAvg = getAverage(selectedMatchDetails.recent_away_matches, activeMetric, false, true);
-          
-          if (homeAvg === null || awayAvg === null) return null;
-          
-          const lambda = homeAvg + awayAvg;
-          const line = getStandardLine(activeMetric, lambda);
-          const overProb = poissonOver(lambda, line);
-          const underProb = poissonUnder(lambda, line);
-          const fairOver = overProb > 0 ? 1 / overProb : 99;
-          const fairUnder = underProb > 0 ? 1 / underProb : 99;
-          
-          const isOverStrong = overProb >= 0.65;
-          const isUnderStrong = underProb >= 0.65;
-          
+          const getMetricPeriodRatio = (metric, period) => {
+            if (period === 'full_time') return 1.0;
+            if (period === 'first_half') {
+              if (metric === 'yellow_cards' || metric === 'red_cards') return 0.30;
+              if (metric === 'fouls') return 0.48;
+              if (metric === 'offsides') return 0.50;
+              if (metric === 'xg_buts_attendus') return 0.45;
+              if (metric === 'corners') return 0.46;
+              return 0.47;
+            }
+            if (period === 'second_half') {
+              if (metric === 'yellow_cards' || metric === 'red_cards') return 0.70;
+              if (metric === 'fouls') return 0.52;
+              if (metric === 'offsides') return 0.50;
+              if (metric === 'xg_buts_attendus') return 0.55;
+              if (metric === 'corners') return 0.54;
+              return 0.53;
+            }
+            return 1.0;
+          };
+
+          let meanHome = 0;
+          let meanAway = 0;
+          let cov = 0;
+          let isGBDT = false;
+
+          if (activeMetric === 'corners' && selectedMatchDetails.gbdt_predictions) {
+            const pred = selectedMatchDetails.gbdt_predictions[simPeriod];
+            if (pred) {
+              meanHome = pred.home_expected;
+              meanAway = pred.away_expected;
+              cov = pred.covariance;
+              isGBDT = true;
+            }
+          } else {
+            const hAvg = getAverage(selectedMatchDetails.recent_home_matches, activeMetric, true);
+            const aAvg = getAverage(selectedMatchDetails.recent_away_matches, activeMetric, false, true);
+            if (hAvg === null || aAvg === null) {
+              return (
+                <div style={{
+                  padding: '24px 16px',
+                  background: 'rgba(255, 255, 255, 0.01)',
+                  border: '1px dashed rgba(255, 255, 255, 0.08)',
+                  borderRadius: '12px',
+                  textAlign: 'center',
+                  color: 'var(--text-muted)',
+                  marginBottom: '16px'
+                }}>
+                  ⚠️ Pas assez de données historiques récurrentes pour simuler les cotes de cet indicateur ({metricTitle}).
+                </div>
+              );
+            }
+            const ratio = getMetricPeriodRatio(activeMetric, simPeriod);
+            meanHome = hAvg * ratio;
+            meanAway = aAvg * ratio;
+            cov = 0;
+          }
+
+          let defaultLines = [];
+          if (activeMetric === 'corners') {
+            defaultLines = simPeriod === 'full_time' ? [7.5, 8.5, 9.5, 10.5, 11.5] : [2.5, 3.5, 4.5, 5.5];
+          } else {
+            const lambda = meanHome + meanAway;
+            let standardLine = Math.round(lambda);
+            if (standardLine <= 0) standardLine = 1;
+            standardLine = standardLine - 0.5;
+            defaultLines = [standardLine - 2, standardLine - 1, standardLine, standardLine + 1, standardLine + 2].filter(v => v >= 0.5);
+          }
+          const allLinesForPeriod = [...defaultLines, ...customLines.filter(l => !defaultLines.includes(l))].sort((a, b) => a - b);
+
+          const handleAddCustomLine = (e) => {
+            e.preventDefault();
+            const parsed = parseFloat(customLineInput);
+            if (!isNaN(parsed) && parsed > 0 && !customLines.includes(parsed)) {
+              setCustomLines([...customLines, parsed]);
+              setCustomLineInput('');
+            }
+          };
+
           return (
             <div style={{
               background: 'rgba(255, 255, 255, 0.015)',
               border: '1px solid rgba(255, 255, 255, 0.04)',
-              borderRadius: '10px',
-              padding: '16px 20px',
+              borderRadius: '12px',
+              padding: '20px',
               marginBottom: '16px',
               boxShadow: 'inset 0 1px 4px rgba(255,255,255,0.01)',
               display: 'flex',
               flexDirection: 'column',
-              gap: '12px'
+              gap: '16px'
             }}>
-              <h4 style={{ fontSize: '11px', fontFamily: 'Outfit', fontWeight: 800, color: 'var(--color-accent-solid)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span>ESTIMATEUR DE VALUE BET & COTES JUSTES (LOI DE POISSON)</span>
-              </h4>
-              
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                {/* Over Option */}
-                <div style={{
-                  background: isOverStrong ? 'rgba(16, 185, 129, 0.06)' : 'rgba(255, 255, 255, 0.01)',
-                  border: isOverStrong ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid rgba(255, 255, 255, 0.03)',
-                  borderRadius: '8px',
-                  padding: '12px 14px',
-                  textAlign: 'center',
-                  boxShadow: isOverStrong ? '0 0 12px rgba(16, 185, 129, 0.05)' : 'none',
-                  transition: 'all 0.2s ease'
-                }}>
-                  <span style={{ fontSize: '10px', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 700 }}>Plus de {line} {metricTitle}</span>
-                  <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--color-success)', marginTop: '6px' }}>
-                    {Math.round(overProb * 100)}% <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500 }}>probabilité</span>
-                  </div>
-                  <div style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--text-primary)', marginTop: '4px' }}>
-                    Cote Juste : <span style={{ color: 'var(--color-success)', fontSize: '13.5px', fontWeight: 800 }}>{fairOver.toFixed(2)}</span>
-                  </div>
-                  {isOverStrong ? (
-                    <span style={{ display: 'inline-block', fontSize: '9px', background: 'rgba(16, 185, 129, 0.15)', color: 'var(--color-success)', padding: '2px 6px', borderRadius: '4px', fontWeight: 800, marginTop: '8px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      Signal Fort (Value Potentielle)
-                    </span>
-                  ) : (
-                    <span style={{ display: 'inline-block', fontSize: '9px', color: 'var(--text-muted)', marginTop: '8px' }}>
-                      Cote min. conseillée : {(fairOver * 1.05).toFixed(2)}
-                    </span>
-                  )}
+              {/* Header Title */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                <h4 style={{ fontSize: '11.5px', fontFamily: 'Outfit', fontWeight: 800, color: '#bf5af2', margin: 0, textTransform: 'uppercase', letterSpacing: '0.08em', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>SIMULATEUR DE COTES & CALCULATEUR DE VALUE (POISSON BIVARIÉ)</span>
+                </h4>
+                <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600 }}>
+                  {isGBDT 
+                    ? `Moyennes GBDT : ${meanHome.toFixed(2)} Dom / ${meanAway.toFixed(2)} Ext (Cov: ${cov.toFixed(3)})` 
+                    : `Moyennes estimées (${simPeriod === 'first_half' ? '1ère MT' : simPeriod === 'second_half' ? '2ème MT' : 'Match'}) : ${meanHome.toFixed(2)} Dom / ${meanAway.toFixed(2)} Ext`
+                  }
+                </span>
+              </div>
+
+              {/* Step-by-Step Interactive Guide */}
+              <div style={{
+                background: 'rgba(127, 0, 255, 0.04)',
+                border: '1px solid rgba(127, 0, 255, 0.15)',
+                borderRadius: '10px',
+                padding: '12px 16px',
+                fontSize: '11.5px',
+                lineHeight: '1.5',
+                color: 'var(--text-secondary)'
+              }}>
+                <div style={{ fontWeight: 800, color: '#bf5af2', marginBottom: '6px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <span>💡 Comment utiliser ce simulateur en 3 étapes simples :</span>
                 </div>
-                
-                {/* Under Option */}
-                <div style={{
-                  background: isUnderStrong ? 'rgba(191, 90, 242, 0.06)' : 'rgba(255, 255, 255, 0.01)',
-                  border: isUnderStrong ? '1px solid rgba(191, 90, 242, 0.25)' : '1px solid rgba(255, 255, 255, 0.03)',
-                  borderRadius: '8px',
-                  padding: '12px 14px',
-                  textAlign: 'center',
-                  boxShadow: isUnderStrong ? '0 0 12px rgba(191, 90, 242, 0.05)' : 'none',
-                  transition: 'all 0.2s ease'
-                }}>
-                  <span style={{ fontSize: '10px', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 700 }}>Moins de {line} {metricTitle}</span>
-                  <div style={{ fontSize: '18px', fontWeight: 800, color: '#bf5af2', marginTop: '6px' }}>
-                    {Math.round(underProb * 100)}% <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500 }}>probabilité</span>
-                  </div>
-                  <div style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--text-primary)', marginTop: '4px' }}>
-                    Cote Juste : <span style={{ color: '#bf5af2', fontSize: '13.5px', fontWeight: 800 }}>{fairUnder.toFixed(2)}</span>
-                  </div>
-                  {isUnderStrong ? (
-                    <span style={{ display: 'inline-block', fontSize: '9px', background: 'rgba(191, 90, 242, 0.15)', color: '#bf5af2', padding: '2px 6px', borderRadius: '4px', fontWeight: 800, marginTop: '8px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      Signal Fort (Value Potentielle)
-                    </span>
-                  ) : (
-                    <span style={{ display: 'inline-block', fontSize: '9px', color: 'var(--text-muted)', marginTop: '8px' }}>
-                      Cote min. conseillée : {(fairUnder * 1.05).toFixed(2)}
-                    </span>
-                  )}
+                <ul style={{ margin: 0, paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <li>
+                    <strong>1. Ajustez le Payout</strong> : Réglez le curseur sur le taux de retour de votre bookmaker (ex: 93% en France, 95% à l'étranger).
+                  </li>
+                  <li>
+                    <strong>2. Comparez la Cote Estimée Bookie</strong> : Elle représente la cote normale que propose le marché pour cette ligne.
+                  </li>
+                  <li>
+                    <strong>3. Saisissez votre cote</strong> : Entrez la cote de votre bookmaker. Si elle s'allume en <strong style={{ color: '#10b981' }}>Vert (VALUE)</strong>, le pari est rentable à long terme !
+                  </li>
+                </ul>
+              </div>
+
+              {/* Period Selector Tabs (For all count metrics) */}
+              <div style={{ display: 'flex', gap: '4px', background: 'rgba(0,0,0,0.25)', padding: '3px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.03)' }}>
+                {[
+                  { id: 'first_half', label: '1ère Mi-Temps' },
+                  { id: 'second_half', label: '2ème Mi-Temps' },
+                  { id: 'full_time', label: 'Match Entier' }
+                ].map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => setSimPeriod(p.id)}
+                    style={{
+                      flex: 1,
+                      padding: '6px 10px',
+                      fontSize: '10.5px',
+                      fontFamily: 'Outfit',
+                      fontWeight: 700,
+                      border: 'none',
+                      borderRadius: '6px',
+                      background: simPeriod === p.id ? 'linear-gradient(135deg, #7f00ff 0%, #0082ff 100%)' : 'transparent',
+                      color: simPeriod === p.id ? '#fff' : 'var(--text-secondary)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s'
+                    }}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Payout Slider */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: 'rgba(0,0,0,0.15)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.02)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', fontWeight: 600 }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Taux de Retour Bookmaker (Payout) :</span>
+                  <strong style={{ color: '#bf5af2', fontSize: '12px' }}>{Math.round(payoutRatio * 100)}% <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>({Math.round((1 - payoutRatio) * 100)}% de marge)</span></strong>
+                </div>
+                <input
+                  type="range"
+                  min="85"
+                  max="98"
+                  value={Math.round(payoutRatio * 100)}
+                  onChange={(e) => setPayoutRatio(parseFloat(e.target.value) / 100)}
+                  style={{
+                    width: '100%',
+                    accentColor: '#bf5af2',
+                    cursor: 'pointer',
+                    height: '4px',
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    borderRadius: '2px',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              {/* Explanatory definitions row */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr 1fr',
+                gap: '10px',
+                background: 'rgba(0,0,0,0.1)',
+                borderRadius: '6px',
+                padding: '8px 12px',
+                fontSize: '10px',
+                color: 'var(--text-muted)',
+                border: '1px solid rgba(255,255,255,0.015)'
+              }}>
+                <div>
+                  <strong style={{ color: 'var(--text-secondary)' }}>Cote Juste</strong> : Cote sans marge de profit.
+                </div>
+                <div>
+                  <strong style={{ color: 'var(--text-secondary)' }}>Cote Estimée Bookie</strong> : Cote marché avec marge incluse.
+                </div>
+                <div>
+                  <strong style={{ color: 'var(--text-secondary)' }}>Value Edge</strong> : Avantage statistique attendu.
                 </div>
               </div>
+
+              {/* Odds Table */}
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px', textTransform: 'none' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', color: 'var(--text-muted)', fontWeight: 800 }}>
+                      <th style={{ padding: '6px 4px', textAlign: 'left' }}>Ligne</th>
+                      <th style={{ padding: '6px 4px', textAlign: 'center' }}>Option</th>
+                      <th style={{ padding: '6px 4px', textAlign: 'center' }}>Probabilité</th>
+                      <th style={{ padding: '6px 4px', textAlign: 'center' }}>Cote Juste</th>
+                      <th style={{ padding: '6px 4px', textAlign: 'center' }}>Cote Estimée Bookie</th>
+                      <th style={{ padding: '6px 4px', textAlign: 'center', width: '90px' }}>Votre Bookmaker</th>
+                      <th style={{ padding: '6px 4px', textAlign: 'right' }}>Calculateur de Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allLinesForPeriod.map(line => {
+                      const overProb = bivariatePoissonOver(meanHome, meanAway, cov, line);
+                      const underProb = 1 - overProb;
+
+                      const fairOver = overProb > 0 ? 1 / overProb : 99;
+                      const fairUnder = underProb > 0 ? 1 / underProb : 99;
+
+                      const bookieOver = overProb > 0 ? payoutRatio / overProb : 99;
+                      const bookieUnder = underProb > 0 ? payoutRatio / underProb : 99;
+
+                      const overKey = `${simPeriod}-${line}-over`;
+                      const underKey = `${simPeriod}-${line}-under`;
+
+                      const userOddsOver = parseFloat(userOdds[overKey] || '');
+                      const userOddsUnder = parseFloat(userOdds[underKey] || '');
+
+                      const calculateEdge = (userVal, fairVal) => {
+                        if (!userVal || isNaN(userVal)) return null;
+                        const probImplied = 1 / userVal;
+                        const probFair = 1 / fairVal;
+                        return (probFair / probImplied - 1) * 100;
+                      };
+
+                      const overEdge = calculateEdge(userOddsOver, fairOver);
+                      const underEdge = calculateEdge(userOddsUnder, fairUnder);
+
+                      const renderValueCell = (edge) => {
+                        if (edge === null) return <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '10.5px' }}>Entrez une cote</span>;
+                        if (edge > 0) {
+                          return (
+                            <span style={{
+                              color: '#10b981',
+                              background: 'rgba(16, 185, 129, 0.08)',
+                              border: '1px solid rgba(16, 185, 129, 0.15)',
+                              padding: '3px 8px',
+                              borderRadius: '4px',
+                              fontSize: '10px',
+                              fontWeight: 800,
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.04em'
+                            }} title="Cette cote est sous-évaluée par le bookmaker, rentable à long terme.">
+                              VALUE +{edge.toFixed(1)}%
+                            </span>
+                          );
+                        } else {
+                          return (
+                            <span style={{
+                              color: 'var(--text-muted)',
+                              background: 'rgba(255,255,255,0.02)',
+                              border: '1px solid rgba(255,255,255,0.03)',
+                              padding: '3px 8px',
+                              borderRadius: '4px',
+                              fontSize: '10px',
+                              fontWeight: 600
+                            }} title="Cette cote n'offre pas de rentabilité statistique par rapport aux moyennes.">
+                              Perte {edge.toFixed(1)}%
+                            </span>
+                          );
+                        }
+                      };
+
+                      return (
+                        <React.Fragment key={line}>
+                          {/* OVER ROW */}
+                          <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.015)' }}>
+                            <td style={{ padding: '6px 4px', fontWeight: 800 }} rowSpan={2}>
+                              {line}
+                            </td>
+                            <td style={{ padding: '6px 4px', textAlign: 'center', color: '#10b981', fontWeight: 700 }}>
+                              Plus de
+                            </td>
+                            <td style={{ padding: '6px 4px', textAlign: 'center', fontWeight: 700 }}>
+                              {Math.round(overProb * 100)}%
+                            </td>
+                            <td style={{ padding: '6px 4px', textAlign: 'center', fontWeight: 600, color: 'var(--text-muted)' }}>
+                              {fairOver.toFixed(2)}
+                            </td>
+                            <td style={{ padding: '6px 4px', textAlign: 'center', fontWeight: 700, color: '#bf5af2' }}>
+                              {bookieOver.toFixed(2)}
+                            </td>
+                            <td style={{ padding: '3px 4px', textAlign: 'center' }}>
+                              <input
+                                type="text"
+                                placeholder="Ex: 1.85"
+                                value={userOdds[overKey] || ''}
+                                onChange={(e) => setUserOdds({ ...userOdds, [overKey]: e.target.value })}
+                                style={{
+                                  width: '65px',
+                                  background: 'rgba(0,0,0,0.25)',
+                                  border: '1px solid rgba(255,255,255,0.06)',
+                                  borderRadius: '4px',
+                                  color: '#fff',
+                                  padding: '2px 4px',
+                                  fontSize: '11px',
+                                  textAlign: 'center',
+                                  outline: 'none'
+                                }}
+                              />
+                            </td>
+                            <td style={{ padding: '6px 4px', textAlign: 'right' }}>
+                              {renderValueCell(overEdge)}
+                            </td>
+                          </tr>
+                          {/* UNDER ROW */}
+                          <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                            <td style={{ padding: '6px 4px', textAlign: 'center', color: '#bf5af2', fontWeight: 700 }}>
+                              Moins de
+                            </td>
+                            <td style={{ padding: '6px 4px', textAlign: 'center', fontWeight: 700 }}>
+                              {Math.round(underProb * 100)}%
+                            </td>
+                            <td style={{ padding: '6px 4px', textAlign: 'center', fontWeight: 600, color: 'var(--text-muted)' }}>
+                              {fairUnder.toFixed(2)}
+                            </td>
+                            <td style={{ padding: '6px 4px', textAlign: 'center', fontWeight: 700, color: '#bf5af2' }}>
+                              {bookieUnder.toFixed(2)}
+                            </td>
+                            <td style={{ padding: '3px 4px', textAlign: 'center' }}>
+                              <input
+                                type="text"
+                                placeholder="Ex: 1.85"
+                                value={userOdds[underKey] || ''}
+                                onChange={(e) => setUserOdds({ ...userOdds, [underKey]: e.target.value })}
+                                style={{
+                                  width: '65px',
+                                  background: 'rgba(0,0,0,0.25)',
+                                  border: '1px solid rgba(255,255,255,0.06)',
+                                  borderRadius: '4px',
+                                  color: '#fff',
+                                  padding: '2px 4px',
+                                  fontSize: '11px',
+                                  textAlign: 'center',
+                                  outline: 'none'
+                                }}
+                              />
+                            </td>
+                            <td style={{ padding: '6px 4px', textAlign: 'right' }}>
+                              {renderValueCell(underEdge)}
+                            </td>
+                          </tr>
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Add Custom Line Input */}
+              <form onSubmit={handleAddCustomLine} style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', padding: '8px 12px', borderRadius: '6px', marginTop: '4px' }}>
+                <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>Simuler une autre ligne de {metricTitle.toLowerCase()} :</span>
+                <input
+                  type="number"
+                  step="0.5"
+                  placeholder="Ex: 6.5"
+                  value={customLineInput}
+                  onChange={(e) => setCustomLineInput(e.target.value)}
+                  style={{
+                    background: 'rgba(0,0,0,0.25)',
+                    border: '1px solid rgba(255,255,255,0.06)',
+                    borderRadius: '4px',
+                    color: '#fff',
+                    padding: '4px 8px',
+                    fontSize: '11px',
+                    width: '70px',
+                    outline: 'none'
+                  }}
+                />
+                <button type="submit" style={{ padding: '4px 10px', fontSize: '11px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: '#fff', cursor: 'pointer', borderRadius: '4px', fontWeight: 700 }}>
+                  Ajouter
+                </button>
+              </form>
             </div>
           );
         })()}

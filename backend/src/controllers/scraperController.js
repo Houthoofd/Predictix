@@ -42,6 +42,17 @@ class ScraperController {
       });
     }
 
+    const targetDate = req.body.date || req.query.date || null;
+    let formattedDate = null;
+    if (targetDate) {
+      const ymdMatch = targetDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (ymdMatch) {
+        formattedDate = `${ymdMatch[3]}-${ymdMatch[2]}-${ymdMatch[1]}`;
+      } else if (/^\d{2}-\d{2}-\d{4}$/.test(targetDate)) {
+        formattedDate = targetDate;
+      }
+    }
+
     const scraperPath = process.env.SCRAPER_PATH || 'E:\\Developpement\\scrapper-v3';
     const outputDirs = [
       path.join(scraperPath, 'data', 'matchendirect'),
@@ -58,7 +69,7 @@ class ScraperController {
     }
 
     try {
-      const matches = await runDiscoveryProcess(scraperPath, scriptName, outputDirs, (child) => {
+      const matches = await runDiscoveryProcess(scraperPath, scriptName, outputDirs, formattedDate, (child) => {
         activeScraperProcess = child;
       });
 
@@ -166,9 +177,26 @@ class ScraperController {
     }
 
     const limit = req.body.limit || req.query.limit || 30;
-    sendEvent('log', { message: `[Predictix] Execution du script : ${scriptName} (limite : ${limit} matchs)` });
+    const targetDate = req.body.date || req.query.date || null;
+    let formattedDate = null;
+    if (targetDate) {
+      const ymdMatch = targetDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (ymdMatch) {
+        formattedDate = `${ymdMatch[3]}-${ymdMatch[2]}-${ymdMatch[1]}`;
+      } else if (/^\d{2}-\d{2}-\d{4}$/.test(targetDate)) {
+        formattedDate = targetDate;
+      }
+    }
 
-    const child = spawn('cmd.exe', ['/c', scriptName, 'verbose', limit], {
+    sendEvent('log', { message: `[Predictix] Execution du script : ${scriptName} (limite : ${limit} matchs, date : ${formattedDate || 'aujourd\'hui'})` });
+
+    const args = ['/c', scriptName, 'verbose', limit];
+    if (formattedDate) {
+      args.push('');
+      args.push(formattedDate);
+    }
+
+    const child = spawn('cmd.exe', args, {
       cwd: scraperPath,
       env: { ...process.env, FORCE_COLOR: '1' }
     });
@@ -234,6 +262,16 @@ class ScraperController {
 
       for (const line of lines) {
         let cleanLine = line.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '').trim();
+        if (cleanLine.startsWith('[STRUCT_MATCH_DATA]')) {
+          try {
+            const matchJsonStr = cleanLine.replace('[STRUCT_MATCH_DATA]', '').trim();
+            const matchData = JSON.parse(matchJsonStr);
+            sendEvent('match_scraped', { match: matchData });
+          } catch(e) {
+            console.error("Failed to parse STRUCT_MATCH_DATA:", e);
+          }
+          continue;
+        }
         if (cleanLine) {
           cleanLine = rewriteScraperLog(cleanLine, targetStrategy);
           sendEvent('log', { message: cleanLine });
@@ -336,12 +374,28 @@ class ScraperController {
                 for (const link of prioritizedLinks) {
                   if (matchAddedCount >= 10) break;
                   
-                  const cached = await dbQuery('SELECT match_id, date FROM scraped_predictions WHERE match_id = ?', [link]);
+                  const cached = await dbQuery('SELECT match_id, date, score, first_half_corners_home, first_half_corners_away FROM scraped_predictions WHERE match_id = ?', [link]);
                   const isPlaceholder = cached.length > 0 && 
                     (cached[0].date === '2026-05-30' || cached[0].date === '2026-05-31' || cached[0].date.includes(':'));
-                  if (cached.length === 0 || isPlaceholder) {
+                  const hasNoStats = cached.length > 0 && cached[0].first_half_corners_home === null;
+                  if (cached.length === 0 || isPlaceholder || hasNoStats) {
                     uncachedLinksSet.add(link);
                     matchAddedCount++;
+                  } else {
+                    const score = cached[0].score || '-';
+                    const corners = (cached[0].first_half_corners_home !== null && cached[0].first_half_corners_home !== undefined)
+                      ? `${cached[0].first_half_corners_home}-${cached[0].first_half_corners_away}`
+                      : 'N/A';
+                    sendEvent('log', { message: `[H2H Cache] Confrontation déjà en cache : ${match.home_team} vs ${match.away_team} (Score: ${score}) (Corners 1ère MT: ${corners})` });
+                    sendEvent('h2h_scraped', { h2h: {
+                      match_url: link,
+                      home_team: match.home_team,
+                      away_team: match.away_team,
+                      score: score,
+                      date: cached[0].date,
+                      first_half_corners_home: cached[0].first_half_corners_home,
+                      first_half_corners_away: cached[0].first_half_corners_away
+                    }});
                   }
                 }
               }
@@ -358,7 +412,8 @@ class ScraperController {
               shouldStop: () => stopScraperRequested,
               log: (msg) => sendEvent('log', { message: msg }),
               importHistoricalMatch,
-              importSkippedMatch
+              importSkippedMatch,
+              onH2HScraped: (h2hData) => sendEvent('h2h_scraped', { h2h: h2hData })
             });
           }
           
@@ -503,10 +558,11 @@ class ScraperController {
             const prioritizedLinks = prioritizeDirectH2H(activeLinks, match.home_team, match.away_team);
             const uncachedLinks = [];
             for (const link of prioritizedLinks) {
-              const cached = await dbQuery('SELECT match_id, date FROM scraped_predictions WHERE match_id = ?', [link]);
+              const cached = await dbQuery('SELECT match_id, date, first_half_corners_home FROM scraped_predictions WHERE match_id = ?', [link]);
               const isPlaceholder = cached.length > 0 && 
                 (cached[0].date === '2026-05-30' || cached[0].date === '2026-05-31' || cached[0].date.includes(':'));
-              if (cached.length === 0 || isPlaceholder) {
+              const hasNoStats = cached.length > 0 && cached[0].first_half_corners_home === null;
+              if (cached.length === 0 || isPlaceholder || hasNoStats) {
                 uncachedLinks.push(link);
               }
             }
