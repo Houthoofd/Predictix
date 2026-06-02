@@ -18,6 +18,7 @@ import TrackerTab from './components/TrackerTab';
 import MagicPredictionsTab from './components/MagicPredictionsTab';
 import StrategiesTab from './components/StrategiesTab';
 import BasketTab from './components/BasketTab';
+import IntegrityTab from './components/IntegrityTab';
 import AddBetModal from './components/AddBetModal';
 import ResetBankrollModal from './components/ResetBankrollModal';
 import MatchDetailsModal from './components/MatchDetailsModal';
@@ -72,6 +73,7 @@ export default function App() {
   const [batchProgress, setBatchProgress] = useState(0); // Count of successfully placed batch bets
   const [crawlLoading, setCrawlLoading] = useState(false); // Track on-demand crawling loading state
   const [showScrapeResultModal, setShowScrapeResultModal] = useState(false);
+  const [customLogos, setCustomLogos] = useState([]);
   const [scrapeResultStats, setScrapeResultStats] = useState(null);
   const [selectedScraperStrategyId, setSelectedScraperStrategyId] = useState('');
   const [basketBets, setBasketBets] = useState([]); // Dynamic bet basket state
@@ -222,7 +224,8 @@ export default function App() {
         fetchBankroll(),
         fetchBets(),
         fetchPredictions(),
-        fetchStats()
+        fetchStats(),
+        fetchCustomLogos()
       ]);
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -237,10 +240,81 @@ export default function App() {
         fetchBankroll(),
         fetchBets(),
         fetchPredictions(),
-        fetchStats()
+        fetchStats(),
+        fetchCustomLogos()
       ]);
     } catch (error) {
       console.error("Error refreshing data silently:", error);
+    }
+  };
+
+  const fetchCustomLogos = async () => {
+    try {
+      const res = await fetch('/api/custom-logos');
+      const json = await res.json();
+      if (json.success) setCustomLogos(json.data || []);
+    } catch (err) {
+      console.error("Error fetching custom logos:", err);
+    }
+  };
+
+  const handleSaveCustomLogo = async (teamName, url) => {
+    try {
+      const res = await fetch('/api/custom-logos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ team_name: teamName, logo_url: url })
+      });
+      const json = await res.json();
+      if (json.success) {
+        showToast("Logo personnalisé enregistré !", "success");
+        await fetchCustomLogos();
+        await fetchPredictions();
+      } else {
+        showToast("Erreur: " + json.error.message, "error");
+      }
+    } catch (err) {
+      showToast("Impossible d'enregistrer le logo", "error");
+    }
+  };
+
+  const handleDeleteCustomLogo = async (teamName) => {
+    try {
+      const res = await fetch(`/api/custom-logos/${encodeURIComponent(teamName)}`, {
+        method: 'DELETE'
+      });
+      const json = await res.json();
+      if (json.success) {
+        showToast("Logo personnalisé supprimé !", "success");
+        await fetchCustomLogos();
+        await fetchPredictions();
+      } else {
+        showToast("Erreur: " + json.error.message, "error");
+      }
+    } catch (err) {
+      showToast("Impossible de supprimer le logo", "error");
+    }
+  };
+
+  const handleSaveCustomHistoricalMatch = async (matchData) => {
+    try {
+      const res = await fetch('/api/predictions/historical/custom', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(matchData)
+      });
+      const json = await res.json();
+      if (json.success) {
+        showToast("Données historiques enregistrées !", "success");
+        await fetchPredictions();
+        return true;
+      } else {
+        showToast("Erreur: " + json.error.message, "error");
+        return false;
+      }
+    } catch (err) {
+      showToast("Erreur lors de la communication avec le serveur", "error");
+      return false;
     }
   };
 
@@ -1038,6 +1112,7 @@ export default function App() {
                 {activeTab === 'scraper' && 'Configuration Scraper'}
                 {activeTab === 'tracker' && 'Tracker de Paris'}
                 {activeTab === 'strategies' && 'Stratégies Personnalisées'}
+                {activeTab === 'integrity' && 'Qualité des Données'}
               </h2>
               <p className="header-subtitle">
                 {activeTab === 'dashboard' && 'Statistiques de bankroll en temps réel et performances.'}
@@ -1046,6 +1121,7 @@ export default function App() {
                 {activeTab === 'scraper' && 'Gérez et exécutez le scraper de match-en-direct.fr en temps réel.'}
                 {activeTab === 'tracker' && 'Journalisez vos paris sportifs pour optimiser votre capital.'}
                 {activeTab === 'strategies' && 'Analyse et configuration de vos cibles de paris à forte espérance mathématique.'}
+                {activeTab === 'integrity' && 'Analysez les données manquantes, forcer le crawl et gérez les logos personnalisés.'}
               </p>
             </div>
             <div className="header-actions">
@@ -1139,6 +1215,17 @@ export default function App() {
                   fetchAllData={fetchAllData}
                   showNotification={showNotification}
                   showToast={showToast}
+                />
+              )}
+
+              {activeTab === 'integrity' && (
+                <IntegrityTab 
+                  predictions={predictions}
+                  customLogos={customLogos}
+                  onSaveCustomLogo={handleSaveCustomLogo}
+                  onDeleteCustomLogo={handleDeleteCustomLogo}
+                  onSaveCustomHistoricalMatch={handleSaveCustomHistoricalMatch}
+                  onCrawlMatchHistory={handleCrawlHistory}
                 />
               )}
             </>

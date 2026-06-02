@@ -5,7 +5,8 @@ import {
   TrendingUp, 
   RefreshCcw,
   Sparkles,
-  ShoppingCart
+  ShoppingCart,
+  ShieldAlert
 } from 'lucide-react';
 
 export default function Sidebar({ 
@@ -99,6 +100,19 @@ export default function Sidebar({
           >
             <Database size={20} />
             {!sidebarCollapsed && <span>Stratégies</span>}
+          </button>
+          <button 
+            className={`nav-item ${activeTab === 'integrity' ? 'active' : ''}`}
+            onClick={() => setActiveTab('integrity')}
+            title={sidebarCollapsed ? "Qualité des Données" : ""}
+            style={{
+              '--item-accent': '#ff3b30',
+              borderLeft: activeTab === 'integrity' ? '3px solid #ff3b30' : undefined,
+              color: activeTab === 'integrity' ? '#ff3b30' : undefined
+            }}
+          >
+            <ShieldAlert size={20} style={{ color: activeTab === 'integrity' ? '#ff3b30' : undefined }} />
+            {!sidebarCollapsed && <span>Qualité des Données</span>}
           </button>
         </nav>
       </div>

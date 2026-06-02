@@ -216,6 +216,15 @@ function initDb() {
       if (err) console.error("Error running database retroactive repair query:", err.message);
     });
     
+    // 5. Table custom_team_logos
+    db.run(`
+      CREATE TABLE IF NOT EXISTS custom_team_logos (
+        team_name TEXT PRIMARY KEY,
+        logo_url TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
     console.log("Database tables initialized successfully");
   });
 }

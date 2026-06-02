@@ -92,7 +92,60 @@ export function calculateRegressedAverages(row, leagueAverages, homeAvg, awayAvg
 /**
  * Enriches a single match predictions with regressed averages, Poisson calculations, and Value Bets edges
  */
-export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatches, awayMatches, activeCrawlHistoryMatches = new Set()) {
+export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatches, awayMatches, activeCrawlHistoryMatches = new Set(), customLogosMap = {}) {
+  const cleanHomeTeamKey = (row.home_team || '').toLowerCase().trim();
+  const cleanAwayTeamKey = (row.away_team || '').toLowerCase().trim();
+  const homeLogo = customLogosMap[cleanHomeTeamKey] || row.home_logo;
+  const awayLogo = customLogosMap[cleanAwayTeamKey] || row.away_logo;
+
+  const overlayLogos = (matchList) => {
+    return matchList.map(m => {
+      const hKey = (m.home_team || '').toLowerCase().trim();
+      const aKey = (m.away_team || '').toLowerCase().trim();
+      return {
+        ...m,
+        home_logo: customLogosMap[hKey] || m.home_logo,
+        away_logo: customLogosMap[aKey] || m.away_logo
+      };
+    });
+  };
+
+  const enrichedHomeMatches = overlayLogos(homeMatches);
+  const enrichedAwayMatches = overlayLogos(awayMatches);
+  const enrichedH2HMatches = overlayLogos(h2hMatches);
+
+  // Calculate Data Integrity Diagnostics
+  const isHomeLogoMissing = !homeLogo || homeLogo.trim() === '' || homeLogo.toLowerCase().includes('placeholder') || homeLogo.toLowerCase().includes('logo_default') || homeLogo.toLowerCase().includes('logo-default');
+  const isAwayLogoMissing = !awayLogo || awayLogo.trim() === '' || awayLogo.toLowerCase().includes('placeholder') || awayLogo.toLowerCase().includes('logo_default') || awayLogo.toLowerCase().includes('logo-default');
+  
+  // Calculate integrity score (out of 100)
+  let diagnosticScore = 100;
+  if (homeMatches.length === 0) diagnosticScore -= 25;
+  else if (homeMatches.length < 5) diagnosticScore -= 10;
+  
+  if (awayMatches.length === 0) diagnosticScore -= 25;
+  else if (awayMatches.length < 5) diagnosticScore -= 10;
+  
+  if (h2hMatches.length === 0) diagnosticScore -= 30;
+  
+  if (isHomeLogoMissing) diagnosticScore -= 10;
+  if (isAwayLogoMissing) diagnosticScore -= 10;
+  
+  diagnosticScore = Math.max(0, diagnosticScore);
+
+  const diagnostic = {
+    missing_home_history: homeMatches.length === 0,
+    missing_away_history: awayMatches.length === 0,
+    missing_h2h: h2hMatches.length === 0,
+    missing_home_logo: isHomeLogoMissing,
+    missing_away_logo: isAwayLogoMissing,
+    home_matches_count: homeMatches.length,
+    away_matches_count: awayMatches.length,
+    h2h_matches_count: h2hMatches.length,
+    score: diagnosticScore,
+    is_complete: homeMatches.length >= 5 && awayMatches.length >= 5 && h2hMatches.length >= 1 && !isHomeLogoMissing && !isAwayLogoMissing
+  };
+
   // Calculate H2H corners average (Total match corners in H2H)
   let h2hSum = 0;
   let h2hCount = 0;
@@ -344,6 +397,8 @@ export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatc
 
   return {
     ...row,
+    home_logo: homeLogo,
+    away_logo: awayLogo,
     best_tip: dynamicBestTip,
     card_line: dynamicCardLine,
     probability: dynamicProbability,
@@ -354,10 +409,11 @@ export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatc
     away_avg_first_half_corners: awayRegressed,
     h2h_avg_first_half_corners: h2hAvg,
     odds_corners: enrichedOdds,
-    recent_home_matches: homeMatches,
-    recent_away_matches: awayMatches,
-    recent_h2h_matches: h2hMatches,
+    recent_home_matches: enrichedHomeMatches,
+    recent_away_matches: enrichedAwayMatches,
+    recent_h2h_matches: enrichedH2HMatches,
     isCrawling: activeCrawlHistoryMatches.has(row.match_id),
+    diagnostic,
     gbdt_predictions: {
       first_half: {
         expected: parseFloat(gbdt1MTExpected.toFixed(2)),
@@ -669,6 +725,19 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
 
   const leagueAverages = computeLeagueAverages(allHistoricalMatches);
   const enrichedRows = [];
+
+  // Load custom logo overrides
+  let customLogosMap = {};
+  try {
+    const customLogosRows = await dbQueryFn("SELECT * FROM custom_team_logos");
+    if (customLogosRows && Array.isArray(customLogosRows)) {
+      for (const cl of customLogosRows) {
+        customLogosMap[cl.team_name.toLowerCase().trim()] = cl.logo_url;
+      }
+    }
+  } catch (err) {
+    console.warn("[Prediction Engine] Custom logos table might not exist yet or failed to query:", err.message);
+  }
   
   for (const row of rows) {
     const h2hMatches = await dbQueryFn(`
@@ -711,7 +780,7 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
 
     const normalizedAway = awayMatches.map(normalizeMatchRow);
     
-    const enriched = enrichMatchPredictions(row, leagueAverages, normalizedH2H, normalizedHome, normalizedAway, activeCrawlHistoryMatches);
+    const enriched = enrichMatchPredictions(row, leagueAverages, normalizedH2H, normalizedHome, normalizedAway, activeCrawlHistoryMatches, customLogosMap);
     enrichedRows.push(enriched);
   }
 
