@@ -37,11 +37,12 @@ export default function Sidebar({
             onClick={() => setActiveTab('magic-predictions')}
             title={sidebarCollapsed ? "Pronostics Magiques" : ""}
             style={{
+              '--item-accent': '#bf5af2',
               borderLeft: activeTab === 'magic-predictions' ? '3px solid #bf5af2' : undefined,
               color: activeTab === 'magic-predictions' ? '#bf5af2' : undefined
             }}
           >
-            <Sparkles size={20} style={{ color: activeTab === 'magic-predictions' ? '#bf5af2' : '#bf5af2' }} />
+            <Sparkles size={20} style={{ color: '#bf5af2' }} />
             {!sidebarCollapsed && <span style={{ fontWeight: activeTab === 'magic-predictions' ? 700 : 500 }}>Pronostics Magiques</span>}
           </button>
           <button 
@@ -50,6 +51,7 @@ export default function Sidebar({
             title={sidebarCollapsed ? `Panier de Paris (${basketCount})` : ""}
             style={{
               position: 'relative',
+              '--item-accent': '#0082ff',
               borderLeft: activeTab === 'basket' ? '3px solid #0082ff' : undefined,
               color: activeTab === 'basket' ? '#0082ff' : undefined
             }}

@@ -549,19 +549,19 @@ select.form-control {
 .nav-item.active {
   background: var(--bg-tertiary);
   color: var(--text-primary);
-  border-left: 3px solid var(--color-accent-solid);
+  border-left: 3px solid var(--item-accent, var(--color-accent-solid));
   border-radius: 0px var(--radius-sm) var(--radius-sm) 0px !important;
 }
 
 .nav-item.active svg {
-  color: var(--color-accent-solid);
+  color: var(--item-accent, var(--color-accent-solid));
 }
 
 .sidebar.collapsed .nav-item.active {
   border-left: none !important;
   background: rgba(255, 255, 255, 0.05) !important;
-  color: var(--color-accent-solid) !important;
-  box-shadow: 0 0 14px rgba(0, 0, 0, 0.2), 0 0 8px var(--color-accent-solid) !important;
+  color: var(--item-accent, var(--color-accent-solid)) !important;
+  box-shadow: 0 0 14px rgba(0, 0, 0, 0.2), 0 0 8px var(--item-accent, var(--color-accent-solid)) !important;
   border-radius: 10px !important;
   transform: none !important;
 }
