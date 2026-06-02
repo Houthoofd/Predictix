@@ -70,8 +70,7 @@ export default function Sidebar({
                 fontWeight: 800,
                 borderRadius: '10px',
                 padding: '1px 5px',
-                display: 'inline-block',
-                boxShadow: '0 0 8px rgba(191, 90, 242, 0.4)'
+                display: 'inline-block'
               }}>
                 {basketCount}
               </span>

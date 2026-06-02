@@ -85,6 +85,24 @@ const getFlagUrl = (tour) => {
   return `https://flagcdn.com/w40/un.png`;
 };
 
+const formatHumanDate = (dateStr) => {
+  if (!dateStr) return "Date inconnue";
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    try {
+      const d = new Date(parts[0], parts[1] - 1, parts[2]);
+      if (!isNaN(d.getTime())) {
+        const formatted = d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+        const shortFormat = `${parts[2]}/${parts[1]}/${parts[0]}`;
+        const friendly = formatted.charAt(0).toUpperCase() + formatted.slice(1);
+        return `${friendly} (${shortFormat})`;
+      }
+    } catch (e) {}
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  return dateStr;
+};
+
 export default function PredictionsTab({
   predStatusFilter,
   setPredStatusFilter,
@@ -111,10 +129,10 @@ export default function PredictionsTab({
 }) {
   const [collapsedLeagues, setCollapsedLeagues] = React.useState({});
 
-  const toggleLeague = (leagueName) => {
+  const toggleLeague = (leagueKey) => {
     setCollapsedLeagues(prev => ({
       ...prev,
-      [leagueName]: !prev[leagueName]
+      [leagueKey]: !prev[leagueKey]
     }));
   };
 
@@ -230,139 +248,167 @@ export default function PredictionsTab({
       {/* Grouped Predictions matches */}
       {filteredPredictions.length > 0 ? (
         (() => {
-          // Group predictions by tournament
-          const groups = {};
+          // Group predictions by date, then by tournament
+          const dateGroups = {};
           filteredPredictions.forEach(pred => {
+            const dateVal = pred.date || 'Date inconnue';
+            if (!dateGroups[dateVal]) dateGroups[dateVal] = {};
+            
             const league = pred.tournament || 'Football';
-            if (!groups[league]) groups[league] = [];
-            groups[league].push(pred);
+            if (!dateGroups[dateVal][league]) dateGroups[dateVal][league] = [];
+            dateGroups[dateVal][league].push(pred);
           });
 
-          return Object.keys(groups).map((leagueName, lIdx) => {
-            const leaguePredictions = groups[leagueName];
-            const groupFlagUrl = getFlagUrl(leagueName);
-            const isCollapsed = !!collapsedLeagues[leagueName];
+          // Sort date keys descending (newest first)
+          const sortedDates = Object.keys(dateGroups).sort((a, b) => b.localeCompare(a));
+
+          return sortedDates.map((dateStr, dIdx) => {
+            const leaguesInDate = dateGroups[dateStr];
 
             return (
-              <div key={lIdx} style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: isCollapsed ? '2px' : '8px' }}>
-                
-                {/* Collapsible League Header */}
-                <div 
-                  onClick={() => toggleLeague(leagueName)}
-                  style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '10px', 
-                    padding: '6px 12px', 
-                    background: isCollapsed ? 'rgba(255,255,255,0.01)' : 'rgba(255,255,255,0.025)', 
-                    border: '1px solid var(--border-color)', 
-                    borderRadius: '4px',
-                    fontFamily: 'Outfit',
-                    fontWeight: 700,
-                    fontSize: '13px',
-                    color: 'var(--text-primary)',
-                    letterSpacing: '0.04em',
-                    textTransform: 'uppercase',
-                    cursor: 'pointer',
-                    userSelect: 'none',
-                    transition: 'all 0.2s ease',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
-                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = isCollapsed ? 'rgba(255,255,255,0.01)' : 'rgba(255,255,255,0.025)';
-                    e.currentTarget.style.borderColor = 'var(--border-color)';
-                  }}
-                >
-                  {isCollapsed ? (
-                    <ChevronRight size={18} style={{ color: 'var(--text-muted)' }} />
-                  ) : (
-                    <ChevronDown size={18} style={{ color: 'var(--color-accent-solid)' }} />
-                  )}
-                  
-                  {groupFlagUrl && (
-                    <img 
-                      src={groupFlagUrl} 
-                      alt="" 
-                      style={{ width: '18px', height: '13px', objectFit: 'cover', borderRadius: '1.5px', border: '1px solid rgba(255,255,255,0.1)' }} 
-                    />
-                  )}
-                  <span>{leagueName}</span>
-                  
-                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500, marginLeft: 'auto', background: 'var(--bg-tertiary)', padding: '2px 8px', borderRadius: '10px' }}>
-                    {leaguePredictions.length} match{leaguePredictions.length > 1 ? 'es' : ''}
+              <div key={dIdx} style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
+                {/* Date Section Header */}
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '8px', 
+                  padding: '8px 0', 
+                  borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                  fontFamily: 'Outfit',
+                  fontSize: '15px',
+                  fontWeight: 800,
+                  color: 'var(--text-primary)'
+                }}>
+                  <Calendar size={16} style={{ color: 'var(--color-accent-solid)' }} />
+                  <span>{formatHumanDate(dateStr)}</span>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500, background: 'rgba(255, 255, 255, 0.05)', padding: '2px 8px', borderRadius: '10px', marginLeft: '6px' }}>
+                    {Object.values(leaguesInDate).flat().length} match{Object.values(leaguesInDate).flat().length > 1 ? 'es' : ''}
                   </span>
                 </div>
 
-                {/* Matches Grid for this League */}
-                {!isCollapsed && (
-                  <div className="grid-3" style={{ animation: 'fadeIn 0.25s ease-out' }}>
-                    {leaguePredictions.map((pred) => {
-                      const probVal = parseInt(pred.probability.replace('%', ''));
-                      const isHighProb = !isNaN(probVal) && probVal >= 60;
-                      
-                      // Calculate if this prediction itself is a Model-based Value Bet
-                      let isModelValueBet = false;
-                      let modelValueEdge = 0;
-                      let parsedProb = 0;
-                      let parsedOdds = 0;
-                      
-                      const tipLower = String(pred.best_tip).toLowerCase();
-                      const isOver = tipLower.includes('plus') || tipLower.includes('over');
-                      const isUnder = tipLower.includes('moins') || tipLower.includes('under');
-                      
-                      // Find the estimated odds for the card_line (e.g. 4.5)
-                      const cardLineVal = parseFloat(pred.card_line);
-                      const matchingRow = pred.odds_corners ? pred.odds_corners.find(o => 
-                        o.market_type === '1st_half' && parseFloat(o.line) === cardLineVal
-                      ) : null;
-                      const estimatedOddsVal = matchingRow 
-                        ? (isOver ? matchingRow.over_decimal : matchingRow.under_decimal) 
-                        : null;
-                      
-                      if (matchingRow) {
-                        if (isOver) {
-                          isModelValueBet = matchingRow.over_value_bet;
-                          modelValueEdge = matchingRow.over_value_edge;
-                          parsedProb = parseInt(String(matchingRow.over_probability).replace('%', ''), 10);
-                          parsedOdds = matchingRow.over_decimal;
-                        } else if (isUnder) {
-                          isModelValueBet = matchingRow.under_value_bet;
-                          modelValueEdge = matchingRow.under_value_edge;
-                          parsedProb = parseInt(String(matchingRow.under_probability).replace('%', ''), 10);
-                          parsedOdds = matchingRow.under_decimal;
-                        }
-                      }
-                      
-                      const isSelected = selectedPredIds.includes(pred.match_id);
+                {/* Leagues in this Date */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {Object.keys(leaguesInDate).map((leagueName, lIdx) => {
+                    const leaguePredictions = leaguesInDate[leagueName];
+                    const groupFlagUrl = getFlagUrl(leagueName);
+                    const leagueKey = `${dateStr}_${leagueName}`;
+                    const isCollapsed = !!collapsedLeagues[leagueKey];
 
-                      return (
+                    return (
+                      <div key={lIdx} style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: isCollapsed ? '2px' : '8px' }}>
+                        {/* Collapsible League Header */}
                         <div 
-                          key={pred.match_id} 
-                          className={`glass-card ${isHighProb ? 'accent-left' : ''}`}
-                          onClick={() => setSelectedMatchDetails(pred)}
+                          onClick={() => toggleLeague(leagueKey)}
                           style={{ 
                             display: 'flex', 
-                            flexDirection: 'column', 
-                            justifyContent: 'space-between', 
-                            gap: '20px',
-                            border: isSelected 
-                              ? '1.5px solid var(--color-accent-solid)' 
-                              : isModelValueBet 
-                                ? '1px solid rgba(16, 185, 129, 0.35)' 
-                                : '1px solid var(--border-color)',
-                            boxShadow: isSelected
-                              ? '0 0 15px rgba(0, 98, 255, 0.15)'
-                              : isModelValueBet 
-                                ? '0 0 15px rgba(16, 185, 129, 0.08)' 
-                                : 'none',
+                            alignItems: 'center', 
+                            gap: '10px', 
+                            padding: '6px 12px', 
+                            background: isCollapsed ? 'rgba(255,255,255,0.01)' : 'rgba(255,255,255,0.025)', 
+                            border: '1px solid var(--border-color)', 
+                            borderRadius: '4px',
+                            fontFamily: 'Outfit',
+                            fontWeight: 700,
+                            fontSize: '13px',
+                            color: 'var(--text-primary)',
+                            letterSpacing: '0.04em',
+                            textTransform: 'uppercase',
                             cursor: 'pointer',
-                            transform: isSelected ? 'scale(1.008)' : 'none',
-                            transition: 'all 0.15s ease'
+                            userSelect: 'none',
+                            transition: 'all 0.2s ease',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+                            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = isCollapsed ? 'rgba(255,255,255,0.01)' : 'rgba(255,255,255,0.025)';
+                            e.currentTarget.style.borderColor = 'var(--border-color)';
                           }}
                         >
+                          {isCollapsed ? (
+                            <ChevronRight size={18} style={{ color: 'var(--text-muted)' }} />
+                          ) : (
+                            <ChevronDown size={18} style={{ color: 'var(--color-accent-solid)' }} />
+                          )}
+                          
+                          {groupFlagUrl && (
+                            <img 
+                              src={groupFlagUrl} 
+                              alt="" 
+                              style={{ width: '18px', height: '13px', objectFit: 'cover', borderRadius: '1.5px', border: '1px solid rgba(255,255,255,0.1)' }} 
+                            />
+                          )}
+                          <span>{leagueName}</span>
+                          
+                          <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500, marginLeft: 'auto', background: 'var(--bg-tertiary)', padding: '2px 8px', borderRadius: '10px' }}>
+                            {leaguePredictions.length} match{leaguePredictions.length > 1 ? 'es' : ''}
+                          </span>
+                        </div>
+
+                        {/* Matches Grid for this League */}
+                        {!isCollapsed && (
+                          <div className="grid-3" style={{ animation: 'fadeIn 0.25s ease-out' }}>
+                            {leaguePredictions.map((pred) => {
+                              const probVal = parseInt(pred.probability.replace('%', ''));
+                              const isHighProb = !isNaN(probVal) && probVal >= 60;
+                              
+                              // Calculate if this prediction itself is a Model-based Value Bet
+                              let isModelValueBet = false;
+                              let modelValueEdge = 0;
+                              let parsedProb = 0;
+                              let parsedOdds = 0;
+                              
+                              const tipLower = String(pred.best_tip).toLowerCase();
+                              const isOver = tipLower.includes('plus') || tipLower.includes('over');
+                              const isUnder = tipLower.includes('moins') || tipLower.includes('under');
+                              
+                              // Find the estimated odds for the card_line (e.g. 4.5)
+                              const cardLineVal = parseFloat(pred.card_line);
+                              const matchingRow = pred.odds_corners ? pred.odds_corners.find(o => 
+                                o.market_type === '1st_half' && parseFloat(o.line) === cardLineVal
+                              ) : null;
+                              const estimatedOddsVal = matchingRow 
+                                ? (isOver ? matchingRow.over_decimal : matchingRow.under_decimal) 
+                                : null;
+                              
+                              if (matchingRow) {
+                                if (isOver) {
+                                  isModelValueBet = matchingRow.over_value_bet;
+                                  modelValueEdge = matchingRow.over_value_edge;
+                                  parsedProb = parseInt(String(matchingRow.over_probability).replace('%', ''), 10);
+                                  parsedOdds = matchingRow.over_decimal;
+                                } else if (isUnder) {
+                                  isModelValueBet = matchingRow.under_value_bet;
+                                  modelValueEdge = matchingRow.under_value_edge;
+                                  parsedProb = parseInt(String(matchingRow.under_probability).replace('%', ''), 10);
+                                  parsedOdds = matchingRow.under_decimal;
+                                }
+                              }
+                              
+                              const isSelected = selectedPredIds.includes(pred.match_id);
+
+                              return (
+                                <div 
+                                  key={pred.match_id} 
+                                  className={`glass-card ${isHighProb ? 'accent-left' : ''}`}
+                                  onClick={() => setSelectedMatchDetails(pred)}
+                                  style={{ 
+                                    display: 'flex', 
+                                    flexDirection: 'column', 
+                                    justifyContent: 'space-between', 
+                                    gap: '20px',
+                                    border: isSelected 
+                                      ? '1.5px solid var(--color-accent-solid)' 
+                                      : isModelValueBet 
+                                        ? '1px solid rgba(16, 185, 129, 0.35)' 
+                                        : '1px solid var(--border-color)',
+                                    boxShadow: 'none',
+                                    cursor: 'pointer',
+                                    transform: isSelected ? 'scale(1.008)' : 'none',
+                                    transition: 'all 0.15s ease'
+                                  }}
+                                >
                           <div>
                             {/* Header metadata */}
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>

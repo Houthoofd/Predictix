@@ -148,8 +148,7 @@ export default function Header({
               alignItems: 'center',
               justifyContent: 'center',
               position: 'relative',
-              transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
-              boxShadow: unreadCount > 0 ? '0 0 10px rgba(191, 90, 242, 0.2)' : 'none'
+              transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)'
             }}
             title="Notifications"
           >
@@ -165,7 +164,6 @@ export default function Header({
                 height: '8px',
                 borderRadius: '50%',
                 background: '#bf5af2',
-                boxShadow: '0 0 8px #bf5af2',
                 animation: 'pulse 1.8s infinite'
               }} />
             )}
