@@ -15,7 +15,8 @@ import {
   Sparkles,
   Pause,
   Play,
-  Square
+  Square,
+  MoreVertical
 } from 'lucide-react';
 
 export default function IntegrityTab({
@@ -47,6 +48,7 @@ export default function IntegrityTab({
   const [injecting, setInjecting] = useState(false);
   const [prioritizingId, setPrioritizingId] = useState(null);
   const [cleaning, setCleaning] = useState(false);
+  const [activeKebabMatchId, setActiveKebabMatchId] = useState(null);
 
   // Refs to avoid stale closures in polling interval
   const refreshRef = React.useRef(onRefreshPredictions);
@@ -192,6 +194,28 @@ export default function IntegrityTab({
       alert("Erreur de connexion.");
     } finally {
       setInjecting(false);
+    }
+  };
+
+  const handleInjectAndPrioritize = async (matchId) => {
+    try {
+      const res = await fetch('/api/predictions/integrity-batch/inject', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ match_url: matchId })
+      });
+      const json = await res.json();
+      if (json.success) {
+        // Optimistically trigger prediction refresh to reflect status changes if any
+        if (onRefreshPredictions) {
+          onRefreshPredictions();
+        }
+      } else {
+        alert(json.error?.message || "Erreur de priorisation.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Erreur de connexion.");
     }
   };
 
@@ -951,6 +975,98 @@ export default function IntegrityTab({
                         <span style={{ fontSize: '12px', fontWeight: 800, color: diag.score < 60 ? '#e74c3c' : diag.score < 90 ? '#f1c40f' : '#2ecc71' }}>
                           Score : {diag.score}%
                         </span>
+                      </div>
+
+                      {/* Kebab Menu */}
+                      <div style={{ position: 'relative', zIndex: activeKebabMatchId === match.match_id ? 999 : 1 }}>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveKebabMatchId(activeKebabMatchId === match.match_id ? null : match.match_id);
+                          }}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--text-muted)',
+                            cursor: 'pointer',
+                            padding: '6px',
+                            borderRadius: '6px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.color = '#fff'}
+                          onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+                        >
+                          <MoreVertical size={16} />
+                        </button>
+
+                        {activeKebabMatchId === match.match_id && (
+                          <>
+                            {/* Backdrop overlay */}
+                            <div 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveKebabMatchId(null);
+                              }}
+                              style={{
+                                position: 'fixed',
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                zIndex: 998,
+                                background: 'transparent',
+                                cursor: 'default'
+                              }}
+                            />
+                            {/* Dropdown Menu contents */}
+                            <div
+                              style={{
+                                position: 'absolute',
+                                right: 0,
+                                top: '28px',
+                                background: '#121829',
+                                border: '1px solid var(--border-color)',
+                                borderRadius: '8px',
+                                boxShadow: '0 4px 15px rgba(0,0,0,0.6)',
+                                zIndex: 999,
+                                minWidth: '170px',
+                                padding: '4px 0'
+                              }}
+                            >
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleInjectAndPrioritize(match.match_id);
+                                  setActiveKebabMatchId(null);
+                                }}
+                                style={{
+                                  width: '100%',
+                                  background: 'transparent',
+                                  border: 'none',
+                                  color: '#fff',
+                                  padding: '8px 12px',
+                                  textAlign: 'left',
+                                  fontSize: '12.5px',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  transition: 'background 0.2s'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                              >
+                                <Sparkles size={13} style={{ color: '#bf5af2' }} />
+                                <span style={{ fontWeight: 600 }}>Réparer en priorité</span>
+                              </button>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
