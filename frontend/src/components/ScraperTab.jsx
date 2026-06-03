@@ -562,13 +562,8 @@ export default function ScraperTab({
                       {/* Corners indicator */}
                       <div style={{ textAlign: 'right' }}>
                         <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Corners 1ère MT</div>
-                        <div style={{ fontSize: '13.5px', fontWeight: 800, color: hasCorners ? '#34c759' : '#ff9500', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end', marginTop: '2px' }}>
-                          {hasCorners ? `${m.first_half_corners_home} - ${m.first_half_corners_away}` : (
-                            <>
-                              <RefreshCcw size={12} className="animate-spin" />
-                              <span style={{ fontSize: '12px' }}>En attente</span>
-                            </>
-                          )}
+                        <div style={{ fontSize: '13.5px', fontWeight: 800, color: hasCorners ? '#34c759' : 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end', marginTop: '2px' }}>
+                          {hasCorners ? `${m.first_half_corners_home} - ${m.first_half_corners_away}` : 'N/A'}
                         </div>
                       </div>
 
