@@ -189,84 +189,100 @@ export function rewriteScraperLog(line, strategy) {
  * Acts as a generic child-process spawner guard.
  */
 export async function scrapeSingleMatch(scraperPath, link, skipOdds = false, onSpawn = null, socksPort = 9050) {
-  const torActive = await isTorActive(socksPort);
-  if (!torActive) {
-    console.warn(`[Predictix Scraper] Tor is inactive on port ${socksPort}. Skipping scrape for: ${link}`);
-    return null;
-  }
-
-  return new Promise((resolve) => {
-    let resolved = false;
-    const tmpOutFile = path.join(scraperPath, 'data', `tmp_${Date.now()}_${Math.random().toString(36).substring(7)}.json`);
-    const exePath = path.join(scraperPath, 'cmd', 'scrapper-lite', 'examples', 'scrapper-matchendirect.exe');
-    
-    const args = ['-tor', '-socks-port', String(socksPort), '-url', link, '-output', tmpOutFile];
-    if (skipOdds) {
-      args.push('-skip-odds');
+  const maxAttempts = 2;
+  
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const torActive = await isTorActive(socksPort);
+    if (!torActive) {
+      console.warn(`[Predictix Scraper] Tor is inactive on port ${socksPort}. Skipping scrape for: ${link}`);
+      return null;
     }
 
-    // Spawn Go scraper with -url and -tor options
-    const child = spawn(exePath, args);
-    
-    if (onSpawn && typeof onSpawn === 'function') {
-      onSpawn(child);
-    }
-    
-    // Security timeout guard: 50 seconds max execution
-    const timeout = setTimeout(() => {
-      if (resolved) return;
-      resolved = true;
-      console.warn(`[Predictix Scraper] Single match scraper timed out (50s) for: ${link}. Terminating process.`);
-      try {
-        if (process.platform === 'win32') {
-          exec(`taskkill /pid ${child.pid} /T /F`, (err) => {
-            if (err) console.error('Failed to taskkill timed-out child process tree:', err.message);
-          });
-        } else {
-          child.kill();
-        }
-      } catch (err) {
-        console.error('Failed to kill timed-out scraper child process:', err.message);
-        try { child.kill(); } catch (e) {}
-      }
-      if (fs.existsSync(tmpOutFile)) {
-        try { fs.unlinkSync(tmpOutFile); } catch (e) {}
-      }
-      resolve(null);
-    }, 50000);
-    
-    child.on('error', (err) => {
-      if (resolved) return;
-      resolved = true;
-      clearTimeout(timeout);
-      console.error('[Predictix Scraper] Failed to spawn single match scraper:', err.message);
-      resolve(null);
-    });
-    
-    child.on('close', async (code) => {
-      if (resolved) return;
-      resolved = true;
-      clearTimeout(timeout);
+    const result = await new Promise((resolve) => {
+      let resolved = false;
+      const tmpOutFile = path.join(scraperPath, 'data', `tmp_${Date.now()}_${Math.random().toString(36).substring(7)}.json`);
+      const exePath = path.join(scraperPath, 'cmd', 'scrapper-lite', 'examples', 'scrapper-matchendirect.exe');
       
-      if (code === 0 && fs.existsSync(tmpOutFile)) {
+      const args = ['-tor', '-socks-port', String(socksPort), '-url', link, '-output', tmpOutFile];
+      if (skipOdds) {
+        args.push('-skip-odds');
+      }
+
+      // Spawn Go scraper with -url and -tor options
+      const child = spawn(exePath, args);
+      
+      if (onSpawn && typeof onSpawn === 'function') {
+        onSpawn(child);
+      }
+      
+      // Security timeout guard: 50 seconds max execution
+      const timeout = setTimeout(() => {
+        if (resolved) return;
+        resolved = true;
+        console.warn(`[Predictix Scraper] Single match scraper timed out (50s) for: ${link}. Terminating process.`);
         try {
-          const rawData = fs.readFileSync(tmpOutFile, 'utf-8');
-          const parsed = JSON.parse(rawData);
-          const matchData = (parsed.all_matches || parsed.matches || [])[0];
-          
-          if (fs.existsSync(tmpOutFile)) fs.unlinkSync(tmpOutFile);
-          resolve(matchData || null);
-        } catch (e) {
-          console.error('Failed to parse single match tmp JSON output:', e);
+          if (process.platform === 'win32') {
+            exec(`taskkill /pid ${child.pid} /T /F`, (err) => {
+              if (err) console.error('Failed to taskkill timed-out child process tree:', err.message);
+            });
+          } else {
+            child.kill();
+          }
+        } catch (err) {
+          console.error('Failed to kill timed-out scraper child process:', err.message);
+          try { child.kill(); } catch (e) {}
+        }
+        if (fs.existsSync(tmpOutFile)) {
+          try { fs.unlinkSync(tmpOutFile); } catch (e) {}
+        }
+        resolve(null);
+      }, 50000);
+      
+      child.on('error', (err) => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(timeout);
+        console.error('[Predictix Scraper] Failed to spawn single match scraper:', err.message);
+        resolve(null);
+      });
+      
+      child.on('close', async (code) => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(timeout);
+        
+        if (code === 0 && fs.existsSync(tmpOutFile)) {
+          try {
+            const rawData = fs.readFileSync(tmpOutFile, 'utf-8');
+            const parsed = JSON.parse(rawData);
+            const matchData = (parsed.all_matches || parsed.matches || [])[0];
+            
+            if (fs.existsSync(tmpOutFile)) fs.unlinkSync(tmpOutFile);
+            resolve(matchData || null);
+          } catch (e) {
+            console.error('Failed to parse single match tmp JSON output:', e);
+            if (fs.existsSync(tmpOutFile)) fs.unlinkSync(tmpOutFile);
+            resolve(null);
+          }
+        } else {
           if (fs.existsSync(tmpOutFile)) fs.unlinkSync(tmpOutFile);
           resolve(null);
         }
-      } else {
-        if (fs.existsSync(tmpOutFile)) fs.unlinkSync(tmpOutFile);
-        resolve(null);
-      }
+      });
     });
-  });
+
+    if (result) {
+      return result; // Success!
+    }
+
+    if (attempt < maxAttempts) {
+      console.log(`[Predictix Scraper] Attempt ${attempt} failed for link: ${link}. Rotating Tor IP on SOCKS port ${socksPort} (Control: ${socksPort + 1}) and retrying...`);
+      await renewTorSession(socksPort + 1);
+      await new Promise(r => setTimeout(r, 2500)); // wait for Tor circuit to build and stabilize
+    }
+  }
+
+  return null; // All attempts failed
 }
 
 /**
