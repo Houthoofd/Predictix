@@ -25,7 +25,7 @@ async function runIntegrityBatchLoop() {
   const scraperPath = process.env.SCRAPER_PATH || 'E:\\Developpement\\scrapper-v3';
 
   // Proposal B: Check all possible Tor SOCKS ports to detect running Tor instances
-  const possiblePorts = [9050, 9052, 9054];
+  const possiblePorts = [9050, 9052, 9054, 9056];
   const activePorts = [];
   for (const port of possiblePorts) {
     const active = await isTorActive(port);
@@ -36,7 +36,7 @@ async function runIntegrityBatchLoop() {
 
   if (activePorts.length === 0) {
     activeIntegrityBatch.status = 'idle';
-    activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ❌ Erreur : Aucun port proxy Tor actif détecté (vérifié sur 9050, 9052, 9054). Réparation annulée.`);
+    activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ❌ Erreur : Aucun port proxy Tor actif détecté (vérifié sur 9050, 9052, 9054, 9056). Réparation annulée.`);
     return;
   }
 
