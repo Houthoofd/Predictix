@@ -12,7 +12,10 @@ import {
   Database,
   Info,
   Calendar,
-  Sparkles
+  Sparkles,
+  Pause,
+  Play,
+  Square
 } from 'lucide-react';
 
 export default function IntegrityTab({
@@ -27,6 +30,82 @@ export default function IntegrityTab({
   const [showLogoModal, setShowLogoModal] = useState(false);
   const [showH2HModal, setShowH2HModal] = useState(false);
   const [showStatsModal, setShowStatsModal] = useState(false);
+
+  // Data Integrity Batcher State
+  const [batcherStatus, setBatcherStatus] = useState('idle');
+  const [batcherQueueLength, setBatcherQueueLength] = useState(0);
+  const [batcherCurrentIndex, setBatcherCurrentIndex] = useState(0);
+  const [batcherProcessed, setBatcherProcessed] = useState(0);
+  const [batcherSuccess, setBatcherSuccess] = useState(0);
+  const [batcherErrors, setBatcherErrors] = useState(0);
+  const [batcherLogs, setBatcherLogs] = useState([]);
+  const [batcherLoading, setBatcherLoading] = useState(false);
+
+  // Poll batcher status
+  React.useEffect(() => {
+    let intervalId = null;
+
+    const fetchStatus = async () => {
+      try {
+        const res = await fetch('/api/predictions/integrity-batch/status');
+        const json = await res.json();
+        if (json.success && json.data) {
+          const d = json.data;
+          setBatcherStatus(d.status);
+          setBatcherQueueLength(d.queueLength);
+          setBatcherCurrentIndex(d.currentIndex);
+          setBatcherProcessed(d.processedCount);
+          setBatcherSuccess(d.successCount);
+          setBatcherErrors(d.errorCount);
+          setBatcherLogs(d.logs || []);
+        }
+      } catch (err) {
+        console.error('Error fetching batcher status:', err);
+      }
+    };
+
+    fetchStatus();
+    intervalId = setInterval(fetchStatus, 1500);
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, []);
+
+  const handleStartBatcher = async () => {
+    setBatcherLoading(true);
+    try {
+      const res = await fetch('/api/predictions/integrity-batch/start', { method: 'POST' });
+      const json = await res.json();
+      if (!json.success) {
+        alert(json.error?.message || "Échec du lancement du batcher.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Erreur de connexion lors du lancement du batcher.");
+    } finally {
+      setBatcherLoading(false);
+    }
+  };
+
+  const handlePauseBatcher = async () => {
+    try {
+      const res = await fetch('/api/predictions/integrity-batch/pause', { method: 'POST' });
+      await res.json();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleStopBatcher = async () => {
+    if (!window.confirm("Êtes-vous sûr de vouloir arrêter la réparation et réinitialiser le batcher ?")) return;
+    try {
+      const res = await fetch('/api/predictions/integrity-batch/stop', { method: 'POST' });
+      await res.json();
+    } catch (err) {
+      console.error(err);
+    }
+  };
   
   // Custom Logo Modal Form State
   const [logoForm, setLogoForm] = useState({ team: '', url: '' });
@@ -359,6 +438,202 @@ export default function IntegrityTab({
         <div className="glass-card" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '6px', borderLeft: '3px solid var(--color-danger)' }}>
           <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600 }}>HISTORIQUE MANQUANT / CRITIQUE</span>
           <span style={{ fontSize: '28px', fontFamily: 'Outfit', fontWeight: 800, color: 'var(--color-danger)' }}>{summary.critical}</span>
+        </div>
+      </div>
+
+      {/* Batcher Réparation de Données Panel */}
+      <div className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Sparkles size={20} style={{ color: '#0082ff' }} />
+            <div>
+              <h3 style={{ fontSize: '16px', fontFamily: 'Outfit', fontWeight: 800, margin: 0 }}>Réparation Automatique & Complétion de Données</h3>
+              <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '2px 0 0 0' }}>
+                Recherche et répare séquentiellement tous les diagnostics incomplets (historique, statistiques de corners, logos manquants).
+              </p>
+            </div>
+          </div>
+          
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {batcherStatus === 'idle' ? (
+              <button 
+                className="btn btn-primary"
+                style={{ 
+                  background: 'linear-gradient(135deg, #0082ff 0%, #bf5af2 100%)', 
+                  border: 'none', 
+                  fontFamily: 'Outfit', 
+                  fontWeight: 700, 
+                  fontSize: '12.5px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  cursor: 'pointer',
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  color: '#fff'
+                }}
+                onClick={handleStartBatcher}
+                disabled={batcherLoading}
+              >
+                <RefreshCcw size={14} className={batcherLoading ? 'animate-spin' : ''} />
+                <span>Lancer la Réparation Globale</span>
+              </button>
+            ) : batcherStatus === 'running' ? (
+              <>
+                <button 
+                  className="btn btn-warning"
+                  style={{ 
+                    background: '#ff9500', 
+                    border: 'none', 
+                    fontFamily: 'Outfit', 
+                    fontWeight: 700, 
+                    fontSize: '12.5px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    cursor: 'pointer',
+                    padding: '8px 16px',
+                    borderRadius: '6px',
+                    color: '#fff'
+                  }}
+                  onClick={handlePauseBatcher}
+                >
+                  <Pause size={14} />
+                  <span>Pause</span>
+                </button>
+                <button 
+                  className="btn btn-danger"
+                  style={{ 
+                    background: '#ff3b30', 
+                    border: 'none', 
+                    fontFamily: 'Outfit', 
+                    fontWeight: 700, 
+                    fontSize: '12.5px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    cursor: 'pointer',
+                    padding: '8px 16px',
+                    borderRadius: '6px',
+                    color: '#fff'
+                  }}
+                  onClick={handleStopBatcher}
+                >
+                  <Square size={14} />
+                  <span>Arrêter</span>
+                </button>
+              </>
+            ) : (
+              // Paused
+              <>
+                <button 
+                  className="btn btn-primary"
+                  style={{ 
+                    background: '#2ecc71', 
+                    border: 'none', 
+                    fontFamily: 'Outfit', 
+                    fontWeight: 700, 
+                    fontSize: '12.5px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    cursor: 'pointer',
+                    padding: '8px 16px',
+                    borderRadius: '6px',
+                    color: '#fff'
+                  }}
+                  onClick={handleStartBatcher}
+                >
+                  <Play size={14} />
+                  <span>Reprendre</span>
+                </button>
+                <button 
+                  className="btn btn-danger"
+                  style={{ 
+                    background: '#ff3b30', 
+                    border: 'none', 
+                    fontFamily: 'Outfit', 
+                    fontWeight: 700, 
+                    fontSize: '12.5px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    cursor: 'pointer',
+                    padding: '8px 16px',
+                    borderRadius: '6px',
+                    color: '#fff'
+                  }}
+                  onClick={handleStopBatcher}
+                >
+                  <Square size={14} />
+                  <span>Arrêter</span>
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Progress Bar Area */}
+        {batcherStatus !== 'idle' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontFamily: 'Outfit' }}>
+              <span style={{ color: 'var(--text-secondary)' }}>
+                Statut : <strong style={{ color: batcherStatus === 'running' ? '#bf5af2' : '#ff9500' }}>
+                  {batcherStatus === 'running' ? 'En Cours' : 'En Pause'}
+                </strong>
+              </span>
+              <span style={{ fontWeight: 600 }}>
+                {batcherCurrentIndex} / {batcherQueueLength} Matchs Traités ({batcherSuccess} Succès, {batcherErrors} Erreurs)
+              </span>
+            </div>
+            
+            <div style={{ width: '100%', height: '8px', background: 'var(--bg-tertiary)', borderRadius: '4px', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
+              <div 
+                style={{ 
+                  width: `${(batcherCurrentIndex / (batcherQueueLength || 1)) * 100}%`, 
+                  height: '100%', 
+                  background: 'linear-gradient(90deg, #0082ff 0%, #bf5af2 100%)',
+                  transition: 'width 0.4s ease'
+                }} 
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Live Logs Terminal */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Console des Travaux en Direct</span>
+          <div 
+            style={{ 
+              height: '140px', 
+              background: '#0a0f1d', 
+              borderRadius: '8px', 
+              border: '1px solid var(--border-color)', 
+              padding: '10px 14px', 
+              fontFamily: 'monospace', 
+              fontSize: '11.5px', 
+              color: '#4af626', 
+              overflowY: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '4px'
+            }}
+            ref={(el) => {
+              if (el) el.scrollTop = el.scrollHeight; // Auto-scroll to bottom on update
+            }}
+          >
+            {batcherLogs.length > 0 ? (
+              batcherLogs.map((log, index) => (
+                <div key={index} style={{ 
+                  color: log.includes('❌') ? '#ff3b30' : log.includes('⚠') ? '#ff9500' : log.includes('✓') ? '#2ecc71' : '#4af626'
+                }}>
+                  {log}
+                </div>
+              ))
+            ) : (
+              <div style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Aucune activité active. Cliquez sur "Lancer la Réparation Globale" pour démarrer.</div>
+            )}
+          </div>
         </div>
       </div>
 

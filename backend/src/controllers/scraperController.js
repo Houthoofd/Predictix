@@ -10,6 +10,153 @@ let activeScraperProcess = null;
 let stopScraperRequested = false;
 const activeCrawlHistoryMatches = new Set();
 
+const activeIntegrityBatch = {
+  status: 'idle', // 'idle', 'running', 'paused'
+  queue: [],
+  currentIndex: 0,
+  processedCount: 0,
+  successCount: 0,
+  errorCount: 0,
+  logs: [],
+  spawnedChildren: new Set()
+};
+
+async function runIntegrityBatchLoop() {
+  const scraperPath = process.env.SCRAPER_PATH || 'E:\\Developpement\\scrapper-v3';
+
+  while (activeIntegrityBatch.status === 'running' && activeIntegrityBatch.currentIndex < activeIntegrityBatch.queue.length) {
+    const matchObj = activeIntegrityBatch.queue[activeIntegrityBatch.currentIndex];
+    const timeStr = new Date().toLocaleTimeString();
+    
+    activeIntegrityBatch.logs.push(`[${timeStr}] [${activeIntegrityBatch.currentIndex + 1}/${activeIntegrityBatch.queue.length}] Analyse du match : ${matchObj.home_team} vs ${matchObj.away_team}...`);
+    
+    const torActive = await isTorActive();
+    if (!torActive) {
+      activeIntegrityBatch.status = 'idle';
+      activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ❌ Erreur : Tor n'est pas actif sur le port 9050. Arrêt du batcher.`);
+      break;
+    }
+
+    try {
+      const match = await dbGet('SELECT * FROM scraped_predictions WHERE match_id = ?', [matchObj.match_id]);
+      if (!match) {
+        throw new Error("Match introuvable dans la base de données.");
+      }
+
+      let links = [];
+      try {
+        if (match.historical_links) {
+          links = JSON.parse(match.historical_links);
+        }
+      } catch (e) {}
+
+      let activeLinks = [...links];
+
+      const isHomeLogoMissing = !match.home_logo || match.home_logo.trim() === '' || match.home_logo.toLowerCase().includes('placeholder') || match.home_logo.toLowerCase().includes('logo_default') || match.home_logo.toLowerCase().includes('logo-default');
+      const isAwayLogoMissing = !match.away_logo || match.away_logo.trim() === '' || match.away_logo.toLowerCase().includes('placeholder') || match.away_logo.toLowerCase().includes('logo_default') || match.away_logo.toLowerCase().includes('logo-default');
+      const isCornersMissing = match.first_half_corners_home === null || match.first_half_corners_away === null;
+
+      if ((isHomeLogoMissing || isAwayLogoMissing || isCornersMissing) && links.length === 1 && links[0].startsWith('/live-score/')) {
+        let targetLink = links[0];
+        if (match.is_finished === 0 || match.time === 'Planned' || !match.score || match.score === '-' || match.score === '') {
+          if (!targetLink.includes('?p=')) {
+            targetLink += '?p=face-a-face';
+          }
+        }
+        
+        activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] -> Crawl de la page principale : ${targetLink}`);
+        
+        const primaryDetails = await scrapeSingleMatch(scraperPath, targetLink, false, (child) => {
+          activeIntegrityBatch.spawnedChildren.add(child);
+        });
+
+        if (primaryDetails) {
+          await enrichPrimaryMatch(match.match_id, primaryDetails, targetLink, match);
+          activeLinks = primaryDetails.historical_links || [];
+          activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ✓ Page principale actualisée (logos/stats mis à jour)`);
+        }
+      }
+
+      const h2hMatches = await dbQuery(`
+        SELECT match_id FROM scraped_predictions 
+        WHERE is_finished = 1 AND ((home_team = ? AND away_team = ?) OR (home_team = ? AND away_team = ?))
+      `, [match.home_team, match.away_team, match.away_team, match.home_team]);
+
+      const homeMatches = await dbQuery('SELECT match_id FROM scraped_predictions WHERE is_finished = 1 AND home_team = ?', [match.home_team]);
+      const awayMatches = await dbQuery('SELECT match_id FROM scraped_predictions WHERE is_finished = 1 AND away_team = ?', [match.away_team]);
+
+      const needsH2H = h2hMatches.length === 0;
+      const needsTeamHistory = homeMatches.length < 5 || awayMatches.length < 5;
+
+      if ((needsH2H || needsTeamHistory) && activeLinks.length > 0) {
+        const prioritizedLinks = prioritizeDirectH2H(activeLinks, match.home_team, match.away_team);
+        
+        const uncachedLinks = [];
+        for (const link of prioritizedLinks) {
+          const cached = await dbQuery('SELECT match_id, date, first_half_corners_home FROM scraped_predictions WHERE match_id = ?', [link]);
+          const isPlaceholder = cached.length > 0 && 
+            (cached[0].date === '2026-05-30' || cached[0].date === '2026-05-31' || cached[0].date.includes(':'));
+          const hasNoStats = cached.length > 0 && cached[0].first_half_corners_home === null;
+          
+          if (cached.length === 0 || isPlaceholder || hasNoStats) {
+            uncachedLinks.push(link);
+          }
+        }
+
+        if (uncachedLinks.length > 0) {
+          activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] -> ${uncachedLinks.length} confrontations manquantes à crawler.`);
+          for (const link of uncachedLinks.slice(0, 5)) {
+            if (activeIntegrityBatch.status !== 'running') break;
+
+            const histMatch = await scrapeSingleMatch(scraperPath, link, true, (child) => {
+              activeIntegrityBatch.spawnedChildren.add(child);
+            });
+
+            if (histMatch && histMatch.home_team && histMatch.away_team) {
+              await importHistoricalMatch(link, histMatch);
+              const homeClean = histMatch.home_team.replace(/[▲▼]/g, '').trim();
+              const awayClean = histMatch.away_team.replace(/[▲▼]/g, '').trim();
+              activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}]   ✓ Confrontation importée : ${homeClean} vs ${awayClean}`);
+            } else {
+              await importSkippedMatch(link);
+              activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}]   ⚠ Confrontation sautée (échec) : ${link}`);
+            }
+
+            await new Promise(r => setTimeout(r, 2500));
+          }
+        } else {
+          activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] -> H2H/Equipe déjà en cache.`);
+        }
+      }
+
+      activeIntegrityBatch.successCount++;
+    } catch (err) {
+      activeIntegrityBatch.errorCount++;
+      activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ❌ Erreur pour ${matchObj.home_team} vs ${matchObj.away_team} : ${err.message}`);
+    }
+
+    activeIntegrityBatch.processedCount++;
+    activeIntegrityBatch.currentIndex++;
+    
+    for (const child of activeIntegrityBatch.spawnedChildren) {
+      if (child.killed || child.exitCode !== null) {
+        activeIntegrityBatch.spawnedChildren.delete(child);
+      }
+    }
+
+    if (activeIntegrityBatch.status === 'running' && activeIntegrityBatch.currentIndex < activeIntegrityBatch.queue.length) {
+      await new Promise(r => setTimeout(r, 3000));
+    }
+  }
+
+  if (activeIntegrityBatch.currentIndex >= activeIntegrityBatch.queue.length) {
+    activeIntegrityBatch.status = 'idle';
+    activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] 🏁 Réparation globale terminée. Succès: ${activeIntegrityBatch.successCount}, Erreurs: ${activeIntegrityBatch.errorCount}.`);
+  } else if (activeIntegrityBatch.status === 'paused') {
+    activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ⏸ Réparation globale mise en pause.`);
+  }
+}
+
 /**
  * Controller to handle scraper operations, state, and HTTP endpoints
  */
@@ -691,6 +838,121 @@ class ScraperController {
     } catch (err) {
       res.status(500).json({ success: false, error: { message: err.message } });
     }
+  }
+
+  /**
+   * POST /api/scraper/integrity-batch/start
+   */
+  async startIntegrityBatch(req, res) {
+    try {
+      const torActive = await isTorActive();
+      if (!torActive) {
+        return res.status(400).json({ 
+          success: false, 
+          error: { message: "Le proxy Tor local n'est pas actif sur le port 9050. Veuillez lancer Tor et réessayer." } 
+        });
+      }
+
+      if (activeIntegrityBatch.status === 'running') {
+        return res.json({ success: true, message: "Le batcher de réparation est déjà en cours d'exécution." });
+      }
+
+      if (activeIntegrityBatch.status === 'paused' && activeIntegrityBatch.queue.length > 0) {
+        activeIntegrityBatch.status = 'running';
+        activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ▶ Reprise de la réparation globale.`);
+        runIntegrityBatchLoop();
+        return res.json({ success: true, message: "Réparation globale reprise." });
+      }
+
+      const predictions = await getEnrichedPredictions({ dateRange: 'all' }, dbQuery, new Set());
+      const incompleteMatches = predictions.filter(p => p.diagnostic && !p.diagnostic.is_complete);
+
+      if (incompleteMatches.length === 0) {
+        return res.json({ success: true, message: "Toutes les données sont déjà complètes (score d'intégrité de 100% sur tous les matchs) !" });
+      }
+
+      incompleteMatches.sort((a, b) => a.diagnostic.score - b.diagnostic.score);
+
+      activeIntegrityBatch.queue = incompleteMatches.map(m => ({
+        match_id: m.match_id,
+        home_team: m.home_team,
+        away_team: m.away_team,
+        date: m.date,
+        historical_links: m.historical_links,
+        diagnostic: m.diagnostic
+      }));
+
+      activeIntegrityBatch.currentIndex = 0;
+      activeIntegrityBatch.processedCount = 0;
+      activeIntegrityBatch.successCount = 0;
+      activeIntegrityBatch.errorCount = 0;
+      activeIntegrityBatch.logs = [`[${new Date().toLocaleTimeString()}] 🚀 Démarrage de la réparation globale pour ${incompleteMatches.length} matchs.`];
+      activeIntegrityBatch.status = 'running';
+
+      runIntegrityBatchLoop();
+
+      res.json({ success: true, message: "Réparation globale lancée en arrière-plan.", total: incompleteMatches.length });
+    } catch (error) {
+      console.error('[Predictix Integrity Batch Start Error]', error);
+      res.status(500).json({ success: false, error: { message: error.message } });
+    }
+  }
+
+  /**
+   * POST /api/scraper/integrity-batch/pause
+   */
+  async pauseIntegrityBatch(req, res) {
+    if (activeIntegrityBatch.status !== 'running') {
+      return res.json({ success: true, message: "Le batcher n'est pas en cours d'exécution." });
+    }
+
+    activeIntegrityBatch.status = 'paused';
+    activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ⏸ Mise en pause demandée. Arrêt après le match courant...`);
+    res.json({ success: true, message: "Mise en pause planifiée." });
+  }
+
+  /**
+   * POST /api/scraper/integrity-batch/stop
+   */
+  async stopIntegrityBatch(req, res) {
+    activeIntegrityBatch.status = 'idle';
+    activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ⏹ Réparation globale arrêtée par l'utilisateur.`);
+    
+    for (const child of activeIntegrityBatch.spawnedChildren) {
+      if (child && !child.killed) {
+        try {
+          if (process.platform === 'win32') {
+            exec(`taskkill /pid ${child.pid} /T /F`, () => {});
+          } else {
+            child.kill();
+          }
+        } catch (e) {}
+      }
+    }
+    activeIntegrityBatch.spawnedChildren.clear();
+    activeIntegrityBatch.queue = [];
+    activeIntegrityBatch.currentIndex = 0;
+
+    res.json({ success: true, message: "Batcher arrêté et réinitialisé." });
+  }
+
+  /**
+   * GET /api/scraper/integrity-batch/status
+   */
+  async getIntegrityBatchStatus(req, res) {
+    const recentLogs = activeIntegrityBatch.logs.slice(-100);
+    res.json({
+      success: true,
+      data: {
+        status: activeIntegrityBatch.status,
+        queueLength: activeIntegrityBatch.queue.length,
+        currentIndex: activeIntegrityBatch.currentIndex,
+        processedCount: activeIntegrityBatch.processedCount,
+        successCount: activeIntegrityBatch.successCount,
+        errorCount: activeIntegrityBatch.errorCount,
+        logs: recentLogs
+      }
+    });
   }
 }
 

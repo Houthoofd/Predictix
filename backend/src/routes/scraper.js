@@ -17,4 +17,10 @@ router.delete('/custom-logos/:teamName', scraperController.deleteCustomLogo);
 // Manual historical/H2H match stats input endpoint
 router.post('/predictions/historical/custom', scraperController.saveCustomHistoricalMatch);
 
+// Data integrity batcher endpoints
+router.post('/predictions/integrity-batch/start', scraperController.startIntegrityBatch);
+router.post('/predictions/integrity-batch/pause', scraperController.pauseIntegrityBatch);
+router.post('/predictions/integrity-batch/stop', scraperController.stopIntegrityBatch);
+router.get('/predictions/integrity-batch/status', scraperController.getIntegrityBatchStatus);
+
 export default router;
