@@ -70,16 +70,15 @@ export default function IntegrityTab({
           setBatcherErrors(d.errorCount);
           setBatcherLogs(d.logs || []);
 
-          // Trigger refresh if progress changed or if status transitioned to running
-          const progressChanged = d.processedCount !== lastProcessedRef.current;
-          const statusTransitioned = d.status === 'running' && lastStatusRef.current !== 'running';
+          // Trigger refresh if the batcher is running (updates H2H stats and logos in real-time as they are crawled)
+          // or if the status transitioned to/from running
+          const isRunning = d.status === 'running';
+          const statusChanged = d.status !== lastStatusRef.current;
           
-          if ((progressChanged || statusTransitioned) && refreshRef.current) {
-            console.log(`[Predictix Integrity] Data update triggered (processed: ${lastProcessedRef.current} -> ${d.processedCount}, status: ${lastStatusRef.current} -> ${d.status})`);
+          if ((isRunning || statusChanged) && refreshRef.current) {
             refreshRef.current();
           }
 
-          lastProcessedRef.current = d.processedCount;
           lastStatusRef.current = d.status;
         }
       } catch (err) {

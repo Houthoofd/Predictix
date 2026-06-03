@@ -249,6 +249,17 @@ export default function App() {
     }
   };
 
+  const refreshIntegrityData = async () => {
+    try {
+      await Promise.all([
+        fetchPredictions(),
+        fetchCustomLogos()
+      ]);
+    } catch (error) {
+      console.error("Error refreshing integrity data silently:", error);
+    }
+  };
+
   const fetchCustomLogos = async () => {
     try {
       const res = await fetch('/api/custom-logos');
@@ -1230,7 +1241,7 @@ export default function App() {
                   onDeleteCustomLogo={handleDeleteCustomLogo}
                   onSaveCustomHistoricalMatch={handleSaveCustomHistoricalMatch}
                   onCrawlMatchHistory={handleCrawlHistory}
-                  onRefreshPredictions={refreshAllDataSilent}
+                  onRefreshPredictions={refreshIntegrityData}
                 />
               )}
             </>
