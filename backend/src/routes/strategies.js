@@ -1,7 +1,9 @@
 import express from 'express';
 import { dbQuery, dbGet, dbRun } from '../db/database.js';
+import { parseFrenchDate } from '../utils/scraperHelpers.js';
 
 const router = express.Router();
+
 
 // Smart deterministic NLP Pattern Matcher for Magic Strategies
 function parsePromptToStrategy(prompt) {
@@ -181,6 +183,229 @@ router.delete('/strategies/magic/:id', async (req, res) => {
 
     await dbRun('DELETE FROM custom_strategies WHERE id = ?', [id]);
     res.json({ success: true, message: `Stratégie "${existing.name}" supprimée avec succès.`, data: { id } });
+  } catch (error) {
+    res.status(500).json({ success: false, error: { message: error.message } });
+  }
+});
+
+// POST /api/strategies/backtest/:id - Simulate a strategy over historical matches
+router.post('/strategies/backtest/:id', async (req, res) => {
+  const { id } = req.params;
+  const defaultOddsInput = parseFloat(req.body.defaultOdds) || 1.80;
+
+  try {
+    // 1. Get the strategy
+    const strategy = await dbGet('SELECT * FROM custom_strategies WHERE id = ?', [id]);
+    if (!strategy) {
+      return res.status(404).json({ success: false, error: { message: 'Stratégie introuvable.' } });
+    }
+
+    const conditions = JSON.parse(strategy.conditions_json);
+    const limit = conditions.limit || 5;
+    const metric = strategy.metric;
+    const operator = conditions.operator || '>=';
+    const threshold = parseFloat(conditions.threshold);
+
+    // 2. Fetch all completed main matches (is_historical = 0, is_finished = 1)
+    const finishedMatches = await dbQuery(`
+      SELECT * FROM scraped_predictions 
+      WHERE is_historical = 0 AND is_finished = 1 AND statistics_json IS NOT NULL 
+      ORDER BY date ASC, time ASC
+    `);
+
+    const betLogs = [];
+    let totalBets = 0;
+    let wins = 0;
+    let losses = 0;
+    let cumulativeProfit = 0;
+    const profitTimeline = [];
+
+    // Helper map for metric labels in French
+    const metricLabels = {
+      fouls: 'fautes',
+      yellow_cards: 'cartons jaunes',
+      possession: 'possession',
+      shots_on_target: 'tirs cadrés',
+      shots: 'tirs',
+      offsides: 'hors-jeu',
+      corners: 'corners'
+    };
+
+    // 3. For each finished main match, simulate the prediction
+    for (const match of finishedMatches) {
+      // Parse main match date
+      const mainMatchDateStr = parseFrenchDate(match.date);
+      if (!mainMatchDateStr) continue;
+
+      // Find finished matches for home/away teams to use as prior H2H
+      const allH2H = await dbQuery(`
+        SELECT * FROM scraped_predictions 
+        WHERE is_finished = 1 
+          AND ((home_team = ? AND away_team = ?) OR (home_team = ? AND away_team = ?))
+      `, [match.home_team, match.away_team, match.away_team, match.home_team]);
+
+      // Filter H2H matches that occurred strictly before the main match date
+      const priorH2H = allH2H.filter(h => {
+        const hDate = parseFrenchDate(h.date);
+        return hDate && hDate < mainMatchDateStr;
+      });
+
+      // Sort prior H2H by date descending
+      priorH2H.sort((a, b) => {
+        const dateA = parseFrenchDate(a.date);
+        const dateB = parseFrenchDate(b.date);
+        return dateB.localeCompare(dateA); // Newest first
+      });
+
+      // Keep only up to the strategy limit
+      const activeH2H = priorH2H.slice(0, limit);
+      if (activeH2H.length === 0) {
+        continue; // No prior H2H data to evaluate strategy
+      }
+
+      // Compute historical average of the metric
+      let values = [];
+      for (const h2h of activeH2H) {
+        let stats = null;
+        try {
+          if (h2h.statistics_json) {
+            stats = JSON.parse(h2h.statistics_json);
+          }
+        } catch (e) {
+          continue;
+        }
+
+        if (!stats) continue;
+
+        if (metric === 'possession') {
+          if (stats.possession && stats.possession.home !== undefined && stats.possession.away !== undefined) {
+            const val = (h2h.home_team === match.home_team) 
+              ? parseFloat(stats.possession.home) 
+              : parseFloat(stats.possession.away);
+            values.push(val);
+          }
+        } else {
+          if (stats[metric] && stats[metric].home !== undefined && stats[metric].away !== undefined) {
+            const val = parseFloat(stats[metric].home) + parseFloat(stats[metric].away);
+            values.push(val);
+          }
+        }
+      }
+
+      if (values.length === 0) {
+        continue;
+      }
+
+      const sum = values.reduce((acc, curr) => acc + curr, 0);
+      const avg = parseFloat((sum / values.length).toFixed(2));
+
+      // Evaluate operator condition for triggers
+      let triggered = false;
+      if (operator === '>=' || operator === '>=') {
+        triggered = avg >= threshold;
+      } else if (operator === '<=') {
+        triggered = avg <= threshold;
+      } else if (operator === '>') {
+        triggered = avg > threshold;
+      } else if (operator === '<') {
+        triggered = avg < threshold;
+      }
+
+      if (triggered) {
+        // The strategy recommends placing a bet. Let's see if it won!
+        let mainMatchStats = null;
+        try {
+          mainMatchStats = JSON.parse(match.statistics_json);
+        } catch (e) {
+          continue; // Missing stats for main match, skip
+        }
+
+        if (!mainMatchStats) continue;
+
+        let actualVal = 0;
+        if (metric === 'possession') {
+          if (mainMatchStats.possession && mainMatchStats.possession.home !== undefined) {
+            actualVal = parseFloat(mainMatchStats.possession.home);
+          } else {
+            continue;
+          }
+        } else {
+          if (mainMatchStats[metric] && mainMatchStats[metric].home !== undefined && mainMatchStats[metric].away !== undefined) {
+            actualVal = parseFloat(mainMatchStats[metric].home) + parseFloat(mainMatchStats[metric].away);
+          } else {
+            continue;
+          }
+        }
+
+        // Evaluate actual outcome
+        let won = false;
+        if (operator === '>=' || operator === '>=') {
+          won = actualVal >= threshold;
+        } else if (operator === '<=') {
+          won = actualVal <= threshold;
+        } else if (operator === '>') {
+          won = actualVal > threshold;
+        } else if (operator === '<') {
+          won = actualVal < threshold;
+        }
+
+        // Determine bet odds
+        const oddsVal = parseFloat(operator === '>=' || operator === '>' ? match.over_odds : match.under_odds) || defaultOddsInput;
+
+        // Calculate profit
+        const profit = won ? (oddsVal - 1.0) : -1.0;
+        cumulativeProfit += profit;
+        totalBets++;
+
+        if (won) wins++;
+        else losses++;
+
+        profitTimeline.push({
+          bet_index: totalBets,
+          date: mainMatchDateStr,
+          match: `${match.home_team} - ${match.away_team}`,
+          profit: parseFloat(profit.toFixed(2)),
+          cumulative: parseFloat(cumulativeProfit.toFixed(2))
+        });
+
+        betLogs.push({
+          date: mainMatchDateStr,
+          match_id: match.match_id,
+          home_team: match.home_team,
+          away_team: match.away_team,
+          score: match.score,
+          avg_value: avg,
+          actual_value: actualVal,
+          odds: oddsVal,
+          won: won,
+          profit: parseFloat(profit.toFixed(2))
+        });
+      }
+    }
+
+    const winRate = totalBets > 0 ? parseFloat(((wins / totalBets) * 100).toFixed(1)) : 0;
+    const roi = totalBets > 0 ? parseFloat(((cumulativeProfit / totalBets) * 100).toFixed(1)) : 0;
+
+    res.json({
+      success: true,
+      data: {
+        strategy_id: strategy.id,
+        strategy_name: strategy.name,
+        metric: metric,
+        threshold: threshold,
+        operator: operator,
+        limit: limit,
+        total_bets: totalBets,
+        wins: wins,
+        losses: losses,
+        win_rate: winRate,
+        roi: roi,
+        total_profit: parseFloat(cumulativeProfit.toFixed(2)),
+        profit_timeline: profitTimeline,
+        logs: betLogs
+      }
+    });
+
   } catch (error) {
     res.status(500).json({ success: false, error: { message: error.message } });
   }

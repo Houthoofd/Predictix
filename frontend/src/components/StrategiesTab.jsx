@@ -9,7 +9,9 @@ import {
   ArrowRight,
   Info,
   CheckCircle,
-  HelpCircle
+  HelpCircle,
+  TrendingUp,
+  X
 } from 'lucide-react';
 
 export default function StrategiesTab() {
@@ -20,6 +22,12 @@ export default function StrategiesTab() {
   const [creationStep, setCreationStep] = useState(0);
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState('');
+  
+  // Backtest states
+  const [backtestingId, setBacktestingId] = useState(null);
+  const [backtestResults, setBacktestResults] = useState(null);
+  const [defaultOdds, setDefaultOdds] = useState('1.80');
+
 
   const creationSteps = [
     "Analyse de votre concept en langage naturel...",
@@ -125,6 +133,112 @@ export default function StrategiesTab() {
     } catch (err) {
       console.error("Erreur lors de la suppression:", err);
     }
+  };
+
+  const handleRunBacktest = async (id) => {
+    setBacktestingId(id);
+    setBacktestResults(null);
+    try {
+      const res = await fetch(`http://localhost:5000/api/strategies/backtest/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ defaultOdds: parseFloat(defaultOdds) || 1.80 })
+      });
+      const json = await res.json();
+      if (json.success) {
+        setBacktestResults(json.data);
+      } else {
+        alert("Erreur backtest: " + (json.error?.message || "Erreur inconnue"));
+      }
+    } catch (err) {
+      console.error("Erreur backtest:", err);
+      alert("Erreur de connexion lors du lancement du backtest.");
+    } finally {
+      setBacktestingId(null);
+    }
+  };
+
+  const drawProfitChart = (timeline) => {
+    if (!timeline || timeline.length === 0) return null;
+
+    const width = 600;
+    const height = 200;
+    const padding = 20;
+
+    // Include 0 as starting point
+    const points = [{ val: 0, idx: 0 }, ...timeline.map((t, idx) => ({ val: t.cumulative, idx: idx + 1 }))];
+
+    const minVal = Math.min(...points.map(p => p.val));
+    const maxVal = Math.max(...points.map(p => p.val));
+    const valRange = maxVal - minVal === 0 ? 1 : maxVal - minVal;
+
+    const getX = (idx) => padding + (idx / (points.length - 1)) * (width - 2 * padding);
+    const getY = (val) => height - padding - ((val - minVal) / valRange) * (height - 2 * padding);
+
+    let pathD = `M ${getX(0)} ${getY(0)}`;
+    for (let i = 1; i < points.length; i++) {
+      pathD += ` L ${getX(i)} ${getY(i)}`;
+    }
+
+    let areaD = `${pathD} L ${getX(points.length - 1)} ${height - padding} L ${getX(0)} ${height - padding} Z`;
+
+    return (
+      <svg viewBox={`0 0 ${width} ${height}`} width="100%" height="200" style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '12px', border: '1px solid var(--border-color)', padding: '10px', marginTop: '10px' }}>
+        <defs>
+          <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#bf5af2" stopOpacity="0.4" />
+            <stop offset="100%" stopColor="#0082ff" stopOpacity="0.0" />
+          </linearGradient>
+          <linearGradient id="lineGrad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#bf5af2" />
+            <stop offset="100%" stopColor="#0082ff" />
+          </linearGradient>
+        </defs>
+        
+        {/* Zero Line */}
+        {minVal < 0 && maxVal > 0 && (
+          <line 
+            x1={padding} 
+            y1={getY(0)} 
+            x2={width - padding} 
+            y2={getY(0)} 
+            stroke="rgba(255,255,255,0.15)" 
+            strokeDasharray="4 4" 
+          />
+        )}
+
+        {/* Grid lines */}
+        <line x1={padding} y1={padding} x2={width - padding} y2={padding} stroke="rgba(255,255,255,0.05)" />
+        <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="rgba(255,255,255,0.05)" />
+
+        {/* Area under the line */}
+        <path d={areaD} fill="url(#chartGrad)" />
+
+        {/* Trend Line */}
+        <path d={pathD} fill="none" stroke="url(#lineGrad)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+
+        {/* Points */}
+        {points.map((p, i) => (
+          <circle 
+            key={i} 
+            cx={getX(p.idx)} 
+            cy={getY(p.val)} 
+            r="3.5" 
+            fill={p.val >= 0 ? '#2ecc71' : '#e74c3c'} 
+            stroke="rgba(0,0,0,0.6)" 
+            strokeWidth="1"
+          />
+        ))}
+        
+        {/* Texts */}
+        <text x={padding + 5} y={padding + 15} fill="rgba(255,255,255,0.6)" fontSize="10" fontWeight="bold">
+          Max: {maxVal.toFixed(2)} U
+        </text>
+        <text x={padding + 5} y={height - padding - 5} fill="rgba(255,255,255,0.6)" fontSize="10" fontWeight="bold">
+          Min: {minVal.toFixed(2)} U
+        </text>
+      </svg>
+    );
   };
 
   const getMetricLabel = (metric) => {
@@ -291,10 +405,35 @@ export default function StrategiesTab() {
 
         {/* Right Column: Active custom strategies listing */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-          <h4 style={{ fontSize: '18px', fontFamily: 'Outfit', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Database size={18} style={{ color: 'var(--color-accent-solid)' }} />
-            Vos Stratégies Actives ({strategies.length})
-          </h4>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h4 style={{ fontSize: '18px', fontFamily: 'Outfit', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+              <Database size={18} style={{ color: 'var(--color-accent-solid)' }} />
+              Vos Stratégies Actives ({strategies.length})
+            </h4>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 700 }}>COTE BACKTEST :</span>
+              <input 
+                type="number" 
+                step="0.05" 
+                min="1.01" 
+                value={defaultOdds} 
+                onChange={(e) => setDefaultOdds(e.target.value)} 
+                style={{
+                  width: '65px',
+                  padding: '4px 8px',
+                  background: 'var(--bg-tertiary)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '6px',
+                  color: '#fff',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  textAlign: 'center',
+                  outline: 'none'
+                }}
+              />
+            </div>
+          </div>
+
 
           {loading ? (
             <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
@@ -342,6 +481,28 @@ export default function StrategiesTab() {
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+                      {/* Backtest Trigger */}
+                      <button
+                        onClick={() => handleRunBacktest(strat.id)}
+                        className="btn btn-secondary"
+                        style={{
+                          fontSize: '11px',
+                          padding: '0 10px',
+                          height: '28px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          borderColor: 'rgba(191, 90, 242, 0.3)',
+                          background: 'rgba(191, 90, 242, 0.05)',
+                          color: '#bf5af2'
+                        }}
+                        disabled={backtestingId === strat.id}
+                        title="Lancer le rétro-testing de cette stratégie"
+                      >
+                        <TrendingUp size={12} />
+                        {backtestingId === strat.id ? 'Calcul...' : 'Rétro-tester'}
+                      </button>
+
                       {/* Active Toggle */}
                       <button
                         onClick={() => handleToggleStatus(strat.id)}
@@ -389,6 +550,111 @@ export default function StrategiesTab() {
         </div>
 
       </div>
+      
+      {/* 3. Backtest Results Card */}
+      {backtestResults && (
+        <div className="glass-card" style={{ marginTop: '20px', border: '1px solid rgba(191, 90, 242, 0.3)', padding: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <div>
+              <h3 style={{ fontSize: '18px', fontFamily: 'Outfit', fontWeight: 800, color: '#bf5af2', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                <TrendingUp size={20} />
+                Résultats du Rétro-testing : {backtestResults.strategy_name}
+              </h3>
+              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px', margin: '2px 0 0 0' }}>
+                Simulation lancée avec une cote par défaut de <strong>{defaultOdds}</strong>.
+              </p>
+            </div>
+            
+            <button 
+              className="btn btn-secondary" 
+              style={{ padding: '0 8px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              onClick={() => setBacktestResults(null)}
+              title="Fermer les résultats"
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          {/* Stats Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '25px' }}>
+            <div style={{ background: 'rgba(0,0,0,0.15)', border: '1px solid var(--border-color)', padding: '14px', borderRadius: '10px', textAlign: 'center' }}>
+              <div style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>PARIS ÉVALUÉS</div>
+              <div style={{ fontSize: '24px', fontFamily: 'Outfit', fontWeight: 800, marginTop: '6px' }}>{backtestResults.total_bets}</div>
+            </div>
+            <div style={{ background: 'rgba(0,0,0,0.15)', border: '1px solid var(--border-color)', padding: '14px', borderRadius: '10px', textAlign: 'center' }}>
+              <div style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>TAUX DE RÉUSSITE</div>
+              <div style={{ fontSize: '24px', fontFamily: 'Outfit', fontWeight: 800, color: backtestResults.win_rate >= 55 ? '#2ecc71' : backtestResults.win_rate >= 50 ? '#f1c40f' : '#e74c3c', marginTop: '6px' }}>
+                {backtestResults.win_rate}%
+              </div>
+              <div style={{ fontSize: '9.5px', color: 'var(--text-muted)', marginTop: '2px' }}>{backtestResults.wins} V / {backtestResults.losses} D</div>
+            </div>
+            <div style={{ background: 'rgba(0,0,0,0.15)', border: '1px solid var(--border-color)', padding: '14px', borderRadius: '10px', textAlign: 'center' }}>
+              <div style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>RENDEMENT (ROI)</div>
+              <div style={{ fontSize: '24px', fontFamily: 'Outfit', fontWeight: 800, color: backtestResults.roi >= 0 ? '#2ecc71' : '#e74c3c', marginTop: '6px' }}>
+                {backtestResults.roi >= 0 ? '+' : ''}{backtestResults.roi}%
+              </div>
+            </div>
+            <div style={{ background: 'rgba(0,0,0,0.15)', border: '1px solid var(--border-color)', padding: '14px', borderRadius: '10px', textAlign: 'center' }}>
+              <div style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>PROFIT NET TOTAL</div>
+              <div style={{ fontSize: '24px', fontFamily: 'Outfit', fontWeight: 800, color: backtestResults.total_profit >= 0 ? '#2ecc71' : '#e74c3c', marginTop: '6px' }}>
+                {backtestResults.total_profit >= 0 ? '+' : ''}{backtestResults.total_profit} U
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '25px', alignItems: 'start' }}>
+            
+            {/* Chart Area */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>Courbe de profit cumulée (unités)</div>
+              {drawProfitChart(backtestResults.profit_timeline)}
+            </div>
+
+            {/* Logs Area */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>Journal des paris simulés</div>
+              <div style={{ overflowY: 'auto', maxHeight: '200px', background: 'rgba(0,0,0,0.15)', borderRadius: '12px', border: '1px solid var(--border-color)', padding: '8px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
+                      <th style={{ padding: '6px 4px', textAlign: 'left' }}>Date</th>
+                      <th style={{ padding: '6px 4px', textAlign: 'left' }}>Match</th>
+                      <th style={{ padding: '6px 4px', textAlign: 'center' }}>Moy H2H</th>
+                      <th style={{ padding: '6px 4px', textAlign: 'center' }}>Réel</th>
+                      <th style={{ padding: '6px 4px', textAlign: 'center' }}>Cote</th>
+                      <th style={{ padding: '6px 4px', textAlign: 'center' }}>Statut</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {backtestResults.logs.map((log, idx) => (
+                      <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
+                        <td style={{ padding: '6px 4px', color: 'var(--text-muted)' }}>{log.date}</td>
+                        <td style={{ padding: '6px 4px', fontWeight: 600 }}>{log.home_team} - {log.away_team} ({log.score})</td>
+                        <td style={{ padding: '6px 4px', textAlign: 'center' }}>{log.avg_value}</td>
+                        <td style={{ padding: '6px 4px', textAlign: 'center', fontWeight: 700 }}>{log.actual_value}</td>
+                        <td style={{ padding: '6px 4px', textAlign: 'center' }}>{log.odds}</td>
+                        <td style={{ padding: '6px 4px', textAlign: 'center' }}>
+                          <span style={{ 
+                            background: log.won ? 'rgba(46, 204, 113, 0.15)' : 'rgba(231, 76, 60, 0.15)', 
+                            color: log.won ? '#2ecc71' : '#e74c3c', 
+                            padding: '2px 6px', 
+                            borderRadius: '4px',
+                            fontWeight: 700,
+                            fontSize: '9px'
+                          }}>
+                            {log.won ? 'GAGNÉ' : 'PERDU'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
 
     </div>
   );
