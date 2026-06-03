@@ -31,6 +31,7 @@ export default function App() {
   // Theme & Navigation
   const [theme, setTheme] = useState('modern');
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [trackerSubTab, setTrackerSubTab] = useState('journal');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   
   // Data State
@@ -1146,6 +1147,7 @@ export default function App() {
                   stats={stats} 
                   bets={bets} 
                   setActiveTab={setActiveTab} 
+                  setTrackerSubTab={setTrackerSubTab}
                 />
               )}
 
@@ -1200,6 +1202,8 @@ export default function App() {
                   handleRefreshAllBets={handleRefreshAllBets}
                   betRefreshLoading={betRefreshLoading}
                   globalRefreshLoading={globalRefreshLoading}
+                  subTab={trackerSubTab}
+                  setSubTab={setTrackerSubTab}
                 />
               )}
 

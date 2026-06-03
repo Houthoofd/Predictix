@@ -6,7 +6,7 @@ import {
   Award 
 } from 'lucide-react';
 
-export default function DashboardTab({ stats, bets, setActiveTab }) {
+export default function DashboardTab({ stats, bets, setActiveTab, setTrackerSubTab }) {
   // Calculate coordinates for dynamic SVG line chart
   const renderSVGChartPath = (historyData) => {
     if (!historyData || historyData.length < 2) return { pathD: '', areaD: '', points: [] };
@@ -112,7 +112,35 @@ export default function DashboardTab({ stats, bets, setActiveTab }) {
 
       {/* Bankroll Evolution SVG Line Chart */}
       <div className="glass-card">
-        <h3 style={{ fontSize: '18px', marginBottom: '20px', fontFamily: 'Outfit' }}>Évolution du Capital de Paris</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h3 style={{ fontSize: '18px', fontFamily: 'Outfit', margin: 0 }}>Évolution du Capital de Paris</h3>
+          {setTrackerSubTab && (
+            <button 
+              className="btn btn-secondary" 
+              style={{ 
+                padding: '6px 12px', 
+                fontSize: '12px', 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '6px', 
+                fontFamily: 'Outfit', 
+                fontWeight: 600,
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid var(--border-color)',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                color: 'var(--text-primary)'
+              }} 
+              onClick={() => { 
+                setActiveTab('tracker'); 
+                setTrackerSubTab('analytics'); 
+              }}
+            >
+              <span>Analyses Détaillées</span>
+              <TrendingUp size={14} style={{ color: 'var(--color-accent-solid)' }} />
+            </button>
+          )}
+        </div>
         
         {stats.charts?.history?.length > 1 ? (
           <div>
