@@ -75,6 +75,7 @@ export default function IntegrityTab({
           const statusTransitioned = d.status === 'running' && lastStatusRef.current !== 'running';
           
           if ((progressChanged || statusTransitioned) && refreshRef.current) {
+            console.log(`[Predictix Integrity] Data update triggered (processed: ${lastProcessedRef.current} -> ${d.processedCount}, status: ${lastStatusRef.current} -> ${d.status})`);
             refreshRef.current();
           }
 
