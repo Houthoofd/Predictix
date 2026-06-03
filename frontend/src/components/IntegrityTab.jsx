@@ -42,6 +42,11 @@ export default function IntegrityTab({
   const [batcherErrors, setBatcherErrors] = useState(0);
   const [batcherLogs, setBatcherLogs] = useState([]);
   const [batcherLoading, setBatcherLoading] = useState(false);
+  const [batcherQueue, setBatcherQueue] = useState([]);
+  const [injectedUrl, setInjectedUrl] = useState('');
+  const [injecting, setInjecting] = useState(false);
+  const [prioritizingId, setPrioritizingId] = useState(null);
+  const [cleaning, setCleaning] = useState(false);
 
   // Refs to avoid stale closures in polling interval
   const refreshRef = React.useRef(onRefreshPredictions);
@@ -69,6 +74,7 @@ export default function IntegrityTab({
           setBatcherSuccess(d.successCount);
           setBatcherErrors(d.errorCount);
           setBatcherLogs(d.logs || []);
+          setBatcherQueue(d.queue || []);
 
           // Trigger refresh if the batcher is running (updates H2H stats and logos in real-time as they are crawled)
           // or if the status transitioned to/from running
@@ -126,6 +132,89 @@ export default function IntegrityTab({
       await res.json();
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handlePrioritizeMatch = async (matchId) => {
+    setPrioritizingId(matchId);
+    try {
+      const res = await fetch('/api/predictions/integrity-batch/prioritize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ match_id: matchId })
+      });
+      const json = await res.json();
+      if (json.success) {
+        // Optimistically update the queue list
+        const idx = batcherQueue.findIndex(m => m.match_id === matchId);
+        if (idx > -1) {
+          const updated = [...batcherQueue];
+          const [item] = updated.splice(idx, 1);
+          updated.unshift(item);
+          setBatcherQueue(updated);
+        }
+      } else {
+        alert(json.error?.message || "Erreur de priorisation.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Erreur de connexion.");
+    } finally {
+      setPrioritizingId(null);
+    }
+  };
+
+  const handleInjectUrl = async (e) => {
+    e.preventDefault();
+    if (!injectedUrl.trim() || !injectedUrl.startsWith('/live-score/')) {
+      alert("Veuillez entrer une URL valide commençant par /live-score/ (ex: /live-score/psg-brest.html)");
+      return;
+    }
+    setInjecting(true);
+    try {
+      const res = await fetch('/api/predictions/integrity-batch/inject', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ match_url: injectedUrl.trim() })
+      });
+      const json = await res.json();
+      if (json.success) {
+        setInjectedUrl('');
+        // Optimistically trigger prediction refresh
+        if (onRefreshPredictions) {
+          onRefreshPredictions();
+        }
+      } else {
+        alert(json.error?.message || "Échec de l'injection.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Erreur de connexion.");
+    } finally {
+      setInjecting(false);
+    }
+  };
+
+  const handleCleanupDatabase = async () => {
+    if (!window.confirm("Êtes-vous sûr de vouloir lancer le nettoyage d'intégrité de la base de données ? Cette opération va supprimer les doublons et purger les historiques orphelins.")) return;
+    setCleaning(true);
+    try {
+      const res = await fetch('/api/predictions/integrity-batch/cleanup', { method: 'POST' });
+      const json = await res.json();
+      if (json.success) {
+        const d = json.data;
+        alert(`Nettoyage réussi !\n- Doublons supprimés : ${d.deletedDuplicates}\n- Historiques orphelins purgés : ${d.purgedOrphans}\n- Matchs guéris : ${d.healedCount}`);
+        if (onRefreshPredictions) {
+          onRefreshPredictions();
+        }
+      } else {
+        alert(json.error?.message || "Échec du nettoyage.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Erreur de connexion.");
+    } finally {
+      setCleaning(false);
     }
   };
   
@@ -455,18 +544,44 @@ export default function IntegrityTab({
 
       {/* Batcher Réparation de Données Panel */}
       <div className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <Sparkles size={20} style={{ color: '#0082ff' }} />
             <div>
-              <h3 style={{ fontSize: '16px', fontFamily: 'Outfit', fontWeight: 800, margin: 0 }}>Réparation Automatique & Complétion de Données</h3>
+              <h3 style={{ fontSize: '16px', fontFamily: 'Outfit', fontWeight: 800, margin: 0 }}>Cockpit de Réparation Automatique</h3>
               <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '2px 0 0 0' }}>
-                Recherche et répare séquentiellement tous les diagnostics incomplets (historique, statistiques de corners, logos manquants).
+                Recherche et répare tous les diagnostics incomplets (historique, stats de corners, logos manquants).
               </p>
             </div>
           </div>
           
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              className="btn"
+              onClick={handleCleanupDatabase}
+              disabled={cleaning}
+              style={{
+                fontSize: '12.5px',
+                fontWeight: 700,
+                fontFamily: 'Outfit',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: 'rgba(255, 59, 48, 0.08)',
+                border: '1px solid rgba(255, 59, 48, 0.2)',
+                borderRadius: '6px',
+                padding: '8px 14px',
+                cursor: 'pointer',
+                color: '#ff3b30',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 59, 48, 0.15)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255, 59, 48, 0.08)'}
+            >
+              <Trash2 size={14} className={cleaning ? 'animate-spin' : ''} />
+              <span>{cleaning ? 'Nettoyage...' : 'Nettoyer la base'}</span>
+            </button>
+
             {batcherStatus === 'idle' ? (
               <button 
                 className="btn btn-primary"
@@ -585,66 +700,187 @@ export default function IntegrityTab({
           </div>
         </div>
 
-        {/* Progress Bar Area */}
-        {batcherStatus !== 'idle' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontFamily: 'Outfit' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>
-                Statut : <strong style={{ color: batcherStatus === 'running' ? '#bf5af2' : '#ff9500' }}>
-                  {batcherStatus === 'running' ? 'En Cours' : 'En Pause'}
-                </strong>
-              </span>
-              <span style={{ fontWeight: 600 }}>
-                {batcherCurrentIndex} / {batcherQueueLength} Matchs Traités ({batcherSuccess} Succès, {batcherErrors} Erreurs)
-              </span>
-            </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '25px', marginTop: '5px' }}>
+          {/* Col 1: Progress, Controls, Terminal Logs */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
             
-            <div style={{ width: '100%', height: '8px', background: 'var(--bg-tertiary)', borderRadius: '4px', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
+            {/* Progress Bar Area */}
+            {batcherStatus !== 'idle' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontFamily: 'Outfit' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>
+                    Statut : <strong style={{ color: batcherStatus === 'running' ? '#bf5af2' : '#ff9500' }}>
+                      {batcherStatus === 'running' ? 'En Cours' : 'En Pause'}
+                    </strong>
+                  </span>
+                  <span style={{ fontWeight: 600 }}>
+                    {batcherCurrentIndex} / {batcherQueueLength} Matchs Traités ({batcherSuccess} Succès, {batcherErrors} Erreurs)
+                  </span>
+                </div>
+                
+                <div style={{ width: '100%', height: '8px', background: 'var(--bg-tertiary)', borderRadius: '4px', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
+                  <div 
+                    style={{ 
+                      width: `${(batcherCurrentIndex / (batcherQueueLength || 1)) * 100}%`, 
+                      height: '100%', 
+                      background: 'linear-gradient(90deg, #0082ff 0%, #bf5af2 100%)',
+                      transition: 'width 0.4s ease'
+                    }} 
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Live Logs Terminal */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Console des Travaux en Direct</span>
               <div 
                 style={{ 
-                  width: `${(batcherCurrentIndex / (batcherQueueLength || 1)) * 100}%`, 
-                  height: '100%', 
-                  background: 'linear-gradient(90deg, #0082ff 0%, #bf5af2 100%)',
-                  transition: 'width 0.4s ease'
-                }} 
-              />
+                  height: '150px', 
+                  background: '#0a0f1d', 
+                  borderRadius: '8px', 
+                  border: '1px solid var(--border-color)', 
+                  padding: '10px 14px', 
+                  fontFamily: 'monospace', 
+                  fontSize: '11.5px', 
+                  color: '#4af626', 
+                  overflowY: 'auto',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px'
+                }}
+                ref={(el) => {
+                  if (el) el.scrollTop = el.scrollHeight; // Auto-scroll to bottom on update
+                }}
+              >
+                {batcherLogs.length > 0 ? (
+                  batcherLogs.map((log, index) => (
+                    <div key={index} style={{ 
+                      color: log.includes('❌') ? '#ff3b30' : log.includes('⚠') ? '#ff9500' : log.includes('✓') ? '#2ecc71' : '#4af626'
+                    }}>
+                      {log}
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Aucune activité active. Cliquez sur "Lancer la Réparation Globale" pour démarrer.</div>
+                )}
+              </div>
             </div>
-          </div>
-        )}
 
-        {/* Live Logs Terminal */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Console des Travaux en Direct</span>
-          <div 
-            style={{ 
-              height: '140px', 
-              background: '#0a0f1d', 
-              borderRadius: '8px', 
-              border: '1px solid var(--border-color)', 
-              padding: '10px 14px', 
-              fontFamily: 'monospace', 
-              fontSize: '11.5px', 
-              color: '#4af626', 
-              overflowY: 'auto',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '4px'
-            }}
-            ref={(el) => {
-              if (el) el.scrollTop = el.scrollHeight; // Auto-scroll to bottom on update
-            }}
-          >
-            {batcherLogs.length > 0 ? (
-              batcherLogs.map((log, index) => (
-                <div key={index} style={{ 
-                  color: log.includes('❌') ? '#ff3b30' : log.includes('⚠') ? '#ff9500' : log.includes('✓') ? '#2ecc71' : '#4af626'
-                }}>
-                  {log}
-                </div>
-              ))
-            ) : (
-              <div style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Aucune activité active. Cliquez sur "Lancer la Réparation Globale" pour démarrer.</div>
-            )}
+          </div>
+
+          {/* Col 2: Queue Inspector & URL Injector */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            
+            {/* URL Injector Form */}
+            <form onSubmit={handleInjectUrl} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Injecteur de Match sur Demande</label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input 
+                  type="text"
+                  placeholder="Coller l'URL MatchDirect (ex: /live-score/psg-brest.html)"
+                  value={injectedUrl}
+                  onChange={(e) => setInjectedUrl(e.target.value)}
+                  style={{
+                    flex: 1,
+                    background: 'rgba(0,0,0,0.2)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '6px',
+                    padding: '8px 12px',
+                    fontSize: '12.5px',
+                    color: '#fff',
+                    outline: 'none'
+                  }}
+                />
+                <button
+                  type="submit"
+                  disabled={injecting}
+                  style={{
+                    background: 'var(--color-primary)',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '8px 14px',
+                    fontWeight: 700,
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <Plus size={14} />
+                  <span>{injecting ? '...' : 'Injecter'}</span>
+                </button>
+              </div>
+            </form>
+
+            {/* Queue Inspector list */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
+              <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                File d'Attente de Réparation ({batcherQueueLength} restants)
+              </span>
+              <div 
+                style={{ 
+                  height: '110px', 
+                  overflowY: 'auto',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '8px',
+                  background: 'rgba(0,0,0,0.15)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  padding: '4px'
+                }}
+              >
+                {batcherQueue.length > 0 ? (
+                  batcherQueue.map((item, idx) => (
+                    <div 
+                      key={item.match_id}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '6px 10px',
+                        borderBottom: idx === batcherQueue.length - 1 ? 'none' : '1px solid rgba(255,255,255,0.03)',
+                        fontSize: '12px'
+                      }}
+                    >
+                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: '10px' }}>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '10px', marginRight: '6px' }}>#{batcherCurrentIndex + idx + 1}</span>
+                        <strong style={{ color: 'var(--text-primary)' }}>{item.home_team} - {item.away_team}</strong>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '10px', marginLeft: '6px' }}>({item.date})</span>
+                      </div>
+                      
+                      {idx > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => handlePrioritizeMatch(item.match_id)}
+                          disabled={prioritizingId === item.match_id}
+                          style={{
+                            background: 'rgba(191, 90, 242, 0.1)',
+                            border: '1px solid rgba(191, 90, 242, 0.3)',
+                            borderRadius: '4px',
+                            color: '#bf5af2',
+                            padding: '2px 8px',
+                            fontSize: '10px',
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          {prioritizingId === item.match_id ? '...' : '⚡ Prioriser'}
+                        </button>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ color: 'var(--text-muted)', fontSize: '12px', fontStyle: 'italic', padding: '20px', textAlign: 'center' }}>
+                    Aucun match restant dans la file d'attente.
+                  </div>
+                )}
+              </div>
+            </div>
+
           </div>
         </div>
       </div>
@@ -687,12 +923,17 @@ export default function IntegrityTab({
                       <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)', marginTop: '2px' }}>
                         {match.home_team} - {match.away_team}
                       </div>
-                      <div style={{ display: 'flex', gap: '10px', fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                        <span>H2H: {diag.h2h_matches_count || 0}/10</span>
-                        <span>•</span>
-                        <span>Dom: {diag.home_matches_count || 0}/10</span>
-                        <span>•</span>
-                        <span>Ext: {diag.away_matches_count || 0}/10</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+                        <div style={{ display: 'flex', gap: '4px' }} title="Matrice de santé (Logo Dom, Logo Ext, H2H, Histo Dom, Histo Ext)">
+                          <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: diag.missing_home_logo ? '#ff3b30' : '#2ecc71' }} />
+                          <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: diag.missing_away_logo ? '#ff3b30' : '#2ecc71' }} />
+                          <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: (diag.h2h_matches_count || 0) >= 10 ? '#2ecc71' : (diag.h2h_matches_count || 0) > 0 ? '#ff9500' : '#ff3b30' }} />
+                          <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: (diag.home_matches_count || 0) >= 10 ? '#2ecc71' : (diag.home_matches_count || 0) > 0 ? '#ff9500' : '#ff3b30' }} />
+                          <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: (diag.away_matches_count || 0) >= 10 ? '#2ecc71' : (diag.away_matches_count || 0) > 0 ? '#ff9500' : '#ff3b30' }} />
+                        </div>
+                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                          H2H: {diag.h2h_matches_count || 0}/10 • Dom: {diag.home_matches_count || 0}/10 • Ext: {diag.away_matches_count || 0}/10
+                        </span>
                       </div>
                     </div>
 

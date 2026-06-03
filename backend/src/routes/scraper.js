@@ -22,5 +22,8 @@ router.post('/predictions/integrity-batch/start', scraperController.startIntegri
 router.post('/predictions/integrity-batch/pause', scraperController.pauseIntegrityBatch);
 router.post('/predictions/integrity-batch/stop', scraperController.stopIntegrityBatch);
 router.get('/predictions/integrity-batch/status', scraperController.getIntegrityBatchStatus);
+router.post('/predictions/integrity-batch/prioritize', scraperController.prioritizeIntegrityMatch);
+router.post('/predictions/integrity-batch/inject', scraperController.injectIntegrityMatch);
+router.post('/predictions/integrity-batch/cleanup', scraperController.cleanupDatabaseIntegrity);
 
 export default router;

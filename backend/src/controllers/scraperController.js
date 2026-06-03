@@ -1005,13 +1005,66 @@ class ScraperController {
         return res.json({ success: true, message: "Toutes les données sont déjà complètes (score d'intégrité de 100% sur tous les matchs) !" });
       }
 
-      incompleteMatches.sort((a, b) => a.diagnostic.score - b.diagnostic.score);
+      // Smart Priority Weight Calculation
+      const todayStr = new Date().toISOString().substring(0, 10);
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowStr = tomorrow.toISOString().substring(0, 10);
+
+      // Load active custom strategies
+      let activeStrategies = [];
+      try {
+        activeStrategies = await dbQuery("SELECT * FROM custom_strategies WHERE status = 'ACTIVE'");
+      } catch (err) {
+        console.warn("Could not fetch active strategies for scheduling:", err.message);
+      }
+
+      const getMatchWeight = (m) => {
+        let weight = 0;
+        const score = m.diagnostic?.score ?? 100;
+        
+        // 1. Date Priority (upcoming matches are critical)
+        if (m.date === todayStr) {
+          weight += 1500;
+        } else if (m.date === tomorrowStr) {
+          weight += 800;
+        } else if (m.date > todayStr) {
+          weight += 300;
+        }
+
+        // 2. Critical Score Priority (as requested by user)
+        if (score < 30) {
+          weight += 1200; // Extremely critical (strongly prioritized)
+        } else if (score < 60) {
+          weight += 600;  // Critical
+        } else if (score < 90) {
+          weight += 200;  // Alert
+        }
+
+        // Add inverse score density to fine-tune
+        weight += (100 - score);
+
+        // 3. Strategy Priority
+        const matchesStrategy = activeStrategies.some(s => {
+          const tKey = (m.tournament || '').toLowerCase();
+          const metric = s.metric || '';
+          return tKey.includes(metric) || tKey.includes('ligue') || tKey.includes('cup') || tKey.includes('coupe');
+        });
+        if (matchesStrategy) {
+          weight += 400;
+        }
+
+        return weight;
+      };
+
+      incompleteMatches.sort((a, b) => getMatchWeight(b) - getMatchWeight(a));
 
       activeIntegrityBatch.queue = incompleteMatches.map(m => ({
         match_id: m.match_id,
         home_team: m.home_team,
         away_team: m.away_team,
         date: m.date,
+        tournament: m.tournament,
         historical_links: m.historical_links,
         diagnostic: m.diagnostic
       }));
@@ -1020,7 +1073,7 @@ class ScraperController {
       activeIntegrityBatch.processedCount = 0;
       activeIntegrityBatch.successCount = 0;
       activeIntegrityBatch.errorCount = 0;
-      activeIntegrityBatch.logs = [`[${new Date().toLocaleTimeString()}] 🚀 Démarrage de la réparation globale pour ${incompleteMatches.length} matchs.`];
+      activeIntegrityBatch.logs = [`[${new Date().toLocaleTimeString()}] 🚀 Démarrage de la réparation globale pour ${incompleteMatches.length} matchs (Tri par priorité actif).`];
       activeIntegrityBatch.status = 'running';
 
       runIntegrityBatchLoop();
@@ -1075,6 +1128,7 @@ class ScraperController {
    */
   async getIntegrityBatchStatus(req, res) {
     const recentLogs = activeIntegrityBatch.logs.slice(-100);
+    const nextQueue = activeIntegrityBatch.queue.slice(activeIntegrityBatch.currentIndex, activeIntegrityBatch.currentIndex + 10);
     res.json({
       success: true,
       data: {
@@ -1084,9 +1138,209 @@ class ScraperController {
         processedCount: activeIntegrityBatch.processedCount,
         successCount: activeIntegrityBatch.successCount,
         errorCount: activeIntegrityBatch.errorCount,
-        logs: recentLogs
+        logs: recentLogs,
+        queue: nextQueue
       }
     });
+  }
+
+  /**
+   * POST /api/scraper/integrity-batch/prioritize
+   */
+  async prioritizeIntegrityMatch(req, res) {
+    const { match_id } = req.body;
+    if (!match_id) {
+      return res.status(400).json({ success: false, error: { message: "Le paramètre match_id est requis." } });
+    }
+    try {
+      const queue = activeIntegrityBatch.queue;
+      const idx = queue.findIndex((m, i) => i >= activeIntegrityBatch.currentIndex && m.match_id === match_id);
+      
+      if (idx === -1) {
+        return res.status(404).json({ success: false, error: { message: "Match non trouvé dans la file d'attente." } });
+      }
+      
+      const matchObj = queue[idx];
+      // Remove from current index position
+      queue.splice(idx, 1);
+      // Place right at the current index (will be processed next)
+      queue.splice(activeIntegrityBatch.currentIndex, 0, matchObj);
+      
+      activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ⚡ Priorisation manuelle : ${matchObj.home_team} vs ${matchObj.away_team}`);
+      res.json({ success: true, message: "Match priorisé avec succès." });
+    } catch (err) {
+      res.status(500).json({ success: false, error: { message: err.message } });
+    }
+  }
+
+  /**
+   * POST /api/scraper/integrity-batch/inject
+   */
+  async injectIntegrityMatch(req, res) {
+    const { match_url } = req.body;
+    if (!match_url || typeof match_url !== 'string' || !match_url.startsWith('/live-score/')) {
+      return res.status(400).json({ success: false, error: { message: "Une URL Match en Direct valide (commençant par /live-score/) est requise." } });
+    }
+    
+    try {
+      const parts = match_url.replace('/live-score/', '').replace('.html', '').split('-');
+      let home = 'Home';
+      let away = 'Away';
+      if (parts.length >= 2) {
+        home = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+        away = parts[1].charAt(0).toUpperCase() + parts[1].slice(1);
+      }
+      
+      const matchId = match_url;
+      const existing = await dbGet('SELECT * FROM scraped_predictions WHERE match_id = ?', [matchId]);
+      
+      if (!existing) {
+        const todayStr = new Date().toISOString().substring(0, 10);
+        const sql = `
+          INSERT INTO scraped_predictions (
+            match_id, time, date, tournament, home_team, away_team, score,
+            over_odds, under_odds, card_line, probability, best_tip, win_rate, status,
+            is_live, is_finished, first_half_corners_home, first_half_corners_away,
+            is_historical, match_url, scraped_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        `;
+        await dbRun(sql, [
+          matchId, 'Planned', todayStr, 'Football (Injecté)', home, away, '',
+          '1.85', '1.90', '4.5', '60%', 'Plus de', '60%', 'Planned',
+          0, 0, null, null, 0, matchId
+        ]);
+      }
+      
+      const matchObj = {
+        match_id: matchId,
+        home_team: existing ? existing.home_team : home,
+        away_team: existing ? existing.away_team : away,
+        date: existing ? existing.date : new Date().toISOString().substring(0, 10),
+        tournament: existing ? existing.tournament : 'Football (Injecté)',
+        historical_links: JSON.stringify([matchId]),
+        diagnostic: { score: 0, is_complete: false }
+      };
+      
+      // Inject right at current index to be crawled next
+      activeIntegrityBatch.queue.splice(activeIntegrityBatch.currentIndex, 0, matchObj);
+      activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] 📥 Injection manuelle du match : ${matchObj.home_team} vs ${matchObj.away_team}`);
+      
+      // If batcher is currently idle, boot it automatically
+      if (activeIntegrityBatch.status === 'idle') {
+        const torActive = await isTorActive();
+        if (torActive) {
+          activeIntegrityBatch.currentIndex = 0;
+          activeIntegrityBatch.processedCount = 0;
+          activeIntegrityBatch.successCount = 0;
+          activeIntegrityBatch.errorCount = 0;
+          activeIntegrityBatch.logs = [`[${new Date().toLocaleTimeString()}] 🚀 Démarrage automatique suite à l'injection d'un match.`];
+          activeIntegrityBatch.status = 'running';
+          runIntegrityBatchLoop();
+        } else {
+          activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ⚠ Match injecté en file d'attente, mais Tor n'est pas actif pour démarrer.`);
+        }
+      }
+      
+      res.json({ success: true, message: "Match injecté avec succès et placé en tête de file." });
+    } catch (err) {
+      res.status(500).json({ success: false, error: { message: err.message } });
+    }
+  }
+
+  /**
+   * POST /api/scraper/integrity-batch/cleanup
+   */
+  async cleanupDatabaseIntegrity(req, res) {
+    try {
+      activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] 🧹 Lancement du nettoyage de la base de données...`);
+      
+      // 1. Find duplicates: same date, same home_team, same away_team
+      const duplicates = await dbQuery(`
+        SELECT date, home_team, away_team, COUNT(*) as cnt
+        FROM scraped_predictions
+        GROUP BY date, home_team, away_team
+        HAVING cnt > 1
+      `);
+      
+      let deletedDuplicates = 0;
+      for (const group of duplicates) {
+        const rows = await dbQuery(`
+          SELECT match_id, is_historical, statistics_json, first_half_corners_home
+          FROM scraped_predictions
+          WHERE date = ? AND home_team = ? AND away_team = ?
+        `, [group.date, group.home_team, group.away_team]);
+        
+        // Sort rows: prioritize rows with statistics and corners
+        rows.sort((a, b) => {
+          const hasStatsA = a.statistics_json && a.statistics_json !== 'null' ? 1 : 0;
+          const hasStatsB = b.statistics_json && b.statistics_json !== 'null' ? 1 : 0;
+          if (hasStatsA !== hasStatsB) return hasStatsB - hasStatsA;
+          
+          const hasCornersA = a.first_half_corners_home !== null ? 1 : 0;
+          const hasCornersB = b.first_half_corners_home !== null ? 1 : 0;
+          return hasCornersB - hasCornersA;
+        });
+        
+        // Delete all duplicate rows except the first one (best populated)
+        for (let i = 1; i < rows.length; i++) {
+          await dbRun('DELETE FROM scraped_predictions WHERE match_id = ?', [rows[i].match_id]);
+          deletedDuplicates++;
+        }
+      }
+      
+      // 2. Purge orphaned historical records
+      const referencedIds = new Set();
+      const mainMatches = await dbQuery("SELECT historical_links, match_id FROM scraped_predictions WHERE is_historical = 0");
+      for (const m of mainMatches) {
+        referencedIds.add(m.match_id);
+        try {
+          if (m.historical_links) {
+            const links = JSON.parse(m.historical_links);
+            if (Array.isArray(links)) {
+              for (const l of links) {
+                referencedIds.add(l);
+              }
+            }
+          }
+        } catch (e) {}
+      }
+      
+      const historicalMatches = await dbQuery("SELECT match_id FROM scraped_predictions WHERE is_historical = 1");
+      let purgedOrphans = 0;
+      for (const hm of historicalMatches) {
+        if (!referencedIds.has(hm.match_id)) {
+          await dbRun("DELETE FROM scraped_predictions WHERE match_id = ?", [hm.match_id]);
+          purgedOrphans++;
+        }
+      }
+      
+      // 3. Mark outdated matches with missing/invalid score as not finished to trigger re-scrape
+      const todayStr = new Date().toISOString().substring(0, 10);
+      const resultHeal = await dbRun(`
+        UPDATE scraped_predictions 
+        SET is_finished = 0 
+        WHERE date < ? 
+          AND (score = '' OR score = '-' OR score IS NULL OR score LIKE '%:%')
+          AND is_historical = 0
+      `, [todayStr]);
+      const healedCount = resultHeal.changes || 0;
+
+      const logMsg = `[${new Date().toLocaleTimeString()}] ✓ Nettoyage terminé. Doublons supprimés: ${deletedDuplicates}, Historiques orphelins purgés: ${purgedOrphans}, Matchs guéris: ${healedCount}.`;
+      activeIntegrityBatch.logs.push(logMsg);
+
+      res.json({
+        success: true,
+        message: "Nettoyage de la base de données effectué avec succès.",
+        data: {
+          deletedDuplicates,
+          purgedOrphans,
+          healedCount
+        }
+      });
+    } catch (error) {
+      console.error('[Predictix DB Cleanup Error]', error);
+      res.status(500).json({ success: false, error: { message: error.message } });
+    }
   }
 }
 
