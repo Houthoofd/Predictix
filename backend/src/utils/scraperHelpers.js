@@ -1,6 +1,7 @@
 import net from 'net';
 import fs from 'fs';
 import path from 'path';
+import https from 'https';
 import { spawn, exec } from 'child_process';
 
 /**
@@ -429,6 +430,49 @@ export function prioritizeDirectH2H(links, homeTeam, awayTeam) {
   }
 
   return [...direct, ...others];
+}
+
+/**
+ * Fallback to query Wikipedia Pageimages API to resolve missing team logos
+ */
+export function fetchWikipediaLogoFallback(teamName) {
+  return new Promise((resolve) => {
+    if (!teamName) return resolve(null);
+    
+    // Strip accent flags and clean key team keywords
+    const cleanedName = teamName.replace(/[▲▼]/g, '').trim();
+    const query = encodeURIComponent(`${cleanedName} football`);
+    const url = `https://fr.wikipedia.org/w/api.php?action=query&format=json&prop=pageimages&generator=search&gsrsearch=${query}&gsrlimit=1&pithumbsize=150`;
+
+    const req = https.get(url, {
+      headers: {
+        'User-Agent': 'PredictixLogoFetcher/1.0 (benoit@predictix.local)'
+      }
+    }, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          if (json.query && json.query.pages) {
+            const pages = Object.values(json.query.pages);
+            if (pages.length > 0 && pages[0].thumbnail) {
+              return resolve(pages[0].thumbnail.source);
+            }
+          }
+          resolve(null);
+        } catch (e) {
+          resolve(null);
+        }
+      });
+    });
+
+    req.on('error', () => resolve(null));
+    req.setTimeout(2500, () => {
+      req.destroy();
+      resolve(null);
+    });
+  });
 }
 
 

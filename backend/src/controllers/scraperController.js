@@ -2,7 +2,7 @@ import { spawn, exec } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { dbQuery, dbGet, dbRun } from '../db/database.js';
-import { isTorActive, renewTorSession, getNewestScrapedFile, rewriteScraperLog, scrapeSingleMatch, runDiscoveryProcess, crawlH2HLinksBatch, prioritizeDirectH2H } from '../utils/scraperHelpers.js';
+import { isTorActive, renewTorSession, getNewestScrapedFile, rewriteScraperLog, scrapeSingleMatch, runDiscoveryProcess, crawlH2HLinksBatch, prioritizeDirectH2H, fetchWikipediaLogoFallback } from '../utils/scraperHelpers.js';
 import { enrichMatchPredictions, computeLeagueAverages, evaluateSmartScrapingFilter, getEnrichedPredictions } from '../utils/predictionEngine.js';
 import { importScrapedMatches, importHistoricalMatch, importSkippedMatch, enrichPrimaryMatch } from '../db/importer.js';
 
@@ -115,6 +115,34 @@ async function runIntegrityBatchLoop() {
             await enrichPrimaryMatch(match.match_id, primaryDetails, targetLink, match);
             activeLinks = primaryDetails.historical_links || [];
             activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}] ✓ Page principale actualisée (logos/stats)`);
+          }
+        }
+
+        // Proposal D: Self-Healing fallback Wikipedia logo search if logos are still missing/placeholder
+        const updatedMatchForLogos = await dbGet('SELECT * FROM scraped_predictions WHERE match_id = ?', [matchObj.match_id]);
+        if (updatedMatchForLogos) {
+          const homeLogoNow = updatedMatchForLogos.home_logo;
+          const awayLogoNow = updatedMatchForLogos.away_logo;
+          
+          const homeLogoMissingNow = !homeLogoNow || homeLogoNow.trim() === '' || homeLogoNow.toLowerCase().includes('placeholder') || homeLogoNow.toLowerCase().includes('logo_default') || homeLogoNow.toLowerCase().includes('logo-default');
+          const awayLogoMissingNow = !awayLogoNow || awayLogoNow.trim() === '' || awayLogoNow.toLowerCase().includes('placeholder') || awayLogoNow.toLowerCase().includes('logo_default') || awayLogoNow.toLowerCase().includes('logo-default');
+          
+          if (homeLogoMissingNow) {
+            activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}] -> Logo domicile manquant. Recherche Wikipédia pour : ${matchObj.home_team}...`);
+            const fallbackLogo = await fetchWikipediaLogoFallback(matchObj.home_team);
+            if (fallbackLogo) {
+              await dbRun('INSERT OR REPLACE INTO custom_team_logos (team_name, logo_url) VALUES (?, ?)', [matchObj.home_team.toLowerCase().trim(), fallbackLogo]);
+              activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}] ✓ Logo domicile résolu via Wikipédia : ${matchObj.home_team}`);
+            }
+          }
+          
+          if (awayLogoMissingNow) {
+            activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}] -> Logo extérieur manquant. Recherche Wikipédia pour : ${matchObj.away_team}...`);
+            const fallbackLogo = await fetchWikipediaLogoFallback(matchObj.away_team);
+            if (fallbackLogo) {
+              await dbRun('INSERT OR REPLACE INTO custom_team_logos (team_name, logo_url) VALUES (?, ?)', [matchObj.away_team.toLowerCase().trim(), fallbackLogo]);
+              activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}] ✓ Logo extérieur résolu via Wikipédia : ${matchObj.away_team}`);
+            }
           }
         }
 
