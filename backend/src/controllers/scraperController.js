@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import { dbQuery, dbGet, dbRun } from '../db/database.js';
-import { isTorActive, renewTorSession, getNewestScrapedFile, rewriteScraperLog, scrapeSingleMatch, runDiscoveryProcess, crawlH2HLinksBatch, prioritizeDirectH2H, fetchWikipediaLogoFallback, bootstrapTorInstances, cleanupSpawnedTor } from '../utils/scraperHelpers.js';
+import { isTorActive, renewTorSession, getNewestScrapedFile, rewriteScraperLog, scrapeSingleMatch, runDiscoveryProcess, crawlH2HLinksBatch, prioritizeDirectH2H, fetchWikipediaLogoFallback, bootstrapTorInstances, cleanupSpawnedTor, tryResolveSofaStatsFallback } from '../utils/scraperHelpers.js';
 import { enrichMatchPredictions, computeLeagueAverages, evaluateSmartScrapingFilter, getEnrichedPredictions } from '../utils/predictionEngine.js';
 import { importScrapedMatches, importHistoricalMatch, importSkippedMatch, enrichPrimaryMatch } from '../db/importer.js';
 
@@ -188,6 +188,28 @@ async function runIntegrityBatchLoop() {
           }
         }
 
+        // 4b. SofaScore fallback check for missing statistics / corners on main match
+        const checkMatch = await dbGet('SELECT * FROM scraped_predictions WHERE match_id = ?', [matchObj.match_id]);
+        if (checkMatch && (checkMatch.first_half_corners_home === null || !checkMatch.statistics_json || checkMatch.statistics_json === 'null')) {
+          activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}] -> Stats manquantes pour le match principal. Tentative de secours via SofaScore...`);
+          const sofaData = await tryResolveSofaStatsFallback(checkMatch.date, checkMatch.home_team, checkMatch.away_team);
+          if (sofaData) {
+            const statsJson = JSON.stringify(sofaData);
+            const cornersHome = sofaData.first_half_corners ? sofaData.first_half_corners.home : null;
+            const cornersAway = sofaData.first_half_corners ? sofaData.first_half_corners.away : null;
+            await dbRun(`
+              UPDATE scraped_predictions 
+              SET statistics_json = ?, 
+                  first_half_corners_home = ?, 
+                  first_half_corners_away = ? 
+              WHERE match_id = ?
+            `, [statsJson, cornersHome, cornersAway, matchObj.match_id]);
+            activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}] 🟢 ✓ Stats et corners résolus via SofaScore pour le match principal !`);
+          } else {
+            activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}] ❌ SofaScore n'a renvoyé aucune statistique pour ce match.`);
+          }
+        }
+
         // 5. Deep H2H / History crawl
         if (needsH2HCrawl && activeLinks.length > 0) {
           const prioritizedLinks = prioritizeDirectH2H(activeLinks, match.home_team, match.away_team);
@@ -246,6 +268,26 @@ async function runIntegrityBatchLoop() {
 
               if (histMatch && histMatch.home_team && histMatch.away_team) {
                 await importHistoricalMatch(link, histMatch);
+                
+                // SofaScore fallback check for historical match if corners or stats are missing
+                if (histMatch.first_half_corners_home === null || histMatch.first_half_corners_home === undefined || !histMatch.statistics) {
+                  activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}]   ⚡ H2H sans statistiques. Recherche SofaScore de secours...`);
+                  const sofaHistData = await tryResolveSofaStatsFallback(histMatch.date || match.date, histMatch.home_team, histMatch.away_team);
+                  if (sofaHistData) {
+                    const statsJson = JSON.stringify(sofaHistData);
+                    const cornersHome = sofaHistData.first_half_corners ? sofaHistData.first_half_corners.home : null;
+                    const cornersAway = sofaHistData.first_half_corners ? sofaHistData.first_half_corners.away : null;
+                    await dbRun(`
+                      UPDATE scraped_predictions 
+                      SET statistics_json = ?, 
+                          first_half_corners_home = ?, 
+                          first_half_corners_away = ? 
+                      WHERE match_id = ?
+                    `, [statsJson, cornersHome, cornersAway, link]);
+                    activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}]   🟢 ✓ Confrontation H2H complétée via SofaScore !`);
+                  }
+                }
+
                 const homeClean = histMatch.home_team.replace(/[▲▼]/g, '').trim();
                 const awayClean = histMatch.away_team.replace(/[▲▼]/g, '').trim();
                 activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}]   ✓ H2H importé : ${homeClean} vs ${awayClean}`);
@@ -570,6 +612,21 @@ class ScraperController {
           }, socksPort);
           
           if (details) {
+            let finalFirstHalfCornersHome = details.first_half_corners_home;
+            let finalFirstHalfCornersAway = details.first_half_corners_away;
+            let finalStatistics = details.statistics;
+            
+            if (finalFirstHalfCornersHome === null || finalFirstHalfCornersHome === undefined || !finalStatistics) {
+              sendEvent('log', { message: `[Tor Port ${socksPort}] ⚡ Match principal sans stats. Recherche SofaScore de secours...` });
+              const sofaData = await tryResolveSofaStatsFallback(details.date || m.date, details.home_team || m.home_team, details.away_team || m.away_team);
+              if (sofaData) {
+                finalStatistics = sofaData;
+                finalFirstHalfCornersHome = sofaData.first_half_corners ? sofaData.first_half_corners.home : null;
+                finalFirstHalfCornersAway = sofaData.first_half_corners ? sofaData.first_half_corners.away : null;
+                sendEvent('log', { message: `[Tor Port ${socksPort}] 🟢 ✓ Stats résolues via SofaScore pour ce match !` });
+              }
+            }
+
             const enriched = {
               match_id: m.match_id || m.href || '',
               time: m.time || 'Finished',
@@ -580,11 +637,11 @@ class ScraperController {
               home_logo: details.home_logo || m.home_logo,
               away_logo: details.away_logo || m.away_logo,
               score: details.score || m.score || '',
-              first_half_corners_home: details.first_half_corners_home,
-              first_half_corners_away: details.first_half_corners_away,
+              first_half_corners_home: finalFirstHalfCornersHome,
+              first_half_corners_away: finalFirstHalfCornersAway,
               historical_links: details.historical_links,
               match_url: m.href || m.match_url || '',
-              statistics: details.statistics
+              statistics: finalStatistics
             };
             
             scrapedMatches.push(enriched);
