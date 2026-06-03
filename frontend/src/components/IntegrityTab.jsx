@@ -366,11 +366,6 @@ export default function IntegrityTab({
       setValidationError("Le score final doit être au format ButsDom-ButsExt (ex: 2-1).");
       return;
     }
-    if (statsForm.first_half_corners_home === '' || statsForm.first_half_corners_away === '') {
-      setValidationError("Les corners de la 1ère mi-temps sont obligatoires pour calibrer le modèle.");
-      return;
-    }
-
     // Prepare JSON payload
     const statistics = {
       possession: { home: `${statsForm.possession_home}%`, away: `${statsForm.possession_away}%` },
@@ -391,8 +386,8 @@ export default function IntegrityTab({
       home_team: statsForm.home_team,
       away_team: statsForm.away_team,
       score: statsForm.score,
-      first_half_corners_home: parseInt(statsForm.first_half_corners_home, 10),
-      first_half_corners_away: parseInt(statsForm.first_half_corners_away, 10),
+      first_half_corners_home: statsForm.first_half_corners_home !== '' ? parseInt(statsForm.first_half_corners_home, 10) : null,
+      first_half_corners_away: statsForm.first_half_corners_away !== '' ? parseInt(statsForm.first_half_corners_away, 10) : null,
       statistics
     };
 
@@ -1222,9 +1217,9 @@ export default function IntegrityTab({
                 </div>
               </div>
 
-              {/* Corners Details (CRITICAL) */}
-              <div style={{ background: 'rgba(191, 90, 242, 0.04)', border: '1px solid rgba(191, 90, 242, 0.2)', padding: '14px', borderRadius: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <div style={{ fontSize: '11px', fontWeight: 800, color: '#bf5af2', textTransform: 'uppercase', letterSpacing: '0.04em' }}>CORNERS (IMPORTANT MODÉLISATION)</div>
+              {/* Corners Details */}
+              <div style={{ padding: '14px', borderRadius: '10px', display: 'flex', flexDirection: 'column', gap: '10px', border: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.01)' }}>
+                <div style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>CORNERS</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                   <div>
                     <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Corners 1ère Mi-Temps (Dom / Ext)</label>

@@ -559,11 +559,11 @@ export default function ScraperTab({
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                      {/* Corners indicator */}
+                      {/* Stats indicator */}
                       <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Corners 1ère MT</div>
-                        <div style={{ fontSize: '13.5px', fontWeight: 800, color: hasCorners ? '#34c759' : 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end', marginTop: '2px' }}>
-                          {hasCorners ? `${m.first_half_corners_home} - ${m.first_half_corners_away}` : 'N/A'}
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Statistiques</div>
+                        <div style={{ fontSize: '13.5px', fontWeight: 800, color: hasStats ? '#34c759' : 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end', marginTop: '2px' }}>
+                          {hasStats ? `${Object.keys(m.statistics).length} métriques` : 'N/A'}
                         </div>
                       </div>
 
