@@ -716,6 +716,91 @@ export default function IntegrityTab({
           {selectedMatch ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '25px' }}>
               
+              {/* Diagnostic Checklist Panel */}
+              <div className="glass-card" style={{ padding: '20px', borderLeft: selectedMatch.diagnostic?.is_complete ? '4px solid #2ecc71' : selectedMatch.diagnostic?.score < 60 ? '4px solid #e74c3c' : '4px solid #f1c40f' }}>
+                <h3 style={{ fontSize: '15px', fontFamily: 'Outfit', fontWeight: 800, marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <ShieldAlert size={18} style={{ color: selectedMatch.diagnostic?.is_complete ? '#2ecc71' : selectedMatch.diagnostic?.score < 60 ? '#e74c3c' : '#f1c40f' }} />
+                  Inspecteur de Diagnostic
+                </h3>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {/* Checkpoint 1: Logo Domicile */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12.5px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {selectedMatch.diagnostic?.missing_home_logo ? (
+                        <X size={14} style={{ color: '#e74c3c' }} />
+                      ) : (
+                        <Check size={14} style={{ color: '#2ecc71' }} />
+                      )}
+                      <span>Logo Domicile : {selectedMatch.home_team}</span>
+                    </div>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                      {selectedMatch.diagnostic?.missing_home_logo ? 'Manquant/Générique' : 'Valide'}
+                    </span>
+                  </div>
+                  
+                  {/* Checkpoint 2: Logo Extérieur */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12.5px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {selectedMatch.diagnostic?.missing_away_logo ? (
+                        <X size={14} style={{ color: '#e74c3c' }} />
+                      ) : (
+                        <Check size={14} style={{ color: '#2ecc71' }} />
+                      )}
+                      <span>Logo Extérieur : {selectedMatch.away_team}</span>
+                    </div>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                      {selectedMatch.diagnostic?.missing_away_logo ? 'Manquant/Générique' : 'Valide'}
+                    </span>
+                  </div>
+                  
+                  {/* Checkpoint 3: Historique H2H */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12.5px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {selectedMatch.diagnostic?.missing_h2h ? (
+                        <X size={14} style={{ color: '#e74c3c' }} />
+                      ) : (
+                        <Check size={14} style={{ color: '#2ecc71' }} />
+                      )}
+                      <span>Confrontations Directes (H2H)</span>
+                    </div>
+                    <span style={{ fontSize: '11px', color: selectedMatch.diagnostic?.missing_h2h ? '#e74c3c' : 'var(--text-primary)', fontWeight: 600 }}>
+                      {selectedMatch.diagnostic?.h2h_matches_count || 0} match(s) en base
+                    </span>
+                  </div>
+
+                  {/* Checkpoint 4: Historique Domicile */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12.5px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {selectedMatch.diagnostic?.home_matches_count < 5 ? (
+                        <AlertTriangle size={14} style={{ color: '#f1c40f' }} />
+                      ) : (
+                        <Check size={14} style={{ color: '#2ecc71' }} />
+                      )}
+                      <span>Historique Domicile : {selectedMatch.home_team}</span>
+                    </div>
+                    <span style={{ fontSize: '11px', color: selectedMatch.diagnostic?.home_matches_count < 5 ? '#f1c40f' : 'var(--text-primary)', fontWeight: 600 }}>
+                      {selectedMatch.diagnostic?.home_matches_count || 0}/5 recommandés
+                    </span>
+                  </div>
+
+                  {/* Checkpoint 5: Historique Extérieur */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12.5px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {selectedMatch.diagnostic?.away_matches_count < 5 ? (
+                        <AlertTriangle size={14} style={{ color: '#f1c40f' }} />
+                      ) : (
+                        <Check size={14} style={{ color: '#2ecc71' }} />
+                      )}
+                      <span>Historique Extérieur : {selectedMatch.away_team}</span>
+                    </div>
+                    <span style={{ fontSize: '11px', color: selectedMatch.diagnostic?.away_matches_count < 5 ? '#f1c40f' : 'var(--text-primary)', fontWeight: 600 }}>
+                      {selectedMatch.diagnostic?.away_matches_count || 0}/5 recommandés
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               {/* Match Header Details & Logo triggers */}
               <div className="glass-card" style={{ padding: '20px' }}>
                 <h3 style={{ fontSize: '16px', fontFamily: 'Outfit', fontWeight: 800, marginBottom: '16px' }}>
