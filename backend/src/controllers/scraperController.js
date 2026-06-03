@@ -84,6 +84,31 @@ async function runIntegrityBatchLoop() {
           throw new Error("Match introuvable dans la base de données.");
         }
 
+        // 1. Pre-inspect missing items and calculate diagnostics immediately
+        const isHomeLogoMissing = !match.home_logo || match.home_logo.trim() === '' || match.home_logo.toLowerCase().includes('placeholder') || match.home_logo.toLowerCase().includes('logo_default') || match.home_logo.toLowerCase().includes('logo-default');
+        const isAwayLogoMissing = !match.away_logo || match.away_logo.trim() === '' || match.away_logo.toLowerCase().includes('placeholder') || match.away_logo.toLowerCase().includes('logo_default') || match.away_logo.toLowerCase().includes('logo-default');
+        const isCornersMissing = match.first_half_corners_home === null || match.first_half_corners_away === null;
+
+        const h2hMatches = await dbQuery(`
+          SELECT match_id FROM scraped_predictions 
+          WHERE is_finished = 1 AND ((home_team = ? AND away_team = ?) OR (home_team = ? AND away_team = ?))
+        `, [match.home_team, match.away_team, match.away_team, match.home_team]);
+
+        const homeMatches = await dbQuery('SELECT match_id FROM scraped_predictions WHERE is_finished = 1 AND home_team = ?', [match.home_team]);
+        const awayMatches = await dbQuery('SELECT match_id FROM scraped_predictions WHERE is_finished = 1 AND away_team = ?', [match.away_team]);
+
+        const needsH2H = h2hMatches.length === 0;
+        const needsTeamHistory = homeMatches.length < 5 || awayMatches.length < 5;
+        const needsH2HCrawl = needsH2H || needsTeamHistory;
+
+        // 2. If the match is already 100% healthy and complete, skip it instantly without delay
+        if (!isHomeLogoMissing && !isAwayLogoMissing && !isCornersMissing && !needsH2HCrawl) {
+          activeIntegrityBatch.successCount++;
+          activeIntegrityBatch.processedCount++;
+          activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}] ✓ Match [${match.home_team} vs ${match.away_team}] déjà complet (Diagnostic 100%).`);
+          continue; // Skip the cooloff delay and proceed immediately to the next match
+        }
+
         let links = [];
         try {
           if (match.historical_links) {
@@ -93,11 +118,10 @@ async function runIntegrityBatchLoop() {
 
         let activeLinks = [...links];
 
-        const isHomeLogoMissing = !match.home_logo || match.home_logo.trim() === '' || match.home_logo.toLowerCase().includes('placeholder') || match.home_logo.toLowerCase().includes('logo_default') || match.home_logo.toLowerCase().includes('logo-default');
-        const isAwayLogoMissing = !match.away_logo || match.away_logo.trim() === '' || match.away_logo.toLowerCase().includes('placeholder') || match.away_logo.toLowerCase().includes('logo_default') || match.away_logo.toLowerCase().includes('logo-default');
-        const isCornersMissing = match.first_half_corners_home === null || match.first_half_corners_away === null;
+        // 3. Primary page crawl condition: we need details (logos/corners) OR we need history but only have the single match URL (links.length === 1)
+        const needsPrimaryCrawl = isHomeLogoMissing || isAwayLogoMissing || isCornersMissing || (needsH2HCrawl && links.length === 1);
 
-        if ((isHomeLogoMissing || isAwayLogoMissing || isCornersMissing) && links.length === 1 && links[0].startsWith('/live-score/')) {
+        if (needsPrimaryCrawl && links.length === 1 && links[0].startsWith('/live-score/')) {
           let targetLink = links[0];
           if (match.is_finished === 0 || match.time === 'Planned' || !match.score || match.score === '-' || match.score === '') {
             if (!targetLink.includes('?p=')) {
@@ -118,7 +142,7 @@ async function runIntegrityBatchLoop() {
           }
         }
 
-        // Proposal D: Self-Healing fallback Wikipedia logo search if logos are still missing/placeholder
+        // 4. Self-Healing fallback Wikipedia logo search if logos are still missing/placeholder
         const updatedMatchForLogos = await dbGet('SELECT * FROM scraped_predictions WHERE match_id = ?', [matchObj.match_id]);
         if (updatedMatchForLogos) {
           const homeLogoNow = updatedMatchForLogos.home_logo;
@@ -146,18 +170,8 @@ async function runIntegrityBatchLoop() {
           }
         }
 
-        const h2hMatches = await dbQuery(`
-          SELECT match_id FROM scraped_predictions 
-          WHERE is_finished = 1 AND ((home_team = ? AND away_team = ?) OR (home_team = ? AND away_team = ?))
-        `, [match.home_team, match.away_team, match.away_team, match.home_team]);
-
-        const homeMatches = await dbQuery('SELECT match_id FROM scraped_predictions WHERE is_finished = 1 AND home_team = ?', [match.home_team]);
-        const awayMatches = await dbQuery('SELECT match_id FROM scraped_predictions WHERE is_finished = 1 AND away_team = ?', [match.away_team]);
-
-        const needsH2H = h2hMatches.length === 0;
-        const needsTeamHistory = homeMatches.length < 5 || awayMatches.length < 5;
-
-        if ((needsH2H || needsTeamHistory) && activeLinks.length > 0) {
+        // 5. Deep H2H / History crawl
+        if (needsH2HCrawl && activeLinks.length > 0) {
           const prioritizedLinks = prioritizeDirectH2H(activeLinks, match.home_team, match.away_team);
           
           const uncachedLinks = [];
