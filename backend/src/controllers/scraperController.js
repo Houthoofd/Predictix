@@ -1,8 +1,9 @@
 import { spawn, exec } from 'child_process';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import { dbQuery, dbGet, dbRun } from '../db/database.js';
-import { isTorActive, renewTorSession, getNewestScrapedFile, rewriteScraperLog, scrapeSingleMatch, runDiscoveryProcess, crawlH2HLinksBatch, prioritizeDirectH2H, fetchWikipediaLogoFallback } from '../utils/scraperHelpers.js';
+import { isTorActive, renewTorSession, getNewestScrapedFile, rewriteScraperLog, scrapeSingleMatch, runDiscoveryProcess, crawlH2HLinksBatch, prioritizeDirectH2H, fetchWikipediaLogoFallback, bootstrapTorInstances, cleanupSpawnedTor } from '../utils/scraperHelpers.js';
 import { enrichMatchPredictions, computeLeagueAverages, evaluateSmartScrapingFilter, getEnrichedPredictions } from '../utils/predictionEngine.js';
 import { importScrapedMatches, importHistoricalMatch, importSkippedMatch, enrichPrimaryMatch } from '../db/importer.js';
 
@@ -24,8 +25,25 @@ const activeIntegrityBatch = {
 async function runIntegrityBatchLoop() {
   const scraperPath = process.env.SCRAPER_PATH || 'E:\\Developpement\\scrapper-v3';
 
-  // Proposal B: Check all possible Tor SOCKS ports to detect running Tor instances
-  const possiblePorts = [9050, 9052, 9054, 9056];
+  // 1. Calculate usable RAM (1.5 GB safety threshold reserved for OS)
+  const freeRAMBytes = os.freemem();
+  const freeRAMMB = freeRAMBytes / (1024 * 1024);
+  const reservedRAMMB = 1500;
+  const usableRAMMB = Math.max(0, freeRAMMB - reservedRAMMB);
+  
+  // Cost per instance is roughly 180MB (Tor + Chromedp)
+  // Raise cap to 12 concurrent workers
+  const recommendedWorkers = Math.max(1, Math.min(12, Math.floor(usableRAMMB / 180)));
+
+  activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ℹ Diagnostic RAM : ${Math.round(freeRAMMB)} Mo libres. Marge 1,5 Go réservée. Allocation ciblée : ${recommendedWorkers} instances.`);
+
+  // 2. Dynamically bootstrap Tor instances
+  await bootstrapTorInstances(recommendedWorkers, scraperPath, (msg) => {
+    activeIntegrityBatch.logs.push(msg);
+  });
+
+  // 3. Scan ports to determine active Tor instances
+  const possiblePorts = [9050, 9052, 9054, 9056, 9058, 9060, 9062, 9064, 9066, 9068, 9070, 9072].slice(0, recommendedWorkers);
   const activePorts = [];
   for (const port of possiblePorts) {
     const active = await isTorActive(port);
@@ -36,11 +54,11 @@ async function runIntegrityBatchLoop() {
 
   if (activePorts.length === 0) {
     activeIntegrityBatch.status = 'idle';
-    activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ❌ Erreur : Aucun port proxy Tor actif détecté (vérifié sur 9050, 9052, 9054, 9056). Réparation annulée.`);
+    activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ❌ Erreur : Aucun port proxy Tor actif détecté. Réparation annulée.`);
     return;
   }
 
-  activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ℹ Détection réseau : ${activePorts.length} proxy Tor actifs détectés (Ports: ${activePorts.join(', ')}).`);
+  activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ℹ Détection réseau : ${activePorts.length} proxy Tor opérationnels (Ports: ${activePorts.join(', ')}).`);
   if (activePorts.length > 1) {
     activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] 🚀 Mode Parallèle activé (traitement sur ${activePorts.length} circuits en même temps).`);
   } else {
@@ -298,6 +316,11 @@ async function runIntegrityBatchLoop() {
   } catch (err) {
     console.error('[Integrity Parallel Workers Error]', err);
   }
+
+  // 4. Clean up dynamically spawned Tor instances
+  await cleanupSpawnedTor((msg) => {
+    activeIntegrityBatch.logs.push(msg);
+  });
 
   // Finished queue or paused
   if (activeIntegrityBatch.currentIndex >= activeIntegrityBatch.queue.length) {
