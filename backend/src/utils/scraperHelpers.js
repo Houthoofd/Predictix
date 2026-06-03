@@ -29,6 +29,49 @@ export function isTorActive() {
 }
 
 /**
+ * Send a SIGNAL NEWNYM to Tor control port (default 9051) to rotate IP
+ */
+export function renewTorSession(controlPort = 9051) {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    socket.setTimeout(2500);
+
+    socket.on('connect', () => {
+      // Authenticate with empty password (default configuration)
+      socket.write('AUTHENTICATE ""\r\n');
+    });
+
+    let authenticated = false;
+    socket.on('data', (data) => {
+      const response = data.toString().trim();
+      if (response.startsWith('250')) {
+        if (!authenticated) {
+          authenticated = true;
+          socket.write('SIGNAL NEWNYM\r\n');
+        } else {
+          socket.destroy();
+          resolve(true); // IP rotation signal accepted successfully
+        }
+      } else {
+        socket.destroy();
+        resolve(false); // Authentication or signal error
+      }
+    });
+
+    const onError = () => {
+      socket.destroy();
+      resolve(false); // Connection or protocol error
+    };
+
+    socket.on('error', onError);
+    socket.on('timeout', onError);
+
+    socket.connect(controlPort, '127.0.0.1');
+  });
+}
+
+
+/**
  * Scan scraper output directories and return path of the newest JSON file
  */
 export function getNewestScrapedFile(outputDirs) {

@@ -2,7 +2,7 @@ import { spawn, exec } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { dbQuery, dbGet, dbRun } from '../db/database.js';
-import { isTorActive, getNewestScrapedFile, rewriteScraperLog, scrapeSingleMatch, runDiscoveryProcess, crawlH2HLinksBatch, prioritizeDirectH2H } from '../utils/scraperHelpers.js';
+import { isTorActive, renewTorSession, getNewestScrapedFile, rewriteScraperLog, scrapeSingleMatch, runDiscoveryProcess, crawlH2HLinksBatch, prioritizeDirectH2H } from '../utils/scraperHelpers.js';
 import { enrichMatchPredictions, computeLeagueAverages, evaluateSmartScrapingFilter, getEnrichedPredictions } from '../utils/predictionEngine.js';
 import { importScrapedMatches, importHistoricalMatch, importSkippedMatch, enrichPrimaryMatch } from '../db/importer.js';
 
@@ -28,7 +28,19 @@ async function runIntegrityBatchLoop() {
     const matchObj = activeIntegrityBatch.queue[activeIntegrityBatch.currentIndex];
     const timeStr = new Date().toLocaleTimeString();
     
-    activeIntegrityBatch.logs.push(`[${timeStr}] [${activeIntegrityBatch.currentIndex + 1}/${activeIntegrityBatch.queue.length}] Analyse du match : ${matchObj.home_team} vs ${matchObj.away_team}...`);
+    // Proposal A: Periodic IP rotation every 4 matches to cycle circuits
+    if (activeIntegrityBatch.currentIndex > 0 && activeIntegrityBatch.currentIndex % 4 === 0) {
+      activeIntegrityBatch.logs.push(`[${timeStr}] 🔄 Rotation d'IP Tor périodique (changement de circuit)...`);
+      const rotated = await renewTorSession();
+      if (rotated) {
+        activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ✓ Nouvelle IP Tor obtenue. Stabilisation de 1.5s...`);
+        await new Promise(r => setTimeout(r, 1500));
+      } else {
+        activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ⚠ Rotation IP impossible (ControlPort 9051 fermé/inactif).`);
+      }
+    }
+
+    activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [${activeIntegrityBatch.currentIndex + 1}/${activeIntegrityBatch.queue.length}] Analyse du match : ${matchObj.home_team} vs ${matchObj.away_team}...`);
     
     const torActive = await isTorActive();
     if (!torActive) {
@@ -120,6 +132,14 @@ async function runIntegrityBatchLoop() {
             } else {
               await importSkippedMatch(link);
               activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}]   ⚠ Confrontation sautée (échec) : ${link}`);
+              
+              // Proposal A: Emergency IP rotation inside H2H loop if a single confrontation fails
+              activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}]   🔄 Rotation d'IP Tor de secours suite à l'échec...`);
+              const rotated = await renewTorSession();
+              if (rotated) {
+                activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}]   ✓ Nouveau circuit Tor activé pour la suite.`);
+                await new Promise(r => setTimeout(r, 1500));
+              }
             }
 
             await new Promise(r => setTimeout(r, 2500));
@@ -133,6 +153,13 @@ async function runIntegrityBatchLoop() {
     } catch (err) {
       activeIntegrityBatch.errorCount++;
       activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ❌ Erreur pour ${matchObj.home_team} vs ${matchObj.away_team} : ${err.message}`);
+      
+      // Proposal A: Emergency IP rotation when a match fails globally
+      activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] 🔄 Rotation d'IP Tor de secours suite à l'erreur...`);
+      const rotated = await renewTorSession();
+      if (rotated) {
+        activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ✓ Circuit Tor renouvelé.`);
+      }
     }
 
     activeIntegrityBatch.processedCount++;
