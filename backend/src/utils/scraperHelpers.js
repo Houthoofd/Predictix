@@ -6,7 +6,7 @@ import { spawn, exec } from 'child_process';
 /**
  * Check if Tor SOCKS5 proxy port is active
  */
-export function isTorActive() {
+export function isTorActive(socksPort = 9050) {
   return new Promise((resolve) => {
     const socket = new net.Socket();
     socket.setTimeout(1500);
@@ -24,7 +24,7 @@ export function isTorActive() {
     socket.on('error', onError);
     socket.on('timeout', onError);
     
-    socket.connect(9050, '127.0.0.1');
+    socket.connect(socksPort, '127.0.0.1');
   });
 }
 
@@ -187,10 +187,10 @@ export function rewriteScraperLog(line, strategy) {
  * Spawn Go scraper to retrieve details for a single specific match page.
  * Acts as a generic child-process spawner guard.
  */
-export async function scrapeSingleMatch(scraperPath, link, skipOdds = false, onSpawn = null) {
-  const torActive = await isTorActive();
+export async function scrapeSingleMatch(scraperPath, link, skipOdds = false, onSpawn = null, socksPort = 9050) {
+  const torActive = await isTorActive(socksPort);
   if (!torActive) {
-    console.warn(`[Predictix Scraper] Tor is inactive. Skipping scrape for: ${link}`);
+    console.warn(`[Predictix Scraper] Tor is inactive on port ${socksPort}. Skipping scrape for: ${link}`);
     return null;
   }
 
@@ -199,7 +199,7 @@ export async function scrapeSingleMatch(scraperPath, link, skipOdds = false, onS
     const tmpOutFile = path.join(scraperPath, 'data', `tmp_${Date.now()}_${Math.random().toString(36).substring(7)}.json`);
     const exePath = path.join(scraperPath, 'cmd', 'scrapper-lite', 'examples', 'scrapper-matchendirect.exe');
     
-    const args = ['-tor', '-url', link, '-output', tmpOutFile];
+    const args = ['-tor', '-socks-port', String(socksPort), '-url', link, '-output', tmpOutFile];
     if (skipOdds) {
       args.push('-skip-odds');
     }

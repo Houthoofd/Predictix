@@ -24,158 +24,189 @@ const activeIntegrityBatch = {
 async function runIntegrityBatchLoop() {
   const scraperPath = process.env.SCRAPER_PATH || 'E:\\Developpement\\scrapper-v3';
 
-  while (activeIntegrityBatch.status === 'running' && activeIntegrityBatch.currentIndex < activeIntegrityBatch.queue.length) {
-    const matchObj = activeIntegrityBatch.queue[activeIntegrityBatch.currentIndex];
-    const timeStr = new Date().toLocaleTimeString();
-    
-    // Proposal A: Periodic IP rotation every 4 matches to cycle circuits
-    if (activeIntegrityBatch.currentIndex > 0 && activeIntegrityBatch.currentIndex % 4 === 0) {
-      activeIntegrityBatch.logs.push(`[${timeStr}] 🔄 Rotation d'IP Tor périodique (changement de circuit)...`);
-      const rotated = await renewTorSession();
-      if (rotated) {
-        activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ✓ Nouvelle IP Tor obtenue. Stabilisation de 1.5s...`);
-        await new Promise(r => setTimeout(r, 1500));
-      } else {
-        activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ⚠ Rotation IP impossible (ControlPort 9051 fermé/inactif).`);
-      }
-    }
-
-    activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [${activeIntegrityBatch.currentIndex + 1}/${activeIntegrityBatch.queue.length}] Analyse du match : ${matchObj.home_team} vs ${matchObj.away_team}...`);
-    
-    const torActive = await isTorActive();
-    if (!torActive) {
-      activeIntegrityBatch.status = 'idle';
-      activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ❌ Erreur : Tor n'est pas actif sur le port 9050. Arrêt du batcher.`);
-      break;
-    }
-
-    try {
-      const match = await dbGet('SELECT * FROM scraped_predictions WHERE match_id = ?', [matchObj.match_id]);
-      if (!match) {
-        throw new Error("Match introuvable dans la base de données.");
-      }
-
-      let links = [];
-      try {
-        if (match.historical_links) {
-          links = JSON.parse(match.historical_links);
-        }
-      } catch (e) {}
-
-      let activeLinks = [...links];
-
-      const isHomeLogoMissing = !match.home_logo || match.home_logo.trim() === '' || match.home_logo.toLowerCase().includes('placeholder') || match.home_logo.toLowerCase().includes('logo_default') || match.home_logo.toLowerCase().includes('logo-default');
-      const isAwayLogoMissing = !match.away_logo || match.away_logo.trim() === '' || match.away_logo.toLowerCase().includes('placeholder') || match.away_logo.toLowerCase().includes('logo_default') || match.away_logo.toLowerCase().includes('logo-default');
-      const isCornersMissing = match.first_half_corners_home === null || match.first_half_corners_away === null;
-
-      if ((isHomeLogoMissing || isAwayLogoMissing || isCornersMissing) && links.length === 1 && links[0].startsWith('/live-score/')) {
-        let targetLink = links[0];
-        if (match.is_finished === 0 || match.time === 'Planned' || !match.score || match.score === '-' || match.score === '') {
-          if (!targetLink.includes('?p=')) {
-            targetLink += '?p=face-a-face';
-          }
-        }
-        
-        activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] -> Crawl de la page principale : ${targetLink}`);
-        
-        const primaryDetails = await scrapeSingleMatch(scraperPath, targetLink, false, (child) => {
-          activeIntegrityBatch.spawnedChildren.add(child);
-        });
-
-        if (primaryDetails) {
-          await enrichPrimaryMatch(match.match_id, primaryDetails, targetLink, match);
-          activeLinks = primaryDetails.historical_links || [];
-          activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ✓ Page principale actualisée (logos/stats mis à jour)`);
-        }
-      }
-
-      const h2hMatches = await dbQuery(`
-        SELECT match_id FROM scraped_predictions 
-        WHERE is_finished = 1 AND ((home_team = ? AND away_team = ?) OR (home_team = ? AND away_team = ?))
-      `, [match.home_team, match.away_team, match.away_team, match.home_team]);
-
-      const homeMatches = await dbQuery('SELECT match_id FROM scraped_predictions WHERE is_finished = 1 AND home_team = ?', [match.home_team]);
-      const awayMatches = await dbQuery('SELECT match_id FROM scraped_predictions WHERE is_finished = 1 AND away_team = ?', [match.away_team]);
-
-      const needsH2H = h2hMatches.length === 0;
-      const needsTeamHistory = homeMatches.length < 5 || awayMatches.length < 5;
-
-      if ((needsH2H || needsTeamHistory) && activeLinks.length > 0) {
-        const prioritizedLinks = prioritizeDirectH2H(activeLinks, match.home_team, match.away_team);
-        
-        const uncachedLinks = [];
-        for (const link of prioritizedLinks) {
-          const cached = await dbQuery('SELECT match_id, date, first_half_corners_home FROM scraped_predictions WHERE match_id = ?', [link]);
-          const isPlaceholder = cached.length > 0 && 
-            (cached[0].date === '2026-05-30' || cached[0].date === '2026-05-31' || cached[0].date.includes(':'));
-          const hasNoStats = cached.length > 0 && cached[0].first_half_corners_home === null;
-          
-          if (cached.length === 0 || isPlaceholder || hasNoStats) {
-            uncachedLinks.push(link);
-          }
-        }
-
-        if (uncachedLinks.length > 0) {
-          activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] -> ${uncachedLinks.length} confrontations manquantes à crawler.`);
-          for (const link of uncachedLinks.slice(0, 5)) {
-            if (activeIntegrityBatch.status !== 'running') break;
-
-            const histMatch = await scrapeSingleMatch(scraperPath, link, true, (child) => {
-              activeIntegrityBatch.spawnedChildren.add(child);
-            });
-
-            if (histMatch && histMatch.home_team && histMatch.away_team) {
-              await importHistoricalMatch(link, histMatch);
-              const homeClean = histMatch.home_team.replace(/[▲▼]/g, '').trim();
-              const awayClean = histMatch.away_team.replace(/[▲▼]/g, '').trim();
-              activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}]   ✓ Confrontation importée : ${homeClean} vs ${awayClean}`);
-            } else {
-              await importSkippedMatch(link);
-              activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}]   ⚠ Confrontation sautée (échec) : ${link}`);
-              
-              // Proposal A: Emergency IP rotation inside H2H loop if a single confrontation fails
-              activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}]   🔄 Rotation d'IP Tor de secours suite à l'échec...`);
-              const rotated = await renewTorSession();
-              if (rotated) {
-                activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}]   ✓ Nouveau circuit Tor activé pour la suite.`);
-                await new Promise(r => setTimeout(r, 1500));
-              }
-            }
-
-            await new Promise(r => setTimeout(r, 2500));
-          }
-        } else {
-          activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] -> H2H/Equipe déjà en cache.`);
-        }
-      }
-
-      activeIntegrityBatch.successCount++;
-    } catch (err) {
-      activeIntegrityBatch.errorCount++;
-      activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ❌ Erreur pour ${matchObj.home_team} vs ${matchObj.away_team} : ${err.message}`);
-      
-      // Proposal A: Emergency IP rotation when a match fails globally
-      activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] 🔄 Rotation d'IP Tor de secours suite à l'erreur...`);
-      const rotated = await renewTorSession();
-      if (rotated) {
-        activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ✓ Circuit Tor renouvelé.`);
-      }
-    }
-
-    activeIntegrityBatch.processedCount++;
-    activeIntegrityBatch.currentIndex++;
-    
-    for (const child of activeIntegrityBatch.spawnedChildren) {
-      if (child.killed || child.exitCode !== null) {
-        activeIntegrityBatch.spawnedChildren.delete(child);
-      }
-    }
-
-    if (activeIntegrityBatch.status === 'running' && activeIntegrityBatch.currentIndex < activeIntegrityBatch.queue.length) {
-      await new Promise(r => setTimeout(r, 3000));
+  // Proposal B: Check all possible Tor SOCKS ports to detect running Tor instances
+  const possiblePorts = [9050, 9052, 9054];
+  const activePorts = [];
+  for (const port of possiblePorts) {
+    const active = await isTorActive(port);
+    if (active) {
+      activePorts.push(port);
     }
   }
 
+  if (activePorts.length === 0) {
+    activeIntegrityBatch.status = 'idle';
+    activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ❌ Erreur : Aucun port proxy Tor actif détecté (vérifié sur 9050, 9052, 9054). Réparation annulée.`);
+    return;
+  }
+
+  activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ℹ Détection réseau : ${activePorts.length} proxy Tor actifs détectés (Ports: ${activePorts.join(', ')}).`);
+  if (activePorts.length > 1) {
+    activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] 🚀 Mode Parallèle activé (traitement sur ${activePorts.length} circuits en même temps).`);
+  } else {
+    activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ℹ Mode Séquentiel activé (un seul proxy Tor actif).`);
+  }
+
+  const worker = async (socksPort) => {
+    let workerProcessedCount = 0;
+
+    while (activeIntegrityBatch.status === 'running') {
+      let indexToProcess = -1;
+      
+      // Atomic index allocation
+      if (activeIntegrityBatch.currentIndex < activeIntegrityBatch.queue.length) {
+        indexToProcess = activeIntegrityBatch.currentIndex;
+        activeIntegrityBatch.currentIndex++;
+      } else {
+        break; // Queue empty
+      }
+
+      const matchObj = activeIntegrityBatch.queue[indexToProcess];
+      const timeStr = new Date().toLocaleTimeString();
+
+      // Proposal A: Periodic IP rotation every 3 matches processed by this specific worker
+      if (workerProcessedCount > 0 && workerProcessedCount % 3 === 0) {
+        activeIntegrityBatch.logs.push(`[${timeStr}] [Tor Port ${socksPort}] 🔄 Rotation d'IP Tor périodique...`);
+        const rotated = await renewTorSession(socksPort + 1); // SOCKS port + 1 is Control Port
+        if (rotated) {
+          activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}] ✓ Nouvelle IP obtenue. Stabilisation de 1.5s...`);
+          await new Promise(r => setTimeout(r, 1500));
+        }
+      }
+
+      workerProcessedCount++;
+
+      activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}] [${indexToProcess + 1}/${activeIntegrityBatch.queue.length}] Analyse : ${matchObj.home_team} vs ${matchObj.away_team}...`);
+
+      try {
+        const match = await dbGet('SELECT * FROM scraped_predictions WHERE match_id = ?', [matchObj.match_id]);
+        if (!match) {
+          throw new Error("Match introuvable dans la base de données.");
+        }
+
+        let links = [];
+        try {
+          if (match.historical_links) {
+            links = JSON.parse(match.historical_links);
+          }
+        } catch (e) {}
+
+        let activeLinks = [...links];
+
+        const isHomeLogoMissing = !match.home_logo || match.home_logo.trim() === '' || match.home_logo.toLowerCase().includes('placeholder') || match.home_logo.toLowerCase().includes('logo_default') || match.home_logo.toLowerCase().includes('logo-default');
+        const isAwayLogoMissing = !match.away_logo || match.away_logo.trim() === '' || match.away_logo.toLowerCase().includes('placeholder') || match.away_logo.toLowerCase().includes('logo_default') || match.away_logo.toLowerCase().includes('logo-default');
+        const isCornersMissing = match.first_half_corners_home === null || match.first_half_corners_away === null;
+
+        if ((isHomeLogoMissing || isAwayLogoMissing || isCornersMissing) && links.length === 1 && links[0].startsWith('/live-score/')) {
+          let targetLink = links[0];
+          if (match.is_finished === 0 || match.time === 'Planned' || !match.score || match.score === '-' || match.score === '') {
+            if (!targetLink.includes('?p=')) {
+              targetLink += '?p=face-a-face';
+            }
+          }
+          
+          activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}] -> Crawl de la page principale : ${targetLink}`);
+          
+          const primaryDetails = await scrapeSingleMatch(scraperPath, targetLink, false, (child) => {
+            activeIntegrityBatch.spawnedChildren.add(child);
+          }, socksPort);
+
+          if (primaryDetails) {
+            await enrichPrimaryMatch(match.match_id, primaryDetails, targetLink, match);
+            activeLinks = primaryDetails.historical_links || [];
+            activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}] ✓ Page principale actualisée (logos/stats)`);
+          }
+        }
+
+        const h2hMatches = await dbQuery(`
+          SELECT match_id FROM scraped_predictions 
+          WHERE is_finished = 1 AND ((home_team = ? AND away_team = ?) OR (home_team = ? AND away_team = ?))
+        `, [match.home_team, match.away_team, match.away_team, match.home_team]);
+
+        const homeMatches = await dbQuery('SELECT match_id FROM scraped_predictions WHERE is_finished = 1 AND home_team = ?', [match.home_team]);
+        const awayMatches = await dbQuery('SELECT match_id FROM scraped_predictions WHERE is_finished = 1 AND away_team = ?', [match.away_team]);
+
+        const needsH2H = h2hMatches.length === 0;
+        const needsTeamHistory = homeMatches.length < 5 || awayMatches.length < 5;
+
+        if ((needsH2H || needsTeamHistory) && activeLinks.length > 0) {
+          const prioritizedLinks = prioritizeDirectH2H(activeLinks, match.home_team, match.away_team);
+          
+          const uncachedLinks = [];
+          for (const link of prioritizedLinks) {
+            const cached = await dbQuery('SELECT match_id, date, first_half_corners_home FROM scraped_predictions WHERE match_id = ?', [link]);
+            const isPlaceholder = cached.length > 0 && 
+              (cached[0].date === '2026-05-30' || cached[0].date === '2026-05-31' || cached[0].date.includes(':'));
+            const hasNoStats = cached.length > 0 && cached[0].first_half_corners_home === null;
+            
+            if (cached.length === 0 || isPlaceholder || hasNoStats) {
+              uncachedLinks.push(link);
+            }
+          }
+
+          if (uncachedLinks.length > 0) {
+            activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}] -> ${uncachedLinks.length} confrontations manquantes.`);
+            for (const link of uncachedLinks.slice(0, 5)) {
+              if (activeIntegrityBatch.status !== 'running') break;
+
+              const histMatch = await scrapeSingleMatch(scraperPath, link, true, (child) => {
+                activeIntegrityBatch.spawnedChildren.add(child);
+              }, socksPort);
+
+              if (histMatch && histMatch.home_team && histMatch.away_team) {
+                await importHistoricalMatch(link, histMatch);
+                const homeClean = histMatch.home_team.replace(/[▲▼]/g, '').trim();
+                const awayClean = histMatch.away_team.replace(/[▲▼]/g, '').trim();
+                activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}]   ✓ H2H importé : ${homeClean} vs ${awayClean}`);
+              } else {
+                await importSkippedMatch(link);
+                activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}]   ⚠ H2H sauté (échec) : ${link}`);
+                
+                // Emergency IP rotation inside loop on failure
+                activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}]   🔄 Rotation d'IP de secours...`);
+                await renewTorSession(socksPort + 1);
+              }
+
+              await new Promise(r => setTimeout(r, 2500));
+            }
+          }
+        }
+
+        activeIntegrityBatch.successCount++;
+        activeIntegrityBatch.processedCount++;
+        activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}] ✓ Match [${matchObj.home_team} vs ${matchObj.away_team}] réparé.`);
+      } catch (err) {
+        activeIntegrityBatch.errorCount++;
+        activeIntegrityBatch.processedCount++;
+        activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}] ❌ Erreur pour ${matchObj.home_team} vs ${matchObj.away_team} : ${err.message}`);
+        
+        // Emergency IP rotation on failure
+        activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}] 🔄 Rotation d'IP de secours...`);
+        await renewTorSession(socksPort + 1);
+      }
+
+      // Cleanup finished child processes
+      for (const child of activeIntegrityBatch.spawnedChildren) {
+        if (child.killed || child.exitCode !== null) {
+          activeIntegrityBatch.spawnedChildren.delete(child);
+        }
+      }
+
+      // Polite cooloff delay between matches
+      if (activeIntegrityBatch.status === 'running') {
+        await new Promise(r => setTimeout(r, 3000));
+      }
+    }
+  };
+
+  // Launch workers in parallel
+  try {
+    await Promise.all(activePorts.map(port => worker(port)));
+  } catch (err) {
+    console.error('[Integrity Parallel Workers Error]', err);
+  }
+
+  // Finished queue or paused
   if (activeIntegrityBatch.currentIndex >= activeIntegrityBatch.queue.length) {
     activeIntegrityBatch.status = 'idle';
     activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] 🏁 Réparation globale terminée. Succès: ${activeIntegrityBatch.successCount}, Erreurs: ${activeIntegrityBatch.errorCount}.`);
