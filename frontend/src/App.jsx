@@ -1230,6 +1230,7 @@ export default function App() {
                   onDeleteCustomLogo={handleDeleteCustomLogo}
                   onSaveCustomHistoricalMatch={handleSaveCustomHistoricalMatch}
                   onCrawlMatchHistory={handleCrawlHistory}
+                  onRefreshPredictions={refreshAllDataSilent}
                 />
               )}
             </>

@@ -24,9 +24,11 @@ export default function IntegrityTab({
   onSaveCustomLogo,
   onDeleteCustomLogo,
   onSaveCustomHistoricalMatch,
-  onCrawlMatchHistory
+  onCrawlMatchHistory,
+  onRefreshPredictions
 }) {
-  const [selectedMatch, setSelectedMatch] = useState(null);
+  const [selectedMatchId, setSelectedMatchId] = useState(null);
+  const selectedMatch = predictions?.find(p => p.match_id === selectedMatchId) || null;
   const [showLogoModal, setShowLogoModal] = useState(false);
   const [showH2HModal, setShowH2HModal] = useState(false);
   const [showStatsModal, setShowStatsModal] = useState(false);
@@ -40,6 +42,15 @@ export default function IntegrityTab({
   const [batcherErrors, setBatcherErrors] = useState(0);
   const [batcherLogs, setBatcherLogs] = useState([]);
   const [batcherLoading, setBatcherLoading] = useState(false);
+
+  // Refs to avoid stale closures in polling interval
+  const refreshRef = React.useRef(onRefreshPredictions);
+  const lastProcessedRef = React.useRef(0);
+  const lastStatusRef = React.useRef('idle');
+
+  React.useEffect(() => {
+    refreshRef.current = onRefreshPredictions;
+  }, [onRefreshPredictions]);
 
   // Poll batcher status
   React.useEffect(() => {
@@ -58,6 +69,17 @@ export default function IntegrityTab({
           setBatcherSuccess(d.successCount);
           setBatcherErrors(d.errorCount);
           setBatcherLogs(d.logs || []);
+
+          // Trigger refresh if progress changed or if status transitioned to running
+          const progressChanged = d.processedCount !== lastProcessedRef.current;
+          const statusTransitioned = d.status === 'running' && lastStatusRef.current !== 'running';
+          
+          if ((progressChanged || statusTransitioned) && refreshRef.current) {
+            refreshRef.current();
+          }
+
+          lastProcessedRef.current = d.processedCount;
+          lastStatusRef.current = d.status;
         }
       } catch (err) {
         console.error('Error fetching batcher status:', err);
@@ -377,11 +399,6 @@ export default function IntegrityTab({
     const success = await onSaveCustomHistoricalMatch(payload);
     if (success) {
       setShowStatsModal(false);
-      // Update selectedMatch reference if applicable to refresh the page diagnostics
-      if (selectedMatch) {
-        const updatedPred = predictions.find(p => p.match_id === selectedMatch.match_id);
-        if (updatedPred) setSelectedMatch(updatedPred);
-      }
     }
   };
 
@@ -655,7 +672,7 @@ export default function IntegrityTab({
                 return (
                   <div 
                     key={match.match_id}
-                    onClick={() => setSelectedMatch(match)}
+                    onClick={() => setSelectedMatchId(match.match_id)}
                     style={{
                       padding: '12px 16px',
                       background: isSelected ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.15)',
