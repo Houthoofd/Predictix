@@ -466,13 +466,6 @@ class ScraperController {
       }
     };
 
-    const torActive = await isTorActive();
-    if (!torActive) {
-      sendEvent('error', { message: "Le proxy Tor local n'est pas actif sur le port 9050. Veuillez lancer Tor et réessayer." });
-      clearInterval(keepAliveInterval);
-      return res.end();
-    }
-
     const scraperPath = process.env.SCRAPER_PATH || 'E:\\Developpement\\scrapper-v3';
     const outputDirs = [
       path.join(scraperPath, 'data', 'matchendirect'),
@@ -488,16 +481,12 @@ class ScraperController {
       return res.end();
     }
 
-    let scriptName = process.env.SCRAPER_SCRIPT || 'scrape-ratingbet.bat';
-    if (!process.env.SCRAPER_SCRIPT) {
-      if (fs.existsSync(path.join(scraperPath, 'scrape-matchendirect.bat'))) {
-        scriptName = 'scrape-matchendirect.bat';
-      } else if (fs.existsSync(path.join(scraperPath, 'scrape-matchendirect.sh'))) {
-        scriptName = 'scrape-matchendirect.sh';
-      }
+    let scriptName = 'scrape-matchendirect.bat';
+    if (process.platform !== 'win32') {
+      scriptName = 'scrape-matchendirect.sh';
     }
 
-    const limit = req.body.limit || req.query.limit || 30;
+    const limit = parseInt(req.body.limit || req.query.limit || 30, 10);
     const targetDate = req.body.date || req.query.date || null;
     let formattedDate = null;
     if (targetDate) {
@@ -509,251 +498,222 @@ class ScraperController {
       }
     }
 
-    sendEvent('log', { message: `[Predictix] Execution du script : ${scriptName} (limite : ${limit} matchs, date : ${formattedDate || 'aujourd\'hui'})` });
+    try {
+      // 1. Calculate recommended workers based on free RAM
+      const freeRAMBytes = os.freemem();
+      const freeRAMMB = freeRAMBytes / (1024 * 1024);
+      const reservedRAMMB = 1500;
+      const usableRAMMB = Math.max(0, freeRAMMB - reservedRAMMB);
+      const recommendedWorkers = Math.max(1, Math.min(12, Math.floor(usableRAMMB / 180)));
 
-    const args = ['/c', scriptName, 'verbose', limit];
-    if (formattedDate) {
-      args.push('');
-      args.push(formattedDate);
-    }
+      sendEvent('log', { message: `[Predictix] Diagnostic RAM : ${Math.round(freeRAMMB)} Mo libres. Marge 1,5 Go réservée. Allocation ciblée : ${recommendedWorkers} instances Tor.` });
 
-    const child = spawn('cmd.exe', args, {
-      cwd: scraperPath,
-      env: { ...process.env, FORCE_COLOR: '1' }
-    });
-    activeScraperProcess = child;
+      // 2. Bootstrap Tor instances
+      await bootstrapTorInstances(recommendedWorkers, scraperPath, (msg) => {
+        sendEvent('log', { message: msg });
+      });
 
-    const timeoutMs = (parseInt(limit, 10) * 75 * 1000) + 120000;
-    const timeoutGuard = setTimeout(() => {
-      if (activeScraperProcess && activeScraperProcess.pid === child.pid) {
-        console.warn(`[Predictix Scraper] Process timed out (${timeoutMs/1000}s). Killing process tree.`);
-        sendEvent('log', { message: `[Predictix] Le scraper a expiré après ${timeoutMs/1000}s. Arrêt forcé...` });
-        sendEvent('error', { message: `Temps limite de scraping dépassé (${timeoutMs/1000}s).` });
-        
-        const pid = child.pid;
-        if (process.platform === 'win32') {
-          exec(`taskkill /pid ${pid} /T /F`, (err) => {
-            if (err) console.error('Failed to taskkill timed-out scraper:', err.message);
-          });
-        } else {
-          child.kill();
+      // 3. Scan SOCKS ports
+      const possiblePorts = [9050, 9052, 9054, 9056, 9058, 9060, 9062, 9064, 9066, 9068, 9070, 9072].slice(0, recommendedWorkers);
+      const activePorts = [];
+      for (const port of possiblePorts) {
+        if (await isTorActive(port)) {
+          activePorts.push(port);
         }
-        activeScraperProcess = null;
+      }
+
+      if (activePorts.length === 0) {
+        sendEvent('error', { message: "Aucun port proxy Tor opérationnel détecté. Scraping annulé." });
         clearInterval(keepAliveInterval);
-        res.end();
+        return res.end();
       }
-    }, timeoutMs);
 
-    let inactivityTimer = null;
-    const INACTIVITY_TIMEOUT_MS = 90000;
+      sendEvent('log', { message: `[Predictix] Détection réseau : ${activePorts.length} proxy Tor actifs (Ports: ${activePorts.join(', ')}).` });
 
-    const resetInactivityTimer = () => {
-      if (inactivityTimer) clearTimeout(inactivityTimer);
-      inactivityTimer = setTimeout(() => {
-        if (activeScraperProcess && activeScraperProcess.pid === child.pid) {
-          console.warn(`[Predictix Scraper] Inactivity timeout (90s of silence). Killing process tree.`);
-          sendEvent('log', { message: `[Predictix] Le scraper est inactif depuis 90s (aucun log). Arrêt forcé...` });
-          sendEvent('error', { message: `Scraper arrêté automatiquement pour inactivité (90s de silence).` });
-          
-          const pid = child.pid;
-          if (process.platform === 'win32') {
-            exec(`taskkill /pid ${pid} /T /F`, (err) => {
-              if (err) console.error('Failed to taskkill inactive scraper:', err.message);
-            });
-          } else {
-            child.kill();
-          }
-          activeScraperProcess = null;
-          clearInterval(keepAliveInterval);
-          res.end();
-        }
-      }, INACTIVITY_TIMEOUT_MS);
-    };
-
-    resetInactivityTimer();
-
-    let logBuffer = '';
-
-    const handleOutput = (data) => {
-      resetInactivityTimer();
-
-      logBuffer += data.toString();
-      const lines = logBuffer.split('\n');
-      logBuffer = lines.pop();
-
-      for (const line of lines) {
-        let cleanLine = line.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '').trim();
-        if (cleanLine.startsWith('[STRUCT_MATCH_DATA]')) {
-          try {
-            const matchJsonStr = cleanLine.replace('[STRUCT_MATCH_DATA]', '').trim();
-            const matchData = JSON.parse(matchJsonStr);
-            sendEvent('match_scraped', { match: matchData });
-          } catch(e) {
-            console.error("Failed to parse STRUCT_MATCH_DATA:", e);
-          }
-          continue;
-        }
-        if (cleanLine) {
-          cleanLine = rewriteScraperLog(cleanLine, targetStrategy);
-          sendEvent('log', { message: cleanLine });
-        }
-      }
-    };
-
-    child.stdout.on('data', handleOutput);
-    child.stderr.on('data', handleOutput);
-
-    child.on('error', (error) => {
-      clearTimeout(timeoutGuard);
-      if (inactivityTimer) clearTimeout(inactivityTimer);
-      console.error('Failed to start scraper process:', error);
-      sendEvent('error', { message: `Impossible de lancer le scraper : ${error.message}` });
-      clearInterval(keepAliveInterval);
-      res.end();
-    });
-
-    child.on('close', async (code) => {
-      clearTimeout(timeoutGuard);
-      if (inactivityTimer) clearTimeout(inactivityTimer);
-      activeScraperProcess = null;
+      // 4. Discovery Phase (gets daily matches listing)
+      sendEvent('log', { message: `[Predictix] Phase 1/4 : Découverte des matchs du jour sur Match en Direct...` });
       
+      let discoveredMatches = [];
+      discoveredMatches = await runDiscoveryProcess(scraperPath, scriptName, outputDirs, formattedDate, (child) => {
+        activeScraperProcess = child;
+      });
+
+      activeScraperProcess = null;
+
+      if (discoveredMatches.length === 0) {
+        sendEvent('log', { message: `[Predictix] Aucun match découvert sur le listing.` });
+        sendEvent('complete', { count: 0, settledBets: [] });
+        await cleanupSpawnedTor((msg) => sendEvent('log', { message: msg }));
+        clearInterval(keepAliveInterval);
+        return res.end();
+      }
+
+      sendEvent('log', { message: `[Predictix] ✓ Découverte réussie : ${discoveredMatches.length} matchs trouvés.` });
+
+      // 5. Parallel crawl details phase
+      const matchesToScrape = discoveredMatches.slice(0, limit);
+      sendEvent('log', { message: `[Predictix] Phase 2/4 : Téléchargement des détails de ${matchesToScrape.length} matchs en parallèle sur ${activePorts.length} workers...` });
+
+      const scrapedMatches = [];
+      let currentIndex = 0;
+      
+      const worker = async (socksPort) => {
+        while (currentIndex < matchesToScrape.length && !stopScraperRequested) {
+          const index = currentIndex++;
+          if (index >= matchesToScrape.length) break;
+          
+          const m = matchesToScrape[index];
+          sendEvent('log', { message: `[Tor Port ${socksPort}] Scraping détails pour : ${m.home_team} vs ${m.away_team}...` });
+          
+          const details = await scrapeSingleMatch(scraperPath, m.href || m.match_url || m.match_id, false, (child) => {
+            // Can be used to register child PID if desired
+          }, socksPort);
+          
+          if (details) {
+            const enriched = {
+              match_id: m.match_id || m.href || '',
+              time: m.time || 'Finished',
+              date: details.date || m.date || '',
+              tournament: details.tournament || m.tournament || '',
+              home_team: details.home_team || m.home_team,
+              away_team: details.away_team || m.away_team,
+              home_logo: details.home_logo || m.home_logo,
+              away_logo: details.away_logo || m.away_logo,
+              score: details.score || m.score || '',
+              first_half_corners_home: details.first_half_corners_home,
+              first_half_corners_away: details.first_half_corners_away,
+              historical_links: details.historical_links,
+              match_url: m.href || m.match_url || '',
+              statistics: details.statistics
+            };
+            
+            scrapedMatches.push(enriched);
+            sendEvent('match_scraped', { match: enriched });
+            
+            const scoreText = enriched.score ? ` (${enriched.score})` : '';
+            sendEvent('log', { message: `[Tor Port ${socksPort}] ✓ Match enrichi : ${enriched.home_team} vs ${enriched.away_team}${scoreText}` });
+          } else {
+            sendEvent('log', { message: `[Tor Port ${socksPort}] ❌ Échec du crawl détails pour : ${m.home_team} vs ${m.away_team}` });
+          }
+          
+          if (currentIndex < matchesToScrape.length && !stopScraperRequested) {
+            await new Promise(r => setTimeout(r, 2000));
+          }
+        }
+      };
+
+      await Promise.all(activePorts.map(port => worker(port)));
+
       if (stopScraperRequested) {
         sendEvent('log', { message: `[Predictix] Scraping annulé par l'utilisateur.` });
+        await cleanupSpawnedTor((msg) => sendEvent('log', { message: msg }));
         clearInterval(keepAliveInterval);
         return res.end();
       }
 
-      if (logBuffer.trim()) {
-        sendEvent('log', { message: logBuffer.trim() });
+      // 6. DB Import Phase
+      sendEvent('log', { message: `[Predictix] Phase 3/4 : Enregistrement de ${scrapedMatches.length} matchs dans SQLite...` });
+      const { importedCount, settledBetsList } = await importScrapedMatches(scrapedMatches, new Date().toISOString());
+      sendEvent('log', { message: `[Predictix] ✓ Importation réussie : ${importedCount} prédictions insérées.` });
+
+      // 7. Parallel H2H Deep Crawl Phase
+      sendEvent('log', { message: `[Predictix] Phase 4/4 : Analyse et crawl des confrontations H2H en parallèle...` });
+      
+      const uncachedLinksSet = new Set();
+      for (const match of scrapedMatches) {
+        if (!match.home_team || !match.away_team) continue;
+
+        let isMatchPromising = true;
+        if (targetStrategy) {
+          const h2hExisting = await dbQuery(`
+            SELECT * FROM scraped_predictions 
+            WHERE is_finished = 1 
+              AND ((home_team = ? AND away_team = ?) OR (home_team = ? AND away_team = ?))
+          `, [match.home_team, match.away_team, match.away_team, match.home_team]);
+          
+          isMatchPromising = evaluateSmartScrapingFilter(match, h2hExisting, targetStrategy);
+        }
+
+        if (!isMatchPromising) {
+          sendEvent('log', { message: `[Smart-Scraping] Match ${match.home_team} vs ${match.away_team} écarté (stats H2H hors-cible).` });
+          continue;
+        }
+
+        if (match.historical_links) {
+          let linksList = [];
+          try {
+            linksList = typeof match.historical_links === 'string' 
+              ? JSON.parse(match.historical_links) 
+              : match.historical_links;
+          } catch (e) {
+            linksList = match.historical_links;
+          }
+          
+          if (Array.isArray(linksList) && linksList.length > 1) {
+            const prioritizedLinks = prioritizeDirectH2H(linksList, match.home_team, match.away_team);
+            let matchAddedCount = 0;
+            for (const link of prioritizedLinks) {
+              if (matchAddedCount >= 10) break;
+              
+              const cached = await dbQuery('SELECT match_id, date, score, first_half_corners_home, first_half_corners_away FROM scraped_predictions WHERE match_id = ?', [link]);
+              const isPlaceholder = cached.length > 0 && 
+                (cached[0].date === '2026-05-30' || cached[0].date === '2026-05-31' || cached[0].date.includes(':'));
+              const hasNoStats = cached.length > 0 && cached[0].first_half_corners_home === null;
+              if (cached.length === 0 || isPlaceholder || hasNoStats) {
+                uncachedLinksSet.add(link);
+                matchAddedCount++;
+              } else {
+                const score = cached[0].score || '-';
+                const corners = (cached[0].first_half_corners_home !== null && cached[0].first_half_corners_home !== undefined)
+                  ? `${cached[0].first_half_corners_home}-${cached[0].first_half_corners_away}`
+                  : 'N/A';
+                sendEvent('log', { message: `[H2H Cache] Confrontation déjà en cache : ${match.home_team} vs ${match.away_team} (Score: ${score}) (Corners 1ère MT: ${corners})` });
+                sendEvent('h2h_scraped', { h2h: {
+                  match_url: link,
+                  home_team: match.home_team,
+                  away_team: match.away_team,
+                  score: score,
+                  date: cached[0].date,
+                  first_half_corners_home: cached[0].first_half_corners_home,
+                  first_half_corners_away: cached[0].first_half_corners_away
+                }});
+              }
+            }
+          }
+        }
       }
 
-      sendEvent('log', { message: `[Predictix] Le processus scraper s'est terminé avec le code : ${code}` });
-
-      if (code !== 0) {
-        sendEvent('error', { message: `Le scraper a rencontré une erreur (Code de sortie : ${code})` });
-        clearInterval(keepAliveInterval);
-        return res.end();
+      const linksToScrape = Array.from(uncachedLinksSet).slice(0, 80);
+      
+      if (linksToScrape.length > 0) {
+        sendEvent('log', { message: `[Predictix] ${linksToScrape.length} nouvelles confrontations H2H à scrapper en parallèle...` });
+        
+        await crawlH2HLinksBatch(linksToScrape, scraperPath, {
+          activePorts: activePorts,
+          shouldStop: () => stopScraperRequested,
+          log: (msg) => sendEvent('log', { message: msg }),
+          importHistoricalMatch,
+          importSkippedMatch,
+          onH2HScraped: (h2hData) => sendEvent('h2h_scraped', { h2h: h2hData })
+        });
       }
+      
+      sendEvent('log', { message: `[Predictix] ✓ Scraping de l'historique H2H terminé avec succès.` });
+      
+      // 8. Clean up Tor processes
+      await cleanupSpawnedTor((msg) => sendEvent('log', { message: msg }));
 
+      sendEvent('complete', { count: importedCount, settledBets: settledBetsList });
+    } catch (err) {
+      console.error('Error during scraping execution:', err);
+      sendEvent('error', { message: `Le scraper a rencontré une erreur : ${err.message}` });
       try {
-        sendEvent('log', { message: '[Predictix] Analyse et importation des données...' });
-        
-        const newestFile = getNewestScrapedFile(outputDirs);
-        if (!newestFile) {
-          sendEvent('error', { message: `Aucun fichier de données scrapées (.json) trouvé dans les répertoires scannés.` });
-          clearInterval(keepAliveInterval);
-          return res.end();
-        }
-
-        sendEvent('log', { message: `[Predictix] Lecture du fichier : ${path.basename(newestFile)}` });
-        
-        const rawData = fs.readFileSync(newestFile, 'utf-8');
-        const parsed = JSON.parse(rawData);
-
-        const matches = parsed.all_matches || parsed.matches || [];
-        sendEvent('log', { message: `[Predictix] ${matches.length} matchs trouvés. Enregistrement dans SQLite...` });
-
-        const { importedCount, settledBetsList } = await importScrapedMatches(matches, parsed.metadata?.scraped_at);
-
-        sendEvent('log', { message: `[Predictix] ✓ Importation réussie : ${importedCount} prédictions insérées.` });
-        sendEvent('log', { message: `[Predictix] Analyse de l'historique des opposants...` });
-
-        try {
-          const uncachedLinksSet = new Set();
-          for (const match of matches) {
-            if (!match.home_team || !match.away_team) continue;
-
-            let isMatchPromising = true;
-            if (targetStrategy) {
-              const h2hExisting = await dbQuery(`
-                SELECT * FROM scraped_predictions 
-                WHERE is_finished = 1 
-                  AND ((home_team = ? AND away_team = ?) OR (home_team = ? AND away_team = ?))
-              `, [match.home_team, match.away_team, match.away_team, match.home_team]);
-              
-              isMatchPromising = evaluateSmartScrapingFilter(match, h2hExisting, targetStrategy);
-            }
-
-            if (!isMatchPromising) {
-              sendEvent('log', { message: `[Smart-Scraping] Match ${match.home_team} vs ${match.away_team} écarté (stats H2H hors-cible). Gain de temps Tor appréciable.` });
-              continue;
-            }
-
-            if (match.historical_links) {
-              let linksList = [];
-              try {
-                linksList = typeof match.historical_links === 'string' 
-                  ? JSON.parse(match.historical_links) 
-                  : match.historical_links;
-              } catch (e) {
-                linksList = match.historical_links;
-              }
-              
-              if (Array.isArray(linksList) && linksList.length > 1) {
-                const prioritizedLinks = prioritizeDirectH2H(linksList, match.home_team, match.away_team);
-                let matchAddedCount = 0;
-                for (const link of prioritizedLinks) {
-                  if (matchAddedCount >= 10) break;
-                  
-                  const cached = await dbQuery('SELECT match_id, date, score, first_half_corners_home, first_half_corners_away FROM scraped_predictions WHERE match_id = ?', [link]);
-                  const isPlaceholder = cached.length > 0 && 
-                    (cached[0].date === '2026-05-30' || cached[0].date === '2026-05-31' || cached[0].date.includes(':'));
-                  const hasNoStats = cached.length > 0 && cached[0].first_half_corners_home === null;
-                  if (cached.length === 0 || isPlaceholder || hasNoStats) {
-                    uncachedLinksSet.add(link);
-                    matchAddedCount++;
-                  } else {
-                    const score = cached[0].score || '-';
-                    const corners = (cached[0].first_half_corners_home !== null && cached[0].first_half_corners_home !== undefined)
-                      ? `${cached[0].first_half_corners_home}-${cached[0].first_half_corners_away}`
-                      : 'N/A';
-                    sendEvent('log', { message: `[H2H Cache] Confrontation déjà en cache : ${match.home_team} vs ${match.away_team} (Score: ${score}) (Corners 1ère MT: ${corners})` });
-                    sendEvent('h2h_scraped', { h2h: {
-                      match_url: link,
-                      home_team: match.home_team,
-                      away_team: match.away_team,
-                      score: score,
-                      date: cached[0].date,
-                      first_half_corners_home: cached[0].first_half_corners_home,
-                      first_half_corners_away: cached[0].first_half_corners_away
-                    }});
-                  }
-                }
-              }
-            }
-          }
-
-          const linksToScrape = Array.from(uncachedLinksSet).slice(0, 80);
-          
-          if (linksToScrape.length > 0) {
-            sendEvent('log', { message: `[Predictix] ${linksToScrape.length} nouvelles confrontations à scrapper` });
-            
-            await crawlH2HLinksBatch(linksToScrape, scraperPath, {
-              concurrency: 4,
-              shouldStop: () => stopScraperRequested,
-              log: (msg) => sendEvent('log', { message: msg }),
-              importHistoricalMatch,
-              importSkippedMatch,
-              onH2HScraped: (h2hData) => sendEvent('h2h_scraped', { h2h: h2hData })
-            });
-          }
-          
-          sendEvent('log', { message: `[Predictix] ✓ Scraping de l'historique terminé avec succès.` });
-        } catch (deepCrawlErr) {
-          console.error("Error in sync deep H2H crawl:", deepCrawlErr);
-          sendEvent('log', { message: `[ERREUR H2H] Échec du crawl profond : ${deepCrawlErr.message}` });
-        }
-
-        sendEvent('complete', { count: importedCount, settledBets: settledBetsList });
-        clearInterval(keepAliveInterval);
-        res.end();
-      } catch (error) {
-        console.error('Error importing scraped data:', error);
-        sendEvent('error', { message: `Erreur lors de l'importation en base de données : ${error.message}` });
-        clearInterval(keepAliveInterval);
-        res.end();
-      }
-    });
+        await cleanupSpawnedTor((msg) => sendEvent('log', { message: msg }));
+      } catch (e) {}
+    } finally {
+      clearInterval(keepAliveInterval);
+      res.end();
+    }
   }
 
   /**
