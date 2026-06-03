@@ -187,9 +187,40 @@ async function runIntegrityBatchLoop() {
           }
 
           if (uncachedLinks.length > 0) {
+            let newlyCrawledHome = 0;
+            let newlyCrawledAway = 0;
+            let newlyCrawledH2H = 0;
+
+            const existingHomeCount = homeMatches.length;
+            const existingAwayCount = awayMatches.length;
+            const existingH2HCount = h2hMatches.length;
+
             activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}] -> ${uncachedLinks.length} confrontations manquantes.`);
-            for (const link of uncachedLinks.slice(0, 5)) {
+            
+            let crawlCount = 0;
+            for (const link of uncachedLinks) {
               if (activeIntegrityBatch.status !== 'running') break;
+
+              // Check if we have met the required count to reach 100% diagnostic score:
+              // - 5 home matches
+              // - 5 away matches
+              // - 1 H2H match
+              const currentHomeTotal = existingHomeCount + newlyCrawledHome;
+              const currentAwayTotal = existingAwayCount + newlyCrawledAway;
+              const currentH2HTotal = existingH2HCount + newlyCrawledH2H;
+
+              if (currentHomeTotal >= 5 && currentAwayTotal >= 5 && currentH2HTotal >= 1) {
+                activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}] ✓ Objectif d'intégrité atteint (5 H/5 A/1 H2H). Arrêt du crawl historique.`);
+                break;
+              }
+
+              // Hard safety cap: max 10 crawls per match to avoid long Tor hangs
+              if (crawlCount >= 10) {
+                activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}] ⚠ Limite de sécurité atteinte (10 crawls).`);
+                break;
+              }
+
+              crawlCount++;
 
               const histMatch = await scrapeSingleMatch(scraperPath, link, true, (child) => {
                 activeIntegrityBatch.spawnedChildren.add(child);
@@ -200,6 +231,26 @@ async function runIntegrityBatchLoop() {
                 const homeClean = histMatch.home_team.replace(/[▲▼]/g, '').trim();
                 const awayClean = histMatch.away_team.replace(/[▲▼]/g, '').trim();
                 activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}]   ✓ H2H importé : ${homeClean} vs ${awayClean}`);
+
+                // Update dynamic counts based on the imported match
+                const matchHomeClean = match.home_team.toLowerCase().trim();
+                const matchAwayClean = match.away_team.toLowerCase().trim();
+                const histHomeClean = homeClean.toLowerCase().trim();
+                const histAwayClean = awayClean.toLowerCase().trim();
+
+                const isDirectH2H = (histHomeClean === matchHomeClean && histAwayClean === matchAwayClean) ||
+                                    (histHomeClean === matchAwayClean && histAwayClean === matchHomeClean);
+
+                if (isDirectH2H) {
+                  newlyCrawledH2H++;
+                }
+
+                if (histHomeClean === matchHomeClean || histAwayClean === matchHomeClean) {
+                  newlyCrawledHome++;
+                }
+                if (histHomeClean === matchAwayClean || histAwayClean === matchAwayClean) {
+                  newlyCrawledAway++;
+                }
               } else {
                 await importSkippedMatch(link);
                 activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}]   ⚠ H2H sauté (échec) : ${link}`);
