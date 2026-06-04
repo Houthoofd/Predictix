@@ -146,7 +146,22 @@ const getMetricTitle = (key) => {
     degagements: 'Dégagements',
     rentree_de_touche: 'Touches',
     occasions_manquees: 'Occasions Manquées',
-    poteau: 'Tirs sur Poteau'
+    poteau: 'Tirs sur Poteau',
+    total_rebounds: 'Rebonds',
+    assists: 'Passes Décisives',
+    blocks: 'Contres',
+    steals: 'Interceptions',
+    field_goals: 'Paniers Réussis',
+    free_throws: 'Lancers Francs',
+    aces: 'Aces',
+    double_faults: 'Doubles Fautes',
+    first_serve: '1er Service (%)',
+    break_points: 'Balles de Break',
+    tries: 'Essais',
+    penalties: 'Pénalités',
+    conversions: 'Transformations',
+    goals: 'Buts',
+    saves: 'Arrêts'
   };
   if (titles[key]) return titles[key];
   return key
@@ -726,8 +741,22 @@ export default function MagicPredictionsTab({
                   accentColor: '#bf5af2'
                 }}
               />
-              <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                {sig.tournament}
+              <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                {sig.sport && sig.sport !== 'football' && (
+                  <span style={{ 
+                    background: 'rgba(0, 130, 255, 0.15)', 
+                    color: '#0082ff', 
+                    padding: '2px 6px', 
+                    borderRadius: '4px', 
+                    fontSize: '9.5px',
+                    fontWeight: 800,
+                    letterSpacing: '0.02em',
+                    textTransform: 'uppercase'
+                  }}>
+                    {sig.sport}
+                  </span>
+                )}
+                <span>{sig.tournament}</span>
               </span>
             </div>
             

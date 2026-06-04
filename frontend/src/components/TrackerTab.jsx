@@ -440,7 +440,22 @@ export default function TrackerTab({
                         )}
                       </td>
                       <td style={{ fontWeight: 600 }}>{bet.home_team} vs {bet.away_team}</td>
-                      <td style={{ fontSize: '13px' }}>{bet.league}</td>
+                      <td style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {bet.sport && bet.sport !== 'football' && (
+                          <span style={{ 
+                            background: 'rgba(0, 130, 255, 0.12)', 
+                            color: '#0082ff', 
+                            padding: '1px 5px', 
+                            borderRadius: '4px', 
+                            fontSize: '9px',
+                            fontWeight: 800,
+                            textTransform: 'uppercase'
+                          }}>
+                            {bet.sport}
+                          </span>
+                        )}
+                        <span>{bet.league}</span>
+                      </td>
                       <td style={{ fontFamily: 'Outfit', fontWeight: 600 }}>{bet.best_tip} {bet.card_line}</td>
                       <td style={{ fontWeight: 700 }}>{bet.stake} {stats.bankroll?.currency || '€'}</td>
                       <td>{bet.odds}</td>
@@ -681,7 +696,22 @@ export default function TrackerTab({
                           )}
                         </td>
                         <td style={{ fontWeight: 600 }}>{bet.home_team} vs {bet.away_team}</td>
-                        <td style={{ fontSize: '13px' }}>{bet.league}</td>
+                        <td style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {bet.sport && bet.sport !== 'football' && (
+                            <span style={{ 
+                              background: 'rgba(0, 130, 255, 0.12)', 
+                              color: '#0082ff', 
+                              padding: '1px 5px', 
+                              borderRadius: '4px', 
+                              fontSize: '9px',
+                              fontWeight: 800,
+                              textTransform: 'uppercase'
+                            }}>
+                              {bet.sport}
+                            </span>
+                          )}
+                          <span>{bet.league}</span>
+                        </td>
                         <td style={{ fontFamily: 'Outfit', fontWeight: 600 }}>{bet.best_tip} {bet.card_line}</td>
                         <td>{bet.stake} {stats.bankroll?.currency || '€'}</td>
                         <td>{bet.odds}</td>

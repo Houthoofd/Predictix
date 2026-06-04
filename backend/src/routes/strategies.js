@@ -30,6 +30,51 @@ function parsePromptToStrategy(prompt) {
   } else if (text.includes('hors-jeu') || text.includes('hors jeu')) {
     metric = 'offsides';
     metricLabel = 'Hors-jeu';
+  } else if (text.includes('rebond')) {
+    metric = 'total_rebounds';
+    metricLabel = 'Rebonds';
+  } else if (text.includes('passe') || text.includes('assist')) {
+    metric = 'assists';
+    metricLabel = 'Passes décisives';
+  } else if (text.includes('contre') || text.includes('block')) {
+    metric = 'blocks';
+    metricLabel = 'Contres';
+  } else if (text.includes('interception') || text.includes('steal')) {
+    metric = 'steals';
+    metricLabel = 'Interceptions';
+  } else if (text.includes('panier') || text.includes('field goal')) {
+    metric = 'field_goals';
+    metricLabel = 'Paniers';
+  } else if (text.includes('lancer franc') || text.includes('free throw')) {
+    metric = 'free_throws';
+    metricLabel = 'Lancers francs';
+  } else if (text.includes('ace')) {
+    metric = 'aces';
+    metricLabel = 'Aces';
+  } else if (text.includes('double faute') || text.includes('double fault')) {
+    metric = 'double_faults';
+    metricLabel = 'Doubles fautes';
+  } else if (text.includes('premier service') || text.includes('1er service') || text.includes('first serve')) {
+    metric = 'first_serve';
+    metricLabel = 'Premiers services';
+  } else if (text.includes('break')) {
+    metric = 'break_points';
+    metricLabel = 'Balles de break';
+  } else if (text.includes('essai') || text.includes('trie')) {
+    metric = 'tries';
+    metricLabel = 'Essais';
+  } else if (text.includes('pénalité') || text.includes('penal')) {
+    metric = 'penalties';
+    metricLabel = 'Pénalités';
+  } else if (text.includes('transformation') || text.includes('conversion')) {
+    metric = 'conversions';
+    metricLabel = 'Transformations';
+  } else if (text.includes('but') || text.includes('goal')) {
+    metric = 'goals';
+    metricLabel = 'Buts';
+  } else if (text.includes('arrêt') || text.includes('save')) {
+    metric = 'saves';
+    metricLabel = 'Arrêts';
   }
 
   // 2. Identify Operator
@@ -75,6 +120,21 @@ function parsePromptToStrategy(prompt) {
     else if (metric === 'shots_on_target') threshold = 8.5;
     else if (metric === 'shots') threshold = 18.5;
     else if (metric === 'offsides') threshold = 3.5;
+    else if (metric === 'total_rebounds') threshold = 70.5;
+    else if (metric === 'assists') threshold = 38.5;
+    else if (metric === 'blocks') threshold = 7.5;
+    else if (metric === 'steals') threshold = 12.5;
+    else if (metric === 'field_goals') threshold = 60.5;
+    else if (metric === 'free_throws') threshold = 30.5;
+    else if (metric === 'aces') threshold = 12.5;
+    else if (metric === 'double_faults') threshold = 5.5;
+    else if (metric === 'first_serve') threshold = 60.0;
+    else if (metric === 'break_points') threshold = 4.5;
+    else if (metric === 'tries') threshold = 4.5;
+    else if (metric === 'penalties') threshold = 3.5;
+    else if (metric === 'conversions') threshold = 3.5;
+    else if (metric === 'goals') threshold = 5.5;
+    else if (metric === 'saves') threshold = 14.5;
     else threshold = 4.5;
   }
 
@@ -269,7 +329,22 @@ router.post('/strategies/backtest/:id', async (req, res) => {
       shots_on_target: 'tirs cadrés',
       shots: 'tirs',
       offsides: 'hors-jeu',
-      corners: 'corners'
+      corners: 'corners',
+      total_rebounds: 'rebonds',
+      assists: 'passes décisives',
+      blocks: 'contres',
+      steals: 'interceptions',
+      field_goals: 'paniers réussis',
+      free_throws: 'lancers francs',
+      aces: 'aces',
+      double_faults: 'doubles fautes',
+      first_serve: '1er service (%)',
+      break_points: 'balles de break',
+      tries: 'essais',
+      penalties: 'pénalités',
+      conversions: 'transformations',
+      goals: 'buts',
+      saves: 'arrêts'
     };
 
     // 3. For each finished main match, simulate the prediction
@@ -509,7 +584,22 @@ router.get('/predictions/magic', async (req, res) => {
       shots_on_target: 'tirs cadrés',
       shots: 'tirs',
       offsides: 'hors-jeu',
-      corners: 'corners'
+      corners: 'corners',
+      total_rebounds: 'rebonds',
+      assists: 'passes décisives',
+      blocks: 'contres',
+      steals: 'interceptions',
+      field_goals: 'paniers réussis',
+      free_throws: 'lancers francs',
+      aces: 'aces',
+      double_faults: 'doubles fautes',
+      first_serve: '1er service (%)',
+      break_points: 'balles de break',
+      tries: 'essais',
+      penalties: 'pénalités',
+      conversions: 'transformations',
+      goals: 'buts',
+      saves: 'arrêts'
     };
 
     // 3. For each upcoming match, check active strategies

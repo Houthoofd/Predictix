@@ -37,7 +37,11 @@ export default function ScraperTab({
   setSelectedScraperStrategyId,
   scraperTargetDate,
   setScraperTargetDate,
-  liveScrapedMatches
+  liveScrapedMatches,
+  selectedScraperSource,
+  setSelectedScraperSource,
+  selectedScraperSport,
+  setSelectedScraperSport
 }) {
   const [strategies, setStrategies] = useState([]);
   const [expandedMatches, setExpandedMatches] = useState({});
@@ -167,15 +171,98 @@ export default function ScraperTab({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px', borderBottom: scraping ? '1px solid var(--border-color)' : 'none', paddingBottom: scraping ? '16px' : '0', transition: 'all 0.3s ease' }}>
           <div>
             <h3 style={{ fontSize: '18px', fontFamily: 'Outfit', fontWeight: 700 }}>
-              Lancer le Scraper Go (MatchEnDirect.fr)
+              {selectedScraperSource === 'flashscore' ? `Lancer le Scraper Go (Flashscore - ${selectedScraperSport.charAt(0).toUpperCase() + selectedScraperSport.slice(1)})` : 'Lancer le Scraper Go (MatchEnDirect.fr)'}
             </h3>
             <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-              Compile et démarre le serveur de workflow, navigue sur MatchEnDirect pour extraire les statistiques et cotes.
+              {selectedScraperSource === 'flashscore' ? 'Compile et démarre le scraper Flashscore pour extraire les matchs, scores et statistiques du sport sélectionné.' : 'Compile et démarre le serveur de workflow, navigue sur MatchEnDirect pour extraire les statistiques et cotes.'}
             </p>
           </div>
           
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
             
+            {/* Scraper Source Selector */}
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '8px', 
+              background: 'rgba(255, 255, 255, 0.03)', 
+              border: '1px solid var(--border-color)', 
+              borderRadius: '6px', 
+              padding: '4px 12px', 
+              height: '36px',
+              transition: 'all 0.2s ease'
+            }}>
+              <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>Source :</span>
+              <select
+                value={selectedScraperSource}
+                onChange={(e) => {
+                  setSelectedScraperSource(e.target.value);
+                  if (e.target.value === 'matchendirect') {
+                    setSelectedScraperSport('football');
+                  }
+                }}
+                disabled={scraping}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--text-primary)',
+                  fontWeight: 700,
+                  fontSize: '12.5px',
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="matchendirect" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>MatchEnDirect</option>
+                <option value="flashscore" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>Flashscore (Multi-sports)</option>
+              </select>
+            </div>
+
+            {/* Sport Selector (only enabled/visible when Flashscore is selected) */}
+            {selectedScraperSource === 'flashscore' && (
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '8px', 
+                background: 'rgba(255, 255, 255, 0.03)', 
+                border: '1px solid var(--border-color)', 
+                borderRadius: '6px', 
+                padding: '4px 12px', 
+                height: '36px',
+                transition: 'all 0.2s ease'
+              }}>
+                <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>Sport :</span>
+                <select
+                  value={selectedScraperSport}
+                  onChange={(e) => setSelectedScraperSport(e.target.value)}
+                  disabled={scraping}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-primary)',
+                    fontWeight: 700,
+                    fontSize: '12.5px',
+                    outline: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="football" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>Football</option>
+                  <option value="basketball" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>Basketball</option>
+                  <option value="tennis" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>Tennis</option>
+                  <option value="rugby" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>Rugby</option>
+                  <option value="handball" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>Handball</option>
+                  <option value="volleyball" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>Volleyball</option>
+                  <option value="hockey" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>Hockey sur glace</option>
+                  <option value="baseball" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>Baseball</option>
+                  <option value="american-football" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>Football Américain</option>
+                  <option value="table-tennis" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>Tennis de table</option>
+                  <option value="badminton" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>Badminton</option>
+                  <option value="cricket" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>Cricket</option>
+                  <option value="snooker" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>Snooker</option>
+                  <option value="futsal" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>Futsal</option>
+                </select>
+              </div>
+            )}
+
             {/* Target Date Picker */}
             <div style={{ 
               display: 'flex', 

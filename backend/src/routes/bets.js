@@ -344,7 +344,8 @@ router.post('/bets', async (req, res) => {
     bookmaker,
     status,
     notes,
-    match_url
+    match_url,
+    sport
   } = req.body;
 
   // Validation
@@ -357,6 +358,7 @@ router.post('/bets', async (req, res) => {
   const cleanStake = parseFloat(stake);
   const cleanProb = probability ? parseInt(probability) : null;
   const cleanStatus = status || 'PENDING';
+  const cleanSport = sport || 'football';
   
   // Calculate initial payout
   let payout = 0;
@@ -371,8 +373,8 @@ router.post('/bets', async (req, res) => {
       INSERT INTO bets (
         match_id, date, time, league, home_team, away_team,
         best_tip, card_line, odds, stake, probability,
-        bookmaker, status, payout, notes, match_url
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        bookmaker, status, payout, notes, match_url, sport
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const params = [
@@ -391,7 +393,8 @@ router.post('/bets', async (req, res) => {
       cleanStatus,
       payout,
       notes || null,
-      match_url || null
+      match_url || null,
+      cleanSport
     ];
 
     const result = await dbRun(sql, params);
@@ -433,7 +436,8 @@ router.post('/bets/batch', async (req, res) => {
         bookmaker,
         status,
         notes,
-        match_url
+        match_url,
+        sport
       } = bet;
 
       // Validation for required fields inside batch
@@ -446,6 +450,7 @@ router.post('/bets/batch', async (req, res) => {
       const cleanStake = parseFloat(stake);
       const cleanProb = probability ? parseInt(probability) : null;
       const cleanStatus = status || 'PENDING';
+      const cleanSport = sport || 'football';
       
       let payout = 0;
       if (cleanStatus === 'WON') {
@@ -458,8 +463,8 @@ router.post('/bets/batch', async (req, res) => {
         INSERT INTO bets (
           match_id, date, time, league, home_team, away_team,
           best_tip, card_line, odds, stake, probability,
-          bookmaker, status, payout, notes, match_url
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          bookmaker, status, payout, notes, match_url, sport
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
 
       const params = [
@@ -478,7 +483,8 @@ router.post('/bets/batch', async (req, res) => {
         cleanStatus,
         payout,
         notes || null,
-        match_url || null
+        match_url || null,
+        cleanSport
       ];
 
       const result = await dbRun(sql, params);
@@ -512,7 +518,8 @@ router.put('/bets/:id', async (req, res) => {
     probability,
     bookmaker,
     status,
-    notes
+    notes,
+    sport
   } = req.body;
 
   try {
@@ -528,6 +535,7 @@ router.put('/bets/:id', async (req, res) => {
     const cleanProb = probability !== undefined ? (probability ? parseInt(probability) : null) : existing.probability;
     const cleanStatus = status !== undefined ? status : existing.status;
     const cleanNotes = notes !== undefined ? notes : existing.notes;
+    const cleanSport = sport !== undefined ? sport : existing.sport;
     
     // Calculate payout
     let payout = 0;
@@ -541,7 +549,7 @@ router.put('/bets/:id', async (req, res) => {
       UPDATE bets SET
         date = ?, time = ?, league = ?, home_team = ?, away_team = ?,
         best_tip = ?, card_line = ?, odds = ?, stake = ?, probability = ?,
-        bookmaker = ?, status = ?, payout = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+        bookmaker = ?, status = ?, payout = ?, notes = ?, sport = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `;
 
@@ -560,6 +568,7 @@ router.put('/bets/:id', async (req, res) => {
       cleanStatus,
       payout,
       cleanNotes,
+      cleanSport,
       id
     ];
 

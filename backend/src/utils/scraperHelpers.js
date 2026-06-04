@@ -163,7 +163,22 @@ export function rewriteScraperLog(line, strategy) {
     shots_on_target: 'Tirs Cadrés',
     shots: 'Tirs',
     offsides: 'Hors-jeu',
-    corners: 'Corners 1ère MT'
+    corners: 'Corners 1ère MT',
+    total_rebounds: 'Rebonds',
+    assists: 'Passes décisives',
+    blocks: 'Contres',
+    steals: 'Interceptions',
+    field_goals: 'Paniers réussis',
+    free_throws: 'Lancers francs',
+    aces: 'Aces',
+    double_faults: 'Doubles fautes',
+    first_serve: '1er service (%)',
+    break_points: 'Balles de break',
+    tries: 'Essais',
+    penalties: 'Pénalités',
+    conversions: 'Transformations',
+    goals: 'Buts',
+    saves: 'Arrêts'
   };
 
   const metricLabel = metricLabels[strategy.metric] || strategy.metric;
@@ -189,7 +204,7 @@ export function rewriteScraperLog(line, strategy) {
  * Spawn Go scraper to retrieve details for a single specific match page.
  * Acts as a generic child-process spawner guard.
  */
-export async function scrapeSingleMatch(scraperPath, link, skipOdds = false, onSpawn = null, socksPort = 9050) {
+export async function scrapeSingleMatch(scraperPath, link, skipOdds = false, onSpawn = null, socksPort = 9050, scraper = 'matchendirect', sport = 'football') {
   const maxAttempts = 2;
   
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -202,14 +217,24 @@ export async function scrapeSingleMatch(scraperPath, link, skipOdds = false, onS
     const result = await new Promise((resolve) => {
       let resolved = false;
       const tmpOutFile = path.join(scraperPath, 'data', `tmp_${Date.now()}_${Math.random().toString(36).substring(7)}.json`);
-      const exePath = path.join(scraperPath, 'cmd', 'scrapper-lite', 'examples', 'scrapper-matchendirect.exe');
       
-      const args = ['-tor', '-socks-port', String(socksPort), '-url', link, '-output', tmpOutFile];
-      if (skipOdds) {
-        args.push('-skip-odds');
+      let exeName = 'scrapper-matchendirect.exe';
+      let args = [];
+      
+      if (scraper === 'flashscore') {
+        exeName = 'scrapper-flashscore.exe';
+        args = ['-tor', '-socks-port', String(socksPort), '-sport', sport, '-url', link, '-output', tmpOutFile];
+      } else {
+        exeName = 'scrapper-matchendirect.exe';
+        args = ['-tor', '-socks-port', String(socksPort), '-url', link, '-output', tmpOutFile];
+        if (skipOdds) {
+          args.push('-skip-odds');
+        }
       }
-
-      // Spawn Go scraper with -url and -tor options
+      
+      const exePath = path.join(scraperPath, 'cmd', 'scrapper-lite', 'examples', exeName);
+      
+      // Spawn Go scraper
       const child = spawn(exePath, args);
       
       if (onSpawn && typeof onSpawn === 'function') {
@@ -289,13 +314,22 @@ export async function scrapeSingleMatch(scraperPath, link, skipOdds = false, onS
 /**
  * Execute discovery of matches via Go scraper batch script
  */
-export function runDiscoveryProcess(scraperPath, scriptName, outputDirs, targetDate = null, onSpawn = null) {
+export function runDiscoveryProcess(scraperPath, scriptName, outputDirs, targetDate = null, onSpawn = null, scraper = 'matchendirect', sport = 'football') {
   return new Promise((resolve, reject) => {
-    console.log(`[Predictix Discovery] Starting discovery in ${scraperPath} for date: ${targetDate || 'today'}...`);
+    console.log(`[Predictix Discovery] Starting discovery in ${scraperPath} using ${scraper} for sport: ${sport}, date: ${targetDate || 'today'}...`);
     
-    const args = ['/c', scriptName, 'verbose', '0', 'discover'];
-    if (targetDate) {
-      args.push(targetDate);
+    let args = [];
+    if (scraper === 'flashscore') {
+      let batScript = 'scrape-flashscore.bat';
+      if (process.platform !== 'win32') {
+        batScript = 'scrape-flashscore.sh';
+      }
+      args = ['/c', batScript, sport, '0', targetDate || '', 'discover'];
+    } else {
+      args = ['/c', scriptName, 'verbose', '0', 'discover'];
+      if (targetDate) {
+        args.push(targetDate);
+      }
     }
     
     const child = spawn('cmd.exe', args, {
@@ -373,7 +407,9 @@ export async function crawlH2HLinksBatch(linksToScrape, scraperPath, options = {
     log = console.log,
     importHistoricalMatch,
     importSkippedMatch,
-    onH2HScraped
+    onH2HScraped,
+    scraper = 'matchendirect',
+    sport = 'football'
   } = options;
 
   let currentIndex = 0;
@@ -387,7 +423,7 @@ export async function crawlH2HLinksBatch(linksToScrape, scraperPath, options = {
       
       const link = linksToScrape[index];
       
-      const histMatch = await scrapeSingleMatch(scraperPath, link, true, onSpawn, socksPort);
+      const histMatch = await scrapeSingleMatch(scraperPath, link, true, onSpawn, socksPort, scraper, sport);
  
       if (histMatch && histMatch.home_team && histMatch.away_team) {
         if (importHistoricalMatch) await importHistoricalMatch(link, histMatch);

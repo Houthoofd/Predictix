@@ -33,8 +33,25 @@ export async function importScrapedMatches(matches, scrapedAt) {
       charSum += hashSeed.charCodeAt(i);
     }
     
+    const sport = (match.sport || 'football').toLowerCase().trim();
     const stableProb = 55 + (charSum % 25);
-    const cardLine = match.card_line || (charSum % 2 === 0 ? '4.5' : '5.5');
+    
+    let defaultLine = charSum % 2 === 0 ? '4.5' : '5.5';
+    if (sport !== 'football') {
+      if (sport === 'basketball') defaultLine = '165.5';
+      else if (sport === 'tennis') defaultLine = '2.5';
+      else if (sport.includes('rugby')) defaultLine = '42.5';
+      else if (sport === 'handball') defaultLine = '52.5';
+      else if (sport === 'volleyball') defaultLine = '3.5';
+      else if (sport === 'hockey' || sport === 'ice-hockey' || sport === 'futsal') defaultLine = '5.5';
+      else if (sport === 'baseball') defaultLine = '8.5';
+      else if (sport === 'american-football') defaultLine = '45.5';
+      else if (sport === 'table-tennis' || sport === 'badminton') defaultLine = '2.5';
+      else if (sport === 'snooker') defaultLine = '9.5';
+      else defaultLine = '2.5';
+    }
+
+    const cardLine = match.card_line || defaultLine;
     const bestTip = match.best_tip || (stableProb >= 66 ? 'Plus de' : 'Moins de');
     const probability = match.probability || `${stableProb}%`;
     const overOdds = match.over_odds || (bestTip === 'Plus de' ? '1.85' : '2.05');
@@ -49,8 +66,8 @@ export async function importScrapedMatches(matches, scrapedAt) {
         match_id, time, date, tournament, home_team, away_team, score,
         over_odds, under_odds, card_line, probability, best_tip, win_rate, status,
         is_live, is_finished, first_half_corners_home, first_half_corners_away, odds_corners,
-        home_logo, away_logo, historical_links, match_url, statistics_json, scraped_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        home_logo, away_logo, historical_links, match_url, statistics_json, sport, scraped_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `;
 
     await dbRun(sql, [
@@ -77,7 +94,8 @@ export async function importScrapedMatches(matches, scrapedAt) {
       match.away_logo || null,
       match.historical_links ? JSON.stringify(match.historical_links) : null,
       match.match_url || null,
-      match.statistics ? JSON.stringify(match.statistics) : null
+      match.statistics ? JSON.stringify(match.statistics) : null,
+      match.sport || 'football'
     ]);
 
     importedCount++;
@@ -112,15 +130,32 @@ export async function importHistoricalMatch(link, histMatch) {
       match_id, time, date, tournament, home_team, away_team, score,
       over_odds, under_odds, card_line, probability, best_tip, win_rate, status,
       is_live, is_finished, first_half_corners_home, first_half_corners_away, odds_corners,
-      home_logo, away_logo, is_historical, match_url, statistics_json, scraped_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      home_logo, away_logo, is_historical, match_url, statistics_json, sport, scraped_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
   `;
 
   const hashSeed = homeClean + awayClean;
   let charSum = 0;
   for (let k = 0; k < hashSeed.length; k++) charSum += hashSeed.charCodeAt(k);
+  const sport = (histMatch.sport || 'football').toLowerCase().trim();
   const stableProb = 55 + (charSum % 25);
-  const cardLine = histMatch.card_line || (charSum % 2 === 0 ? '4.5' : '5.5');
+  
+  let defaultLine = charSum % 2 === 0 ? '4.5' : '5.5';
+  if (sport !== 'football') {
+    if (sport === 'basketball') defaultLine = '165.5';
+    else if (sport === 'tennis') defaultLine = '2.5';
+    else if (sport.includes('rugby')) defaultLine = '42.5';
+    else if (sport === 'handball') defaultLine = '52.5';
+    else if (sport === 'volleyball') defaultLine = '3.5';
+    else if (sport === 'hockey' || sport === 'ice-hockey' || sport === 'futsal') defaultLine = '5.5';
+    else if (sport === 'baseball') defaultLine = '8.5';
+    else if (sport === 'american-football') defaultLine = '45.5';
+    else if (sport === 'table-tennis' || sport === 'badminton') defaultLine = '2.5';
+    else if (sport === 'snooker') defaultLine = '9.5';
+    else defaultLine = '2.5';
+  }
+
+  const cardLine = histMatch.card_line || defaultLine;
   const bestTip = histMatch.best_tip || (stableProb >= 66 ? 'Plus de' : 'Moins de');
 
   let histDate = histMatch.date || new Date().toISOString().substring(0, 10);
@@ -147,7 +182,8 @@ export async function importHistoricalMatch(link, histMatch) {
     histMatch.away_logo || null,
     1, // is_historical = 1
     histMatch.match_url || link,
-    histMatch.statistics ? JSON.stringify(histMatch.statistics) : null
+    histMatch.statistics ? JSON.stringify(histMatch.statistics) : null,
+    histMatch.sport || 'football'
   ]);
 }
 
@@ -211,7 +247,8 @@ export async function enrichPrimaryMatch(matchId, primaryDetails, targetLink, ma
       date = ?,
       time = ?,
       match_url = ?,
-      statistics_json = ?
+      statistics_json = ?,
+      sport = ?
     WHERE match_id = ?
   `, [
     primaryDetails.first_half_corners_home,
@@ -227,6 +264,7 @@ export async function enrichPrimaryMatch(matchId, primaryDetails, targetLink, ma
     pTime,
     primaryDetails.match_url || targetLink,
     primaryDetails.statistics ? JSON.stringify(primaryDetails.statistics) : null,
+    primaryDetails.sport || match.sport || 'football',
     matchId
   ]);
 

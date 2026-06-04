@@ -406,6 +406,9 @@ class ScraperController {
     }
 
     const targetDate = req.body.date || req.query.date || null;
+    const scraper = req.body.scraper || req.query.scraper || 'matchendirect';
+    const sport = req.body.sport || req.query.sport || 'football';
+    
     let formattedDate = null;
     if (targetDate) {
       const ymdMatch = targetDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -419,6 +422,7 @@ class ScraperController {
     const scraperPath = process.env.SCRAPER_PATH || 'E:\\Developpement\\scrapper-v3';
     const outputDirs = [
       path.join(scraperPath, 'data', 'matchendirect'),
+      path.join(scraperPath, 'data', 'flashscore'),
       path.join(scraperPath, 'data')
     ];
 
@@ -434,7 +438,7 @@ class ScraperController {
     try {
       const matches = await runDiscoveryProcess(scraperPath, scriptName, outputDirs, formattedDate, (child) => {
         activeScraperProcess = child;
-      });
+      }, scraper, sport);
 
       activeScraperProcess = null;
 
@@ -508,14 +512,18 @@ class ScraperController {
       }
     };
 
+    const scraper = req.body.scraper || req.query.scraper || 'matchendirect';
+    const sport = req.body.sport || req.query.sport || 'football';
+
     const scraperPath = process.env.SCRAPER_PATH || 'E:\\Developpement\\scrapper-v3';
     const outputDirs = [
       path.join(scraperPath, 'data', 'matchendirect'),
+      path.join(scraperPath, 'data', 'flashscore'),
       path.join(scraperPath, 'data', 'ratingbet'),
       path.join(scraperPath, 'data')
     ];
 
-    sendEvent('log', { message: `[Predictix] Initialisation du scraping dans : ${scraperPath}` });
+    sendEvent('log', { message: `[Predictix] Initialisation du scraping (${scraper} - ${sport}) dans : ${scraperPath}` });
     
     if (!fs.existsSync(scraperPath)) {
       sendEvent('error', { message: `Dossier du scraper introuvable à l'emplacement configuré : ${scraperPath}` });
@@ -573,12 +581,13 @@ class ScraperController {
       sendEvent('log', { message: `[Predictix] Détection réseau : ${activePorts.length} proxy Tor actifs (Ports: ${activePorts.join(', ')}).` });
 
       // 4. Discovery Phase (gets daily matches listing)
-      sendEvent('log', { message: `[Predictix] Phase 1/4 : Découverte des matchs du jour sur Match en Direct...` });
+      const sourceName = scraper === 'flashscore' ? 'Flashscore' : 'Match en Direct';
+      sendEvent('log', { message: `[Predictix] Phase 1/4 : Découverte des matchs du jour sur ${sourceName} (${sport})...` });
       
       let discoveredMatches = [];
       discoveredMatches = await runDiscoveryProcess(scraperPath, scriptName, outputDirs, formattedDate, (child) => {
         activeScraperProcess = child;
-      });
+      }, scraper, sport);
 
       activeScraperProcess = null;
 
@@ -609,7 +618,7 @@ class ScraperController {
           
           const details = await scrapeSingleMatch(scraperPath, m.href || m.match_url || m.match_id, false, (child) => {
             // Can be used to register child PID if desired
-          }, socksPort);
+          }, socksPort, scraper, sport);
           
           if (details) {
             let finalFirstHalfCornersHome = details.first_half_corners_home;
@@ -751,7 +760,9 @@ class ScraperController {
           log: (msg) => sendEvent('log', { message: msg }),
           importHistoricalMatch,
           importSkippedMatch,
-          onH2HScraped: (h2hData) => sendEvent('h2h_scraped', { h2h: h2hData })
+          onH2HScraped: (h2hData) => sendEvent('h2h_scraped', { h2h: h2hData }),
+          scraper: scraper,
+          sport: sport
         });
       }
       
@@ -785,7 +796,22 @@ class ScraperController {
             shots_on_target: 'tirs cadrés',
             shots: 'tirs',
             offsides: 'hors-jeu',
-            corners: 'corners'
+            corners: 'corners',
+            total_rebounds: 'rebonds',
+            assists: 'passes décisives',
+            blocks: 'contres',
+            steals: 'interceptions',
+            field_goals: 'paniers réussis',
+            free_throws: 'lancers francs',
+            aces: 'aces',
+            double_faults: 'doubles fautes',
+            first_serve: '1er service (%)',
+            break_points: 'balles de break',
+            tries: 'essais',
+            penalties: 'pénalités',
+            conversions: 'transformations',
+            goals: 'buts',
+            saves: 'arrêts'
           };
 
           for (const match of scrapedMatches) {

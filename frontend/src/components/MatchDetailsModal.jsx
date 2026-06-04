@@ -83,7 +83,22 @@ export default function MatchDetailsModal({
       degagements: 'Dégagements',
       rentree_de_touche: 'Touches',
       occasions_manquees: 'Occasions Manquées',
-      poteau: 'Tirs sur Poteau'
+      poteau: 'Tirs sur Poteau',
+      total_rebounds: 'Rebonds',
+      assists: 'Passes Décisives',
+      blocks: 'Contres',
+      steals: 'Interceptions',
+      field_goals: 'Paniers Réussis',
+      free_throws: 'Lancers Francs',
+      aces: 'Aces',
+      double_faults: 'Doubles Fautes',
+      first_serve: '1er Service (%)',
+      break_points: 'Balles de Break',
+      tries: 'Essais',
+      penalties: 'Pénalités',
+      conversions: 'Transformations',
+      goals: 'Buts',
+      saves: 'Arrêts'
     };
     if (titles[key]) return titles[key];
     return key
@@ -326,7 +341,22 @@ export default function MatchDetailsModal({
         degagements: 'Dégagements',
         rentree_de_touche: 'Touches',
         occasions_manquees: 'Occasions Manquées',
-        poteau: 'Tirs sur Poteau'
+        poteau: 'Tirs sur Poteau',
+        total_rebounds: 'Rebonds',
+        assists: 'Passes Décisives',
+        blocks: 'Contres',
+        steals: 'Interceptions',
+        field_goals: 'Paniers Réussis',
+        free_throws: 'Lancers Francs',
+        aces: 'Aces',
+        double_faults: 'Doubles Fautes',
+        first_serve: '1er Service (%)',
+        break_points: 'Balles de Break',
+        tries: 'Essais',
+        penalties: 'Pénalités',
+        conversions: 'Transformations',
+        goals: 'Buts',
+        saves: 'Arrêts'
       };
       if (labels[key]) return labels[key];
       return key.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');

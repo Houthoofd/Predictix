@@ -204,6 +204,18 @@ function initDb() {
     `, (err) => {
       // Ignore if exists
     });
+
+    db.run(`
+      ALTER TABLE scraped_predictions ADD COLUMN sport TEXT DEFAULT 'football'
+    `, (err) => {
+      // Ignore if exists
+    });
+
+    db.run(`
+      ALTER TABLE bets ADD COLUMN sport TEXT DEFAULT 'football'
+    `, (err) => {
+      // Ignore if exists
+    });
     
     // Retroactive status repair for finished matches currently marked as Planned
     db.run(`

@@ -126,16 +126,41 @@ export default function AddBetModal({
               </div>
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Championnat / Ligue</label>
-              <input 
-                type="text" 
-                className="form-control" 
-                placeholder="ex: Premier League, LaLiga..."
-                required
-                value={newBetForm.league}
-                onChange={(e) => setNewBetForm({ ...newBetForm, league: e.target.value })}
-              />
+            <div className="grid-2" style={{ gap: '16px' }}>
+              <div className="form-group">
+                <label className="form-label">Championnat / Ligue</label>
+                <input 
+                  type="text" 
+                  className="form-control" 
+                  placeholder="ex: Premier League, LaLiga..."
+                  required
+                  value={newBetForm.league}
+                  onChange={(e) => setNewBetForm({ ...newBetForm, league: e.target.value })}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Sport</label>
+                <select 
+                  className="form-control"
+                  value={newBetForm.sport || 'football'}
+                  onChange={(e) => setNewBetForm({ ...newBetForm, sport: e.target.value })}
+                >
+                  <option value="football">Football</option>
+                  <option value="basketball">Basketball</option>
+                  <option value="tennis">Tennis</option>
+                  <option value="rugby">Rugby</option>
+                  <option value="handball">Handball</option>
+                  <option value="volleyball">Volleyball</option>
+                  <option value="hockey">Hockey sur glace</option>
+                  <option value="baseball">Baseball</option>
+                  <option value="american-football">Football Américain</option>
+                  <option value="table-tennis">Tennis de table</option>
+                  <option value="badminton">Badminton</option>
+                  <option value="cricket">Cricket</option>
+                  <option value="snooker">Snooker</option>
+                  <option value="futsal">Futsal</option>
+                </select>
+              </div>
             </div>
 
             <div className="grid-2" style={{ gap: '16px' }}>

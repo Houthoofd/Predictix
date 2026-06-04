@@ -58,6 +58,8 @@ export default function App() {
   const [currentDeep, setCurrentDeep] = useState(0);
   const [totalDeep, setTotalDeep] = useState(0);
   const [scraperTargetDate, setScraperTargetDate] = useState('');
+  const [selectedScraperSource, setSelectedScraperSource] = useState('matchendirect');
+  const [selectedScraperSport, setSelectedScraperSport] = useState('football');
   const [liveScrapedMatches, setLiveScrapedMatches] = useState([]);
   
   // Modals state
@@ -66,7 +68,7 @@ export default function App() {
   const [editBetForm, setEditBetForm] = useState({
     id: '', match_id: '', date: '', time: '', league: '', home_team: '', away_team: '',
     best_tip: 'Over', card_line: 4.5, odds: 1.85, stake: 50, probability: '',
-    bookmaker: 'Unibet', status: 'PENDING', notes: '', match_url: ''
+    bookmaker: 'Unibet', status: 'PENDING', notes: '', match_url: '', sport: 'football'
   });
   const [betPlacedSuccess, setBetPlacedSuccess] = useState(false);
   const [showResetBankrollModal, setShowResetBankrollModal] = useState(false);
@@ -158,7 +160,7 @@ export default function App() {
   const [newBetForm, setNewBetForm] = useState({
     match_id: '', date: '', time: '', league: '', home_team: '', away_team: '',
     best_tip: 'Over', card_line: 4.5, odds: 1.85, stake: 50, probability: '',
-    bookmaker: 'Unibet', status: 'PENDING', notes: '', match_url: ''
+    bookmaker: 'Unibet', status: 'PENDING', notes: '', match_url: '', sport: 'football'
   });
   const [resetAmount, setResetAmount] = useState('1000');
   
@@ -429,7 +431,7 @@ export default function App() {
           setNewBetForm({
             match_id: '', date: '', time: '', league: '', home_team: '', away_team: '',
             best_tip: 'Over', card_line: 4.5, odds: 1.85, stake: 50, probability: '',
-            bookmaker: 'Unibet', status: 'PENDING', notes: '', match_url: ''
+            bookmaker: 'Unibet', status: 'PENDING', notes: '', match_url: '', sport: 'football'
           });
         }, 1500);
       } else {
@@ -538,7 +540,8 @@ export default function App() {
       bookmaker: bet.bookmaker || 'Unibet',
       status: bet.status || 'PENDING',
       notes: bet.notes || '',
-      match_url: bet.match_url || ''
+      match_url: bet.match_url || '',
+      sport: bet.sport || 'football'
     });
     setShowEditBetModal(true);
   };
@@ -563,7 +566,8 @@ export default function App() {
           probability: editBetForm.probability ? parseInt(editBetForm.probability) : null,
           bookmaker: editBetForm.bookmaker,
           status: editBetForm.status,
-          notes: editBetForm.notes
+          notes: editBetForm.notes,
+          sport: editBetForm.sport
         })
       });
       const json = await res.json();
@@ -733,8 +737,9 @@ export default function App() {
       probability: isNaN(probNum) ? '' : probNum,
       bookmaker: 'Unibet',
       status: 'PENDING',
-      notes: pred.notes || `Placé depuis la prédiction Match en Direct (Probabilité: ${pred.probability}, Taux de réussite historique: ${pred.win_rate})`,
-      match_url: pred.match_url || ''
+      notes: pred.notes || `Placé depuis la prédiction Predictix (Probabilité: ${pred.probability}, Taux de réussite historique: ${pred.win_rate})`,
+      match_url: pred.match_url || '',
+      sport: pred.sport || 'football'
     });
     setPrefilledBet(pred);
     setShowAddBetModal(true);
@@ -978,12 +983,13 @@ export default function App() {
     setTotalDeep(0);
     setLiveScrapedMatches([]);
     const dateLogSuffix = scraperTargetDate ? ` pour la date ${scraperTargetDate}` : " du jour";
-    setScraperLogs([{ message: `[Predictix] Lancement de la découverte des matchs${dateLogSuffix}...`, type: 'system' }]);
+    const sourceName = selectedScraperSource === 'flashscore' ? `Flashscore (${selectedScraperSport})` : "Match en Direct";
+    setScraperLogs([{ message: `[Predictix] Lancement de la découverte des matchs ${dateLogSuffix} via ${sourceName}...`, type: 'system' }]);
     showToast("Découverte des matchs lancée...", "info");
     
     try {
-      const queryParams = scraperTargetDate ? `?date=${scraperTargetDate}` : '';
-      const response = await fetch(`/api/predictions/scrape/discover${queryParams}`, { 
+      const dateParam = scraperTargetDate ? `&date=${scraperTargetDate}` : '';
+      const response = await fetch(`/api/predictions/scrape/discover?scraper=${selectedScraperSource}&sport=${selectedScraperSport}${dateParam}`, { 
         method: 'POST'
       });
       const json = await response.json();
@@ -1041,7 +1047,9 @@ export default function App() {
         body: JSON.stringify({ 
           limit: selectedLimit,
           strategyId: selectedScraperStrategyId || null,
-          date: scraperTargetDate || null
+          date: scraperTargetDate || null,
+          scraper: selectedScraperSource,
+          sport: selectedScraperSport
         })
       });
       if (!response.body) {
@@ -1328,6 +1336,10 @@ export default function App() {
                   scraperTargetDate={scraperTargetDate}
                   setScraperTargetDate={setScraperTargetDate}
                   liveScrapedMatches={liveScrapedMatches}
+                  selectedScraperSource={selectedScraperSource}
+                  setSelectedScraperSource={setSelectedScraperSource}
+                  selectedScraperSport={selectedScraperSport}
+                  setSelectedScraperSport={setSelectedScraperSport}
                 />
               )}
 
