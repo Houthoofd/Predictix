@@ -20,6 +20,7 @@ import StrategiesTab from './components/StrategiesTab';
 import BasketTab from './components/BasketTab';
 import IntegrityTab from './components/IntegrityTab';
 import AddBetModal from './components/AddBetModal';
+import EditBetModal from './components/EditBetModal';
 import ResetBankrollModal from './components/ResetBankrollModal';
 import MatchDetailsModal from './components/MatchDetailsModal';
 import BatchBetsModal from './components/BatchBetsModal';
@@ -61,6 +62,12 @@ export default function App() {
   
   // Modals state
   const [showAddBetModal, setShowAddBetModal] = useState(false);
+  const [showEditBetModal, setShowEditBetModal] = useState(false);
+  const [editBetForm, setEditBetForm] = useState({
+    id: '', match_id: '', date: '', time: '', league: '', home_team: '', away_team: '',
+    best_tip: 'Over', card_line: 4.5, odds: 1.85, stake: 50, probability: '',
+    bookmaker: 'Unibet', status: 'PENDING', notes: '', match_url: ''
+  });
   const [betPlacedSuccess, setBetPlacedSuccess] = useState(false);
   const [showResetBankrollModal, setShowResetBankrollModal] = useState(false);
   const [prefilledBet, setPrefilledBet] = useState(null); // Used to place bet from prediction
@@ -511,6 +518,66 @@ export default function App() {
         }
       });
     });
+  };
+
+  // Open Edit Bet Modal and prefill with current data
+  const handleOpenEditBetModal = (bet) => {
+    setEditBetForm({
+      id: bet.id,
+      match_id: bet.match_id || '',
+      date: bet.date || '',
+      time: bet.time || '',
+      league: bet.league || '',
+      home_team: bet.home_team || '',
+      away_team: bet.away_team || '',
+      best_tip: bet.best_tip || 'Over',
+      card_line: bet.card_line !== undefined && bet.card_line !== null ? bet.card_line : 4.5,
+      odds: bet.odds !== undefined && bet.odds !== null ? bet.odds : 1.85,
+      stake: bet.stake !== undefined && bet.stake !== null ? bet.stake : 50,
+      probability: bet.probability !== undefined && bet.probability !== null ? bet.probability : '',
+      bookmaker: bet.bookmaker || 'Unibet',
+      status: bet.status || 'PENDING',
+      notes: bet.notes || '',
+      match_url: bet.match_url || ''
+    });
+    setShowEditBetModal(true);
+  };
+
+  // Submit edited bet details
+  const handleEditBet = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await fetch(`/api/bets/${editBetForm.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: editBetForm.date,
+          time: editBetForm.time,
+          league: editBetForm.league,
+          home_team: editBetForm.home_team,
+          away_team: editBetForm.away_team,
+          best_tip: editBetForm.best_tip,
+          card_line: parseFloat(editBetForm.card_line),
+          odds: parseFloat(editBetForm.odds),
+          stake: parseFloat(editBetForm.stake),
+          probability: editBetForm.probability ? parseInt(editBetForm.probability) : null,
+          bookmaker: editBetForm.bookmaker,
+          status: editBetForm.status,
+          notes: editBetForm.notes
+        })
+      });
+      const json = await res.json();
+      if (json.success) {
+        setShowEditBetModal(false);
+        await fetchAllData();
+        showToast("Pari mis à jour avec succès !", "success");
+      } else {
+        showToast("Erreur: " + json.error.message, "error");
+      }
+    } catch (err) {
+      console.error("Error editing bet:", err);
+      showToast("Erreur lors de la modification du pari: " + err.message, "error");
+    }
   };
 
   // Auto-refresh a single bet outcome by scraping Matchendirect
@@ -1291,6 +1358,7 @@ export default function App() {
                   globalRefreshLoading={globalRefreshLoading}
                   subTab={trackerSubTab}
                   setSubTab={setTrackerSubTab}
+                  onOpenEditBetModal={handleOpenEditBetModal}
                 />
               )}
 
@@ -1335,6 +1403,15 @@ export default function App() {
           handleAddBet={handleAddBet}
           bankroll={bankroll}
           betPlacedSuccess={betPlacedSuccess}
+        />
+
+        <EditBetModal 
+          showEditBetModal={showEditBetModal}
+          setShowEditBetModal={setShowEditBetModal}
+          editBetForm={editBetForm}
+          setEditBetForm={setEditBetForm}
+          handleEditBet={handleEditBet}
+          bankroll={bankroll}
         />
 
         <ResetBankrollModal 

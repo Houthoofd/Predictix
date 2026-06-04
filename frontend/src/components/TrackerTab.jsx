@@ -11,7 +11,8 @@ import {
   PieChart,
   Calendar,
   Filter,
-  ArrowUpRight
+  ArrowUpRight,
+  Edit
 } from 'lucide-react';
 
 export default function TrackerTab({ 
@@ -25,7 +26,8 @@ export default function TrackerTab({
   betRefreshLoading = {},
   globalRefreshLoading = false,
   subTab = 'journal',
-  setSubTab
+  setSubTab,
+  onOpenEditBetModal
 }) {
   const [activeKebabId, setActiveKebabId] = React.useState(null);
   const [localSubTab, setLocalSubTab] = React.useState('journal');
@@ -450,29 +452,8 @@ export default function TrackerTab({
                           </span>
                         ) : '-'}
                       </td>
-                      <td>
+                      <td style={{ position: 'relative' }}>
                         <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' }}>
-                          {bet.match_id ? (
-                            <button 
-                              className="btn btn-secondary" 
-                              style={{ padding: '4px 8px', color: 'var(--color-accent-solid)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                              onClick={() => handleRefreshBet(bet.id)}
-                              disabled={betRefreshLoading[bet.id]}
-                              title="Auto-résoudre le score via Matchendirect"
-                            >
-                              <RefreshCw size={13} className={betRefreshLoading[bet.id] ? 'animate-spin' : ''} />
-                            </button>
-                          ) : (
-                            <button 
-                              className="btn btn-secondary" 
-                              style={{ padding: '4px 8px', color: 'var(--text-muted)', cursor: 'not-allowed', opacity: 0.5, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                              disabled
-                              title="Indisponible pour les paris manuels (sans ID match)"
-                            >
-                              <RefreshCw size={13} />
-                            </button>
-                          )}
-                          
                           <button 
                             className="btn btn-accent" 
                             style={{ padding: '4px 10px', fontSize: '12px', background: 'var(--color-success)', color: 'white' }}
@@ -491,22 +472,131 @@ export default function TrackerTab({
                             <X size={14} />
                             <span>Perte</span>
                           </button>
+                          
                           <button 
                             className="btn btn-secondary" 
-                            style={{ padding: '4px 6px', fontSize: '11px' }}
-                            onClick={() => handleSettleBet(bet.id, 'REFUNDED')}
-                            title="Annulé/Remboursé"
+                            style={{ padding: '4px 6px', border: 'none', color: 'var(--text-secondary)' }}
+                            onClick={(e) => toggleKebab(e, bet.id)}
+                            title="Plus d'actions"
                           >
-                            Remb.
+                            <MoreVertical size={16} />
                           </button>
-                          <button 
-                            className="btn btn-secondary" 
-                            style={{ padding: '4px 6px', color: 'var(--color-danger)' }}
-                            onClick={() => handleDeleteBet(bet.id)}
-                            title="Supprimer"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+
+                          {activeKebabId === bet.id && (
+                            <div className="glass-card" style={{ 
+                              position: 'absolute', 
+                              top: '100%', 
+                              right: '16px', 
+                              zIndex: 100, 
+                              minWidth: '170px', 
+                              padding: '6px 0', 
+                              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.4)', 
+                              borderRadius: '6px',
+                              background: '#0f172a',
+                              border: '1px solid var(--border-color)',
+                              textAlign: 'left'
+                            }}>
+                              {bet.match_id && (
+                                <button 
+                                  style={{ 
+                                    width: '100%', 
+                                    padding: '8px 14px', 
+                                    background: 'transparent', 
+                                    border: 'none', 
+                                    color: 'var(--text-primary)', 
+                                    fontSize: '12.5px', 
+                                    textAlign: 'left', 
+                                    cursor: betRefreshLoading[bet.id] ? 'not-allowed' : 'pointer', 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    gap: '8px',
+                                    opacity: betRefreshLoading[bet.id] ? 0.7 : 1
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (!betRefreshLoading[bet.id]) {
+                                      handleRefreshBet(bet.id);
+                                      setActiveKebabId(null);
+                                    }
+                                  }}
+                                  className="kebab-item"
+                                  disabled={betRefreshLoading[bet.id]}
+                                >
+                                  <RefreshCw size={14} className={betRefreshLoading[bet.id] ? 'animate-spin' : ''} style={{ color: 'var(--color-accent-solid)' }} />
+                                  <span>Auto-résoudre</span>
+                                </button>
+                              )}
+                              <button 
+                                style={{ 
+                                  width: '100%', 
+                                  padding: '8px 14px', 
+                                  background: 'transparent', 
+                                  border: 'none', 
+                                  color: 'var(--text-primary)', 
+                                  fontSize: '12.5px', 
+                                  textAlign: 'left', 
+                                  cursor: 'pointer', 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  gap: '8px' 
+                                }}
+                                onClick={() => {
+                                  handleSettleBet(bet.id, 'REFUNDED');
+                                  setActiveKebabId(null);
+                                }}
+                                className="kebab-item"
+                              >
+                                <X size={14} style={{ color: 'var(--text-muted)' }} />
+                                <span>Annulé/Remboursé</span>
+                              </button>
+                              <button 
+                                style={{ 
+                                  width: '100%', 
+                                  padding: '8px 14px', 
+                                  background: 'transparent', 
+                                  border: 'none', 
+                                  color: 'var(--text-primary)', 
+                                  fontSize: '12.5px', 
+                                  textAlign: 'left', 
+                                  cursor: 'pointer', 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  gap: '8px' 
+                                }}
+                                onClick={() => {
+                                  if (onOpenEditBetModal) onOpenEditBetModal(bet);
+                                  setActiveKebabId(null);
+                                }}
+                                className="kebab-item"
+                              >
+                                <Edit size={14} style={{ color: 'var(--color-accent-solid)' }} />
+                                <span>Modifier</span>
+                              </button>
+                              <button 
+                                style={{ 
+                                  width: '100%', 
+                                  padding: '8px 14px', 
+                                  background: 'transparent', 
+                                  border: 'none', 
+                                  color: 'var(--color-danger)', 
+                                  fontSize: '12.5px', 
+                                  textAlign: 'left', 
+                                  cursor: 'pointer', 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  gap: '8px' 
+                                }}
+                                onClick={() => {
+                                  handleDeleteBet(bet.id);
+                                  setActiveKebabId(null);
+                                }}
+                                className="kebab-item"
+                              >
+                                <Trash2 size={14} />
+                                <span>Supprimer</span>
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -631,6 +721,29 @@ export default function TrackerTab({
                               border: '1px solid var(--border-color)',
                               textAlign: 'left'
                             }}>
+                              <button 
+                                style={{ 
+                                  width: '100%', 
+                                  padding: '8px 14px', 
+                                  background: 'transparent', 
+                                  border: 'none', 
+                                  color: 'var(--text-primary)', 
+                                  fontSize: '12.5px', 
+                                  textAlign: 'left', 
+                                  cursor: 'pointer', 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  gap: '8px' 
+                                }}
+                                onClick={() => {
+                                  if (onOpenEditBetModal) onOpenEditBetModal(bet);
+                                  setActiveKebabId(null);
+                                }}
+                                className="kebab-item"
+                              >
+                                <Edit size={14} style={{ color: 'var(--color-accent-solid)' }} />
+                                <span>Modifier</span>
+                              </button>
                               <button 
                                 style={{ 
                                   width: '100%', 
