@@ -5,7 +5,8 @@ export default function MatchDetailsModal({
   selectedMatchDetails,
   setSelectedMatchDetails,
   crawlLoading,
-  handleCrawlHistory
+  handleCrawlHistory,
+  handleQuickPlaceBet
 }) {
   // Lock/Unlock body scroll when modal is shown to avoid background scroll chaining
   React.useEffect(() => {
@@ -29,6 +30,35 @@ export default function MatchDetailsModal({
   const [userOdds, setUserOdds] = React.useState({});
   const [customLineInput, setCustomLineInput] = React.useState('');
   const [customLines, setCustomLines] = React.useState([]);
+  const [hoveredRowKey, setHoveredRowKey] = React.useState(null);
+
+  const handlePlaceBetFromSimulator = (line, option, prob, fairOdds, bookieOdds, customOddsInputVal) => {
+    if (!handleQuickPlaceBet) return;
+    
+    const isOver = option === 'Over';
+    const oddsVal = parseFloat(customOddsInputVal);
+    const selectedOdds = !isNaN(oddsVal) && oddsVal > 0 ? oddsVal : parseFloat(bookieOdds);
+
+    const pred = {
+      match_id: selectedMatchDetails.match_id,
+      date: selectedMatchDetails.date,
+      time: selectedMatchDetails.time,
+      tournament: selectedMatchDetails.tournament,
+      home_team: selectedMatchDetails.home_team,
+      away_team: selectedMatchDetails.away_team,
+      best_tip: option,
+      card_line: line,
+      probability: `${Math.round(prob * 100)}%`,
+      win_rate: 'N/A',
+      over_odds: isOver ? selectedOdds : 1.85,
+      under_odds: !isOver ? selectedOdds : 1.85,
+      match_url: selectedMatchDetails.match_url || '',
+      notes: `Simulation Poisson - ${getMetricTitle(activeMetric)} [${simPeriod === 'first_half' ? '1ère MT' : simPeriod === 'second_half' ? '2ème MT' : 'Match Entier'}]. Option: ${option === 'Over' ? 'Plus de' : 'Moins de'} ${line} (Probabilité: ${Math.round(prob * 100)}%, Cote Estimée: ${bookieOdds.toFixed(2)}, Cote Juste: ${fairOdds.toFixed(2)})`
+    };
+
+    handleQuickPlaceBet(pred);
+    setSelectedMatchDetails(null); // Fermer la modal de détails
+  };
 
   function getMetricTitle(key) {
     const titles = {
@@ -1270,8 +1300,21 @@ export default function MatchDetailsModal({
                       return (
                         <React.Fragment key={line}>
                           {/* OVER ROW */}
-                          <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.015)' }}>
-                            <td style={{ padding: '6px 4px', fontWeight: 800 }} rowSpan={2}>
+                          <tr 
+                            style={{ 
+                              borderBottom: '1px solid rgba(255,255,255,0.015)',
+                              cursor: 'pointer',
+                              background: hoveredRowKey === overKey ? 'rgba(255, 255, 255, 0.04)' : 'transparent',
+                              transition: 'background-color 0.15s ease'
+                            }}
+                            onMouseEnter={() => setHoveredRowKey(overKey)}
+                            onMouseLeave={() => setHoveredRowKey(null)}
+                            onClick={(e) => {
+                              if (e.target.tagName === 'INPUT') return;
+                              handlePlaceBetFromSimulator(line, 'Over', overProb, fairOver, bookieOver, userOdds[overKey]);
+                            }}
+                          >
+                            <td style={{ padding: '6px 4px', fontWeight: 800 }} rowSpan={2} onClick={(e) => e.stopPropagation()}>
                               {line}
                             </td>
                             <td style={{ padding: '6px 4px', textAlign: 'center', color: '#10b981', fontWeight: 700 }}>
@@ -1310,7 +1353,20 @@ export default function MatchDetailsModal({
                             </td>
                           </tr>
                           {/* UNDER ROW */}
-                          <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                          <tr 
+                            style={{ 
+                              borderBottom: '1px solid rgba(255,255,255,0.03)',
+                              cursor: 'pointer',
+                              background: hoveredRowKey === underKey ? 'rgba(255, 255, 255, 0.04)' : 'transparent',
+                              transition: 'background-color 0.15s ease'
+                            }}
+                            onMouseEnter={() => setHoveredRowKey(underKey)}
+                            onMouseLeave={() => setHoveredRowKey(null)}
+                            onClick={(e) => {
+                              if (e.target.tagName === 'INPUT') return;
+                              handlePlaceBetFromSimulator(line, 'Under', underProb, fairUnder, bookieUnder, userOdds[underKey]);
+                            }}
+                          >
                             <td style={{ padding: '6px 4px', textAlign: 'center', color: '#bf5af2', fontWeight: 700 }}>
                               Moins de
                             </td>

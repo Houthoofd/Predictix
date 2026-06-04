@@ -575,6 +575,26 @@ router.put('/bets/:id', async (req, res) => {
   }
 });
 
+// Delete multiple bets
+router.post('/bets/delete-batch', async (req, res) => {
+  const { ids } = req.body;
+  if (!ids || !Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ success: false, error: { message: 'Missing or invalid ids array' } });
+  }
+
+  try {
+    const placeholders = ids.map(() => '?').join(',');
+    await dbRun(`DELETE FROM bets WHERE id IN (${placeholders})`, ids);
+    
+    // Sync bankroll
+    await syncBankroll();
+
+    res.json({ success: true, message: `${ids.length} bets deleted successfully` });
+  } catch (error) {
+    res.status(500).json({ success: false, error: { message: error.message } });
+  }
+});
+
 // Delete a bet
 router.delete('/bets/:id', async (req, res) => {
   const { id } = req.params;

@@ -760,7 +760,145 @@ class ScraperController {
       // 8. Clean up Tor processes
       await cleanupSpawnedTor((msg) => sendEvent('log', { message: msg }));
 
-      sendEvent('complete', { count: importedCount, settledBets: settledBetsList });
+      // Evaluate custom strategies for scraped matches to detect magic predictions
+      const sessionSignals = [];
+      try {
+        const activeStrategies = await dbQuery("SELECT * FROM custom_strategies WHERE status = 'ACTIVE'");
+        if (activeStrategies.length > 0) {
+          const coverageRows = await dbQuery(`
+            SELECT 
+              tournament,
+              ROUND(CAST(SUM(CASE WHEN statistics_json IS NOT NULL THEN 1 ELSE 0 END) AS REAL) / COUNT(*) * 100, 1) as coverage_rate
+            FROM scraped_predictions
+            WHERE is_historical = 0 AND is_finished = 1
+            GROUP BY tournament
+          `);
+          const coverageMap = new Map();
+          for (const row of coverageRows) {
+            coverageMap.set(row.tournament, row.coverage_rate);
+          }
+
+          const metricLabels = {
+            fouls: 'fautes',
+            yellow_cards: 'cartons jaunes',
+            possession: 'possession',
+            shots_on_target: 'tirs cadrés',
+            shots: 'tirs',
+            offsides: 'hors-jeu',
+            corners: 'corners'
+          };
+
+          for (const match of scrapedMatches) {
+            const leagueCoverage = coverageMap.has(match.tournament) ? coverageMap.get(match.tournament) : 100.0;
+            if (leagueCoverage < 50.0) continue;
+
+            const h2hMatches = await dbQuery(`
+              SELECT * FROM scraped_predictions 
+              WHERE is_finished = 1 
+                AND ((home_team = ? AND away_team = ?) OR (home_team = ? AND away_team = ?))
+              ORDER BY date DESC LIMIT 15
+            `, [match.home_team, match.away_team, match.away_team, match.home_team]);
+
+            if (h2hMatches.length === 0) continue;
+
+            for (const strategy of activeStrategies) {
+              let conditions = {};
+              try {
+                conditions = JSON.parse(strategy.conditions_json);
+              } catch (e) {
+                continue;
+              }
+
+              const limit = conditions.limit || 5;
+              const metric = strategy.metric;
+              const operator = conditions.operator || '>=';
+              const threshold = parseFloat(conditions.threshold);
+
+              let values = [];
+              for (const h2h of h2hMatches) {
+                if (values.length >= limit) break;
+                let stats = null;
+                try {
+                  if (h2h.statistics_json) {
+                    stats = JSON.parse(h2h.statistics_json);
+                  }
+                } catch (e) {
+                  continue;
+                }
+                if (!stats) continue;
+
+                if (metric === 'possession') {
+                  if (stats.possession && stats.possession.home !== undefined && stats.possession.away !== undefined) {
+                    const val = (h2h.home_team === match.home_team) 
+                      ? parseFloat(stats.possession.home) 
+                      : parseFloat(stats.possession.away);
+                    values.push(val);
+                  }
+                } else {
+                  if (stats[metric] && stats[metric].home !== undefined && stats[metric].away !== undefined) {
+                    const val = parseFloat(stats[metric].home) + parseFloat(stats[metric].away);
+                    values.push(val);
+                  }
+                }
+              }
+
+              if (values.length === 0) continue;
+
+              const sum = values.reduce((acc, curr) => acc + curr, 0);
+              const avg = parseFloat((sum / values.length).toFixed(1));
+
+              let qualified = false;
+              if (operator === '>=' || operator === '>=') {
+                qualified = avg >= threshold;
+              } else if (operator === '<=') {
+                qualified = avg <= threshold;
+              } else if (operator === '>') {
+                qualified = avg > threshold;
+              } else if (operator === '<') {
+                qualified = avg < threshold;
+              }
+
+              if (qualified) {
+                const metricLabel = metricLabels[metric] || metric;
+                const readableOp = operator === '>=' ? 'au moins' : (operator === '<=' ? 'maximum' : operator);
+                let rationale = '';
+                if (metric === 'possession') {
+                  rationale = `Sélectionné par la stratégie "${strategy.name}" car la possession moyenne de ${match.home_team} sur les ${values.length} dernières confrontations H2H est de ${avg}% (seuil requis ${readableOp} ${threshold}%).`;
+                } else {
+                  rationale = `Détecté par la stratégie "${strategy.name}" car la moyenne cumulée de ${metricLabel} sur les ${values.length} dernières confrontations H2H est de ${avg} (seuil requis ${readableOp} ${threshold}).`;
+                }
+
+                sessionSignals.push({
+                  id: `${match.match_id}_${strategy.id}`,
+                  match_id: match.match_id,
+                  time: match.time,
+                  date: match.date,
+                  tournament: match.tournament,
+                  home_team: match.home_team,
+                  away_team: match.away_team,
+                  home_logo: match.home_logo,
+                  away_logo: match.away_logo,
+                  score: match.score,
+                  match_url: match.match_url,
+                  strategy_id: strategy.id,
+                  strategy_name: strategy.name,
+                  metric: metric,
+                  prompt: strategy.prompt,
+                  avg_value: avg,
+                  threshold: threshold,
+                  operator: operator,
+                  rationale: rationale,
+                  scraped_at: match.scraped_at || new Date().toISOString()
+                });
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Error evaluating session magic predictions:", err.message);
+      }
+
+      sendEvent('complete', { count: importedCount, settledBets: settledBetsList, magicPredictions: sessionSignals });
     } catch (err) {
       console.error('Error during scraping execution:', err);
       sendEvent('error', { message: `Le scraper a rencontré une erreur : ${err.message}` });

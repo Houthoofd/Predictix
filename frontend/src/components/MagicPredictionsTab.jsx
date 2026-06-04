@@ -530,7 +530,7 @@ export default function MagicPredictionsTab({
 
   React.useEffect(() => {
     fetchSignals();
-  }, [minCoverage]);
+  }, [minCoverage, predictions]);
 
   const getMetricBadgeStyle = (metric) => {
     switch (metric) {

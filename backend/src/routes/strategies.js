@@ -515,7 +515,7 @@ router.get('/predictions/magic', async (req, res) => {
     // 3. For each upcoming match, check active strategies
     for (const match of upcomingMatches) {
       // Check league coverage rate first
-      const leagueCoverage = coverageMap.get(match.tournament) || 0.0;
+      const leagueCoverage = coverageMap.has(match.tournament) ? coverageMap.get(match.tournament) : 100.0;
       if (leagueCoverage < minCoverage) {
         continue;
       }

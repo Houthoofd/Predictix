@@ -19,6 +19,7 @@ export default function TrackerTab({
   stats, 
   handleSettleBet, 
   handleDeleteBet,
+  handleDeleteMultipleBets,
   handleRefreshBet,
   handleRefreshAllBets,
   betRefreshLoading = {},
@@ -28,6 +29,7 @@ export default function TrackerTab({
 }) {
   const [activeKebabId, setActiveKebabId] = React.useState(null);
   const [localSubTab, setLocalSubTab] = React.useState('journal');
+  const [selectedBetIds, setSelectedBetIds] = React.useState([]);
   
   // Use prop or local fallback
   const activeSubTab = setSubTab ? subTab : localSubTab;
@@ -321,6 +323,49 @@ export default function TrackerTab({
 
       {activeSubTab === 'journal' ? (
         <>
+          {selectedBetIds.length > 0 && (
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              background: 'rgba(239, 68, 68, 0.08)',
+              border: '1px solid rgba(239, 68, 68, 0.2)',
+              padding: '12px 20px',
+              borderRadius: '8px',
+              color: '#fff',
+              fontFamily: 'Outfit',
+              fontSize: '13px',
+              fontWeight: 600,
+              marginBottom: '16px',
+              boxShadow: '0 4px 15px rgba(239, 68, 68, 0.05)'
+            }}>
+              <span>{selectedBetIds.length} pari(s) sélectionné(s)</span>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button 
+                  className="btn btn-secondary" 
+                  style={{ fontSize: '11px', padding: '4px 10px' }} 
+                  onClick={() => setSelectedBetIds([])}
+                >
+                  Annuler la sélection
+                </button>
+                <button 
+                  className="btn btn-danger" 
+                  style={{ fontSize: '11px', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '4px' }} 
+                  onClick={() => {
+                    if (handleDeleteMultipleBets) {
+                      handleDeleteMultipleBets(selectedBetIds).then(success => {
+                        if (success) setSelectedBetIds([]);
+                      });
+                    }
+                  }}
+                >
+                  <Trash2 size={13} />
+                  Supprimer la sélection
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Active/Pending Bets section */}
           <div className="glass-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
@@ -342,6 +387,22 @@ export default function TrackerTab({
               <table className="premium-table">
                 <thead>
                   <tr>
+                    <th style={{ width: '40px', textAlign: 'center' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={pendingBets.length > 0 && pendingBets.every(b => selectedBetIds.includes(b.id))}
+                        onChange={() => {
+                          const pendingIds = pendingBets.map(b => b.id);
+                          const allSelected = pendingBets.every(b => selectedBetIds.includes(b.id));
+                          if (allSelected) {
+                            setSelectedBetIds(prev => prev.filter(id => !pendingIds.includes(id)));
+                          } else {
+                            setSelectedBetIds(prev => Array.from(new Set([...prev, ...pendingIds])));
+                          }
+                        }}
+                        style={{ cursor: 'pointer', accentColor: '#bf5af2' }}
+                      />
+                    </th>
                     <th>Date</th>
                     <th>Match</th>
                     <th>Championnat</th>
@@ -354,8 +415,22 @@ export default function TrackerTab({
                   </tr>
                 </thead>
                 <tbody>
-                  {bets.filter(b => b.status === 'PENDING').map((bet) => (
-                    <tr key={bet.id}>
+                  {bets.filter(b => b.status === 'PENDING').map((bet) => {
+                    const isSelected = selectedBetIds.includes(bet.id);
+                    return (
+                      <tr key={bet.id} style={{ background: isSelected ? 'rgba(191, 90, 242, 0.04)' : undefined }}>
+                        <td style={{ textAlign: 'center' }}>
+                          <input 
+                            type="checkbox" 
+                            checked={isSelected}
+                            onChange={() => {
+                              setSelectedBetIds(prev => 
+                                prev.includes(bet.id) ? prev.filter(id => id !== bet.id) : [...prev, bet.id]
+                              );
+                            }}
+                            style={{ cursor: 'pointer', accentColor: '#bf5af2' }}
+                          />
+                        </td>
                       <td style={{ fontSize: '12.5px', fontFamily: 'Outfit' }}>
                         <div style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{bet.date}</div>
                         {bet.time && bet.time !== 'Planned' && (
@@ -435,10 +510,11 @@ export default function TrackerTab({
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  );
+                  })}
                   {bets.filter(b => b.status === 'PENDING').length === 0 && (
                     <tr>
-                      <td colSpan="9" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '24px 0' }}>
+                      <td colSpan="10" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '24px 0' }}>
                         Aucun pari actif en attente de résultat.
                       </td>
                     </tr>
@@ -456,6 +532,22 @@ export default function TrackerTab({
               <table className="premium-table">
                 <thead>
                   <tr>
+                    <th style={{ width: '40px', textAlign: 'center' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={completedBets.length > 0 && completedBets.every(b => selectedBetIds.includes(b.id))}
+                        onChange={() => {
+                          const completedIds = completedBets.map(b => b.id);
+                          const allSelected = completedBets.every(b => selectedBetIds.includes(b.id));
+                          if (allSelected) {
+                            setSelectedBetIds(prev => prev.filter(id => !completedIds.includes(id)));
+                          } else {
+                            setSelectedBetIds(prev => Array.from(new Set([...prev, ...completedIds])));
+                          }
+                        }}
+                        style={{ cursor: 'pointer', accentColor: '#bf5af2' }}
+                      />
+                    </th>
                     <th>Date</th>
                     <th>Match</th>
                     <th>Ligue</th>
@@ -474,8 +566,22 @@ export default function TrackerTab({
                     if (bet.status === 'WON') profit = bet.stake * (bet.odds - 1);
                     else if (bet.status === 'LOST') profit = -bet.stake;
 
+                    const isSelected = selectedBetIds.includes(bet.id);
+
                     return (
-                      <tr key={bet.id}>
+                      <tr key={bet.id} style={{ background: isSelected ? 'rgba(191, 90, 242, 0.04)' : undefined }}>
+                        <td style={{ textAlign: 'center' }}>
+                          <input 
+                            type="checkbox" 
+                            checked={isSelected}
+                            onChange={() => {
+                              setSelectedBetIds(prev => 
+                                prev.includes(bet.id) ? prev.filter(id => id !== bet.id) : [...prev, bet.id]
+                              );
+                            }}
+                            style={{ cursor: 'pointer', accentColor: '#bf5af2' }}
+                          />
+                        </td>
                         <td style={{ fontSize: '12.5px', fontFamily: 'Outfit' }}>
                           <div style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{bet.date}</div>
                           {bet.time && bet.time !== 'Planned' && (
@@ -579,7 +685,7 @@ export default function TrackerTab({
                   })}
                   {bets.filter(b => b.status !== 'PENDING').length === 0 && (
                     <tr>
-                      <td colSpan="10" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '24px 0' }}>
+                      <td colSpan="11" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '24px 0' }}>
                         Historique vide.
                       </td>
                     </tr>

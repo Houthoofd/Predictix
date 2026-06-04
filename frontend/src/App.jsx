@@ -476,6 +476,43 @@ export default function App() {
     });
   };
 
+  // Delete Multiple Bets
+  const handleDeleteMultipleBets = async (ids) => {
+    return new Promise((resolve) => {
+      showConfirm({
+        title: "Supprimer les Paris Sélectionnés",
+        message: `Voulez-vous vraiment supprimer les ${ids.length} paris sélectionnés ? Cette action est irréversible.`,
+        confirmText: "Supprimer tout",
+        isDanger: true,
+        onConfirm: async () => {
+          try {
+            const res = await fetch('/api/bets/delete-batch', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ids })
+            });
+            const json = await res.json();
+            if (json.success) {
+              await fetchAllData();
+              showToast(`${ids.length} paris supprimés de votre historique !`, "success");
+              resolve(true);
+            } else {
+              showToast("Erreur lors de la suppression : " + json.error.message, "error");
+              resolve(false);
+            }
+          } catch (err) {
+            console.error("Error deleting multiple bets:", err);
+            showToast("Une erreur est survenue lors de la suppression", "error");
+            resolve(false);
+          }
+        },
+        onCancel: () => {
+          resolve(false);
+        }
+      });
+    });
+  };
+
   // Auto-refresh a single bet outcome by scraping Matchendirect
   const handleRefreshBet = async (id) => {
     setBetRefreshLoading(prev => ({ ...prev, [id]: true }));
@@ -571,12 +608,49 @@ export default function App() {
 
   // Place Bet from Match en Direct Prediction
   const handleQuickPlaceBet = (pred) => {
-    const probNum = parseInt(pred.probability.replace('%', ''));
+    const rawProb = pred.probability ? String(pred.probability) : '';
+    const probNum = parseInt(rawProb.replace('%', ''));
     const lineNum = parseFloat(pred.card_line);
     const oddsNum = pred.best_tip.toLowerCase() === 'over' ? parseFloat(pred.over_odds) : parseFloat(pred.under_odds);
 
+    const formatToYyyyMmDd = (dateStr) => {
+      if (!dateStr) return '';
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+      
+      const slashParts = dateStr.split('/');
+      if (slashParts.length === 3 && slashParts[2].length === 4) {
+        return `${slashParts[2]}-${slashParts[1].padStart(2, '0')}-${slashParts[0].padStart(2, '0')}`;
+      }
+
+      const months = {
+        janvier: '01', 'février': '02', 'fevrier': '02', mars: '03', avril: '04',
+        mai: '05', juin: '06', juillet: '07', 'août': '08', 'aout': '08',
+        septembre: '09', octobre: '10', novembre: '11', 'décembre': '12', 'decembre': '12'
+      };
+      
+      const parts = dateStr.trim().toLowerCase().split(/\s+/);
+      if (parts.length === 3) {
+        const day = parts[0].padStart(2, '0');
+        const monthStr = parts[1];
+        const year = parts[2];
+        const month = months[monthStr];
+        if (month && !isNaN(day) && !isNaN(year)) {
+          return `${year}-${month}-${day}`;
+        }
+      }
+
+      try {
+        const d = new Date(dateStr);
+        if (!isNaN(d.getTime())) {
+          return d.toISOString().substring(0, 10);
+        }
+      } catch (e) {}
+      
+      return dateStr;
+    };
+
     const now = new Date();
-    const defaultDate = pred.date || now.toISOString().substring(0, 10);
+    const defaultDate = formatToYyyyMmDd(pred.date) || now.toISOString().substring(0, 10);
 
     setNewBetForm({
       match_id: pred.match_id,
@@ -592,7 +666,7 @@ export default function App() {
       probability: isNaN(probNum) ? '' : probNum,
       bookmaker: 'Unibet',
       status: 'PENDING',
-      notes: `Placé depuis la prédiction Match en Direct (Probabilité: ${pred.probability}, Taux de réussite historique: ${pred.win_rate})`,
+      notes: pred.notes || `Placé depuis la prédiction Match en Direct (Probabilité: ${pred.probability}, Taux de réussite historique: ${pred.win_rate})`,
       match_url: pred.match_url || ''
     });
     setPrefilledBet(pred);
@@ -1043,7 +1117,8 @@ export default function App() {
                 setScrapeTimeRemaining("Terminé");
                 setScrapeResultStats({
                   count: eventData.count,
-                  settledBets: eventData.settledBets || []
+                  settledBets: eventData.settledBets || [],
+                  magicPredictions: eventData.magicPredictions || []
                 });
                 setShowScrapeResultModal(true);
                 showToast("Analyse de masse terminée avec succès !", "success");
@@ -1209,6 +1284,7 @@ export default function App() {
                   stats={stats} 
                   handleSettleBet={handleSettleBet} 
                   handleDeleteBet={handleDeleteBet} 
+                  handleDeleteMultipleBets={handleDeleteMultipleBets}
                   handleRefreshBet={handleRefreshBet}
                   handleRefreshAllBets={handleRefreshAllBets}
                   betRefreshLoading={betRefreshLoading}
@@ -1275,6 +1351,7 @@ export default function App() {
           setSelectedMatchDetails={setSelectedMatchDetails}
           crawlLoading={crawlLoading}
           handleCrawlHistory={handleCrawlHistory}
+          handleQuickPlaceBet={handleQuickPlaceBet}
         />
 
         <BatchBetsModal 
@@ -1301,6 +1378,10 @@ export default function App() {
           show={showScrapeResultModal}
           onClose={() => setShowScrapeResultModal(false)}
           stats={scrapeResultStats}
+          onNavigateToMagicPredictions={() => {
+            setActiveTab('magic-predictions');
+            setShowScrapeResultModal(false);
+          }}
         />
 
         <ConfirmModal 
