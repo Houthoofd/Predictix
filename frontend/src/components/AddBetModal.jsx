@@ -1,5 +1,5 @@
 import React from 'react';
-import { X } from 'lucide-react';
+import { X, Info } from 'lucide-react';
 
 export default function AddBetModal({
   showAddBetModal,
@@ -319,9 +319,13 @@ export default function AddBetModal({
                   borderTop: '1px solid rgba(255, 255, 255, 0.03)', 
                   paddingTop: '6px',
                   fontStyle: 'italic',
-                  lineHeight: 1.3
+                  lineHeight: 1.3,
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '6px'
                 }}>
-                  ℹ️ Saisir la cote réelle de votre bookmaker aide le modèle Predictix à mesurer les écarts du marché réel pour auto-calibrer et affiner ses cotes théoriques futures.
+                  <Info size={14} style={{ color: 'var(--text-muted)', flexShrink: 0, marginTop: '1px' }} />
+                  <span>Saisir la cote réelle de votre bookmaker aide le modèle Predictix à mesurer les écarts du marché réel pour auto-calibrer et affiner ses cotes théoriques futures.</span>
                 </div>
               </div>
             )}

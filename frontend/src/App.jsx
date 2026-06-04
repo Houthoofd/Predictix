@@ -1085,9 +1085,9 @@ export default function App() {
                 const msg = eventData.message;
                 
                 if (msg.includes('✓') || msg.includes('SUCCES') || msg.includes('réussie')) logType = 'success';
-                else if (msg.includes('[ERREUR]') || msg.includes('Echec')) logType = 'error';
+                else if (msg.includes('[ERREUR]') || msg.includes('[Erreur]') || msg.includes('Echec')) logType = 'error';
                 else if (msg.includes('[INFO]') || msg.includes('Verification')) logType = 'system';
-                else if (msg.includes('Attente') || msg.includes('Recherche')) logType = 'warn';
+                else if (msg.includes('Attente') || msg.includes('Recherche') || msg.includes('[Warning]')) logType = 'warn';
 
                 setScraperLogs(prev => [...prev, { message: msg, type: logType }]);
 

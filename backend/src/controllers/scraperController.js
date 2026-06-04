@@ -35,7 +35,7 @@ async function runIntegrityBatchLoop() {
   // Raise cap to 12 concurrent workers
   const recommendedWorkers = Math.max(1, Math.min(12, Math.floor(usableRAMMB / 180)));
 
-  activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ℹ Diagnostic RAM : ${Math.round(freeRAMMB)} Mo libres. Marge 1,5 Go réservée. Allocation ciblée : ${recommendedWorkers} instances.`);
+  activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [RAM] Diagnostic RAM : ${Math.round(freeRAMMB)} Mo libres. Marge 1,5 Go réservée. Allocation ciblée : ${recommendedWorkers} instances.`);
 
   // 2. Dynamically bootstrap Tor instances
   await bootstrapTorInstances(recommendedWorkers, scraperPath, (msg) => {
@@ -54,15 +54,15 @@ async function runIntegrityBatchLoop() {
 
   if (activePorts.length === 0) {
     activeIntegrityBatch.status = 'idle';
-    activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ❌ Erreur : Aucun port proxy Tor actif détecté. Réparation annulée.`);
+    activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Erreur] Erreur : Aucun port proxy Tor actif détecté. Réparation annulée.`);
     return;
   }
 
-  activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ℹ Détection réseau : ${activePorts.length} proxy Tor opérationnels (Ports: ${activePorts.join(', ')}).`);
+  activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Réseau] Détection réseau : ${activePorts.length} proxy Tor opérationnels (Ports: ${activePorts.join(', ')}).`);
   if (activePorts.length > 1) {
-    activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] 🚀 Mode Parallèle activé (traitement sur ${activePorts.length} circuits en même temps).`);
+    activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Scraper] Mode Parallèle activé (traitement sur ${activePorts.length} circuits en même temps).`);
   } else {
-    activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ℹ Mode Séquentiel activé (un seul proxy Tor actif).`);
+    activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Scraper] Mode Séquentiel activé (un seul proxy Tor actif).`);
   }
 
   const worker = async (socksPort) => {
@@ -84,7 +84,7 @@ async function runIntegrityBatchLoop() {
 
       // Proposal A: Periodic IP rotation every 3 matches processed by this specific worker
       if (workerProcessedCount > 0 && workerProcessedCount % 3 === 0) {
-        activeIntegrityBatch.logs.push(`[${timeStr}] [Tor Port ${socksPort}] 🔄 Rotation d'IP Tor périodique...`);
+        activeIntegrityBatch.logs.push(`[${timeStr}] [Tor Port ${socksPort}] [Rotation IP] Rotation d'IP Tor périodique...`);
         const rotated = await renewTorSession(socksPort + 1); // SOCKS port + 1 is Control Port
         if (rotated) {
           activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}] ✓ Nouvelle IP obtenue. Stabilisation de 1.5s...`);
@@ -204,9 +204,9 @@ async function runIntegrityBatchLoop() {
                   first_half_corners_away = ? 
               WHERE match_id = ?
             `, [statsJson, cornersHome, cornersAway, matchObj.match_id]);
-            activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}] 🟢 ✓ Stats et corners résolus via SofaScore pour le match principal !`);
+            activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}] [SofaScore] ✓ Stats et corners résolus via SofaScore pour le match principal !`);
           } else {
-            activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}] ❌ SofaScore n'a renvoyé aucune statistique pour ce match.`);
+            activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}] [Erreur] SofaScore n'a renvoyé aucune statistique pour ce match.`);
           }
         }
 
@@ -256,7 +256,7 @@ async function runIntegrityBatchLoop() {
 
               // Hard safety cap: max 10 crawls per match to avoid long Tor hangs
               if (crawlCount >= 10) {
-                activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}] ⚠ Limite de sécurité atteinte (10 crawls).`);
+                activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}] [Warning] Limite de sécurité atteinte (10 crawls).`);
                 break;
               }
 
@@ -271,7 +271,7 @@ async function runIntegrityBatchLoop() {
                 
                 // SofaScore fallback check for historical match if corners or stats are missing
                 if (histMatch.first_half_corners_home === null || histMatch.first_half_corners_home === undefined || !histMatch.statistics) {
-                  activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}]   ⚡ H2H sans statistiques. Recherche SofaScore de secours...`);
+                  activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}]   [Tor Link] H2H sans statistiques. Recherche SofaScore de secours...`);
                   const sofaHistData = await tryResolveSofaStatsFallback(histMatch.date || match.date, histMatch.home_team, histMatch.away_team);
                   if (sofaHistData) {
                     const statsJson = JSON.stringify(sofaHistData);
@@ -284,7 +284,7 @@ async function runIntegrityBatchLoop() {
                           first_half_corners_away = ? 
                       WHERE match_id = ?
                     `, [statsJson, cornersHome, cornersAway, link]);
-                    activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}]   🟢 ✓ Confrontation H2H complétée via SofaScore !`);
+                    activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}]   [SofaScore] ✓ Confrontation H2H complétée via SofaScore !`);
                   }
                 }
 
@@ -313,10 +313,10 @@ async function runIntegrityBatchLoop() {
                 }
               } else {
                 await importSkippedMatch(link);
-                activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}]   ⚠ H2H sauté (échec) : ${link}`);
+                activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}]   [Warning] H2H sauté (échec) : ${link}`);
                 
                 // Emergency IP rotation inside loop on failure
-                activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}]   🔄 Rotation d'IP de secours...`);
+                activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}]   [Rotation IP] Rotation d'IP de secours...`);
                 await renewTorSession(socksPort + 1);
               }
 
@@ -331,10 +331,10 @@ async function runIntegrityBatchLoop() {
       } catch (err) {
         activeIntegrityBatch.errorCount++;
         activeIntegrityBatch.processedCount++;
-        activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}] ❌ Erreur pour ${matchObj.home_team} vs ${matchObj.away_team} : ${err.message}`);
+        activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}] [Erreur] Erreur pour ${matchObj.home_team} vs ${matchObj.away_team} : ${err.message}`);
         
         // Emergency IP rotation on failure
-        activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}] 🔄 Rotation d'IP de secours...`);
+        activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}] [Rotation IP] Rotation d'IP de secours...`);
         await renewTorSession(socksPort + 1);
       }
 
@@ -367,9 +367,9 @@ async function runIntegrityBatchLoop() {
   // Finished queue or paused
   if (activeIntegrityBatch.currentIndex >= activeIntegrityBatch.queue.length) {
     activeIntegrityBatch.status = 'idle';
-    activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] 🏁 Réparation globale terminée. Succès: ${activeIntegrityBatch.successCount}, Erreurs: ${activeIntegrityBatch.errorCount}.`);
+    activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Terminé] Réparation globale terminée. Succès: ${activeIntegrityBatch.successCount}, Erreurs: ${activeIntegrityBatch.errorCount}.`);
   } else if (activeIntegrityBatch.status === 'paused') {
-    activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ⏸ Réparation globale mise en pause.`);
+    activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Pause] Réparation globale mise en pause.`);
   }
 }
 
@@ -626,13 +626,13 @@ class ScraperController {
             let finalStatistics = details.statistics;
             
             if (finalFirstHalfCornersHome === null || finalFirstHalfCornersHome === undefined || !finalStatistics) {
-              sendEvent('log', { message: `[Tor Port ${socksPort}] ⚡ Match principal sans stats. Recherche SofaScore de secours...` });
+              sendEvent('log', { message: `[Tor Port ${socksPort}] [Tor Link] Match principal sans stats. Recherche SofaScore de secours...` });
               const sofaData = await tryResolveSofaStatsFallback(details.date || m.date, details.home_team || m.home_team, details.away_team || m.away_team);
               if (sofaData) {
                 finalStatistics = sofaData;
                 finalFirstHalfCornersHome = sofaData.first_half_corners ? sofaData.first_half_corners.home : null;
                 finalFirstHalfCornersAway = sofaData.first_half_corners ? sofaData.first_half_corners.away : null;
-                sendEvent('log', { message: `[Tor Port ${socksPort}] 🟢 ✓ Stats résolues via SofaScore pour ce match !` });
+                sendEvent('log', { message: `[Tor Port ${socksPort}] [SofaScore] ✓ Stats résolues via SofaScore pour ce match !` });
               }
             }
 
@@ -659,7 +659,7 @@ class ScraperController {
             const scoreText = enriched.score ? ` (${enriched.score})` : '';
             sendEvent('log', { message: `[Tor Port ${socksPort}] ✓ Match enrichi : ${enriched.home_team} vs ${enriched.away_team}${scoreText}` });
           } else {
-            sendEvent('log', { message: `[Tor Port ${socksPort}] ❌ Échec du crawl détails pour : ${m.home_team} vs ${m.away_team}` });
+            sendEvent('log', { message: `[Tor Port ${socksPort}] [Erreur] Échec du crawl détails pour : ${m.home_team} vs ${m.away_team}` });
           }
           
           if (currentIndex < matchesToScrape.length && !stopScraperRequested) {

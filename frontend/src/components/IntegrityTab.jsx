@@ -16,7 +16,8 @@ import {
   Pause,
   Play,
   Square,
-  MoreVertical
+  MoreVertical,
+  Zap
 } from 'lucide-react';
 
 export default function IntegrityTab({
@@ -780,7 +781,7 @@ export default function IntegrityTab({
                 {batcherLogs.length > 0 ? (
                   batcherLogs.map((log, index) => (
                     <div key={index} style={{ 
-                      color: log.includes('❌') ? '#ff3b30' : log.includes('⚠') ? '#ff9500' : log.includes('✓') ? '#2ecc71' : '#4af626'
+                      color: (log.includes('❌') || log.includes('[Erreur]')) ? '#ff3b30' : (log.includes('⚠') || log.includes('[Warning]')) ? '#ff9500' : log.includes('✓') ? '#2ecc71' : '#4af626'
                     }}>
                       {log}
                     </div>
@@ -892,7 +893,12 @@ export default function IntegrityTab({
                             transition: 'all 0.15s ease'
                           }}
                         >
-                          {prioritizingId === item.match_id ? '...' : '⚡ Prioriser'}
+                          {prioritizingId === item.match_id ? '...' : (
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <Zap size={10} style={{ fill: '#bf5af2' }} />
+                              Prioriser
+                            </span>
+                          )}
                         </button>
                       )}
                     </div>

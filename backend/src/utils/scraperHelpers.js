@@ -440,7 +440,7 @@ export async function crawlH2HLinksBatch(linksToScrape, scraperPath, options = {
         log(`[Tor Port ${socksPort}] ✓ H2H importé : ${homeClean} vs ${awayClean}${dateText}${scoreText}${cornersText}`);
       } else {
         if (importSkippedMatch) await importSkippedMatch(link);
-        log(`[Tor Port ${socksPort}] ⚠ H2H sauté (échec du crawl) : ${link}`);
+        log(`[Tor Port ${socksPort}] [Warning] H2H sauté (échec du crawl) : ${link}`);
       }
 
       // Small polite delay between links on the same port
@@ -551,7 +551,7 @@ export async function bootstrapTorInstances(neededWorkers, scraperPath, log = co
 
   const torExe = path.join(scraperPath, 'tor', 'tor', 'tor.exe');
   if (!fs.existsSync(torExe)) {
-    log(`[Tor Bootstrap] ❌ Erreur : tor.exe introuvable à l'adresse : ${torExe}. Démarrage manuel requis.`);
+    log(`[Tor Bootstrap] [Erreur] tor.exe introuvable à l'adresse : ${torExe}. Démarrage manuel requis.`);
     return;
   }
 
@@ -595,7 +595,7 @@ export async function bootstrapTorInstances(neededWorkers, scraperPath, log = co
       if (bootstrapSuccessful) {
         log(`[Tor Bootstrap] Port ${port} : ✓ Instance Tor lancée et opérationnelle avec succès (Contrôle: ${port + 1}).`);
       } else {
-        log(`[Tor Bootstrap] Port ${port} : ❌ Échec de l'initialisation dans le délai imparti. Fermeture.`);
+        log(`[Tor Bootstrap] Port ${port} : [Erreur] Échec de l'initialisation dans le délai imparti. Fermeture.`);
         try {
           if (process.platform === 'win32') {
             execSync(`taskkill /pid ${child.pid} /T /F`);
@@ -608,7 +608,7 @@ export async function bootstrapTorInstances(neededWorkers, scraperPath, log = co
         try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch (e) {}
       }
     } catch (err) {
-      log(`[Tor Bootstrap] Port ${port} : ❌ Erreur lors du lancement : ${err.message}`);
+      log(`[Tor Bootstrap] Port ${port} : [Erreur] Erreur lors du lancement : ${err.message}`);
     }
   }
 }

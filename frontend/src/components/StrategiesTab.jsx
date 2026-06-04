@@ -729,7 +729,7 @@ export default function StrategiesTab() {
                         fontWeight: 700, 
                         color: lc.coverage_rate >= 70 ? '#2ecc71' : lc.coverage_rate >= 40 ? '#f1c40f' : '#e74c3c' 
                       }}>
-                        {lc.coverage_rate}% {isFiltered && '❌'}
+                        {lc.coverage_rate}% {isFiltered && ' (Exclu)'}
                       </span>
                     </div>
                   );

@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, RefreshCcw, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, RefreshCcw, ChevronLeft, ChevronRight, AlertTriangle, Lightbulb } from 'lucide-react';
 
 export default function MatchDetailsModal({
   selectedMatchDetails,
@@ -1091,9 +1091,15 @@ export default function MatchDetailsModal({
                   borderRadius: '12px',
                   textAlign: 'center',
                   color: 'var(--text-muted)',
-                  marginBottom: '16px'
+                  marginBottom: '16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px'
                 }}>
-                  ⚠️ Pas assez de données historiques récurrentes pour simuler les cotes de cet indicateur ({metricTitle}).
+                  <AlertTriangle size={20} style={{ color: 'var(--color-warning)' }} />
+                  <span>Pas assez de données historiques récurrentes pour simuler les cotes de cet indicateur ({metricTitle}).</span>
                 </div>
               );
             }
@@ -1159,8 +1165,9 @@ export default function MatchDetailsModal({
                 lineHeight: '1.5',
                 color: 'var(--text-secondary)'
               }}>
-                <div style={{ fontWeight: 800, color: '#bf5af2', marginBottom: '6px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <span>💡 Comment utiliser ce simulateur en 3 étapes simples :</span>
+                <div style={{ fontWeight: 800, color: '#bf5af2', marginBottom: '6px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Lightbulb size={14} style={{ color: '#bf5af2' }} />
+                  <span>Comment utiliser ce simulateur en 3 étapes simples :</span>
                 </div>
                 <ul style={{ margin: 0, paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <li>
