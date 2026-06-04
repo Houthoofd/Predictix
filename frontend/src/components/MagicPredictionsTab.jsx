@@ -480,7 +480,9 @@ export default function MagicPredictionsTab({
   handleAddToBasket, 
   handleInstantPlaceBet,
   selectedPredIds,
-  setSelectedPredIds
+  setSelectedPredIds,
+  selectedMagicSport = 'all',
+  setSelectedMagicSport
 }) {
   const [signals, setSignals] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -576,12 +578,15 @@ export default function MagicPredictionsTab({
     return labels[metric] || metric;
   };
 
-  // Extract unique metrics in active signals for filtering
+  // Extract unique metrics and sports in active signals for filtering
   const availableMetrics = ['all', ...new Set(signals.map(s => s.metric))];
+  const availableSports = ['all', ...new Set(signals.map(s => s.sport || 'football'))];
 
-  const filteredSignals = filterMetric === 'all' 
-    ? signals 
-    : signals.filter(s => s.metric === filterMetric);
+  const filteredSignals = signals.filter(s => {
+    const matchMetric = filterMetric === 'all' || s.metric === filterMetric;
+    const matchSport = selectedMagicSport === 'all' || (s.sport || 'football') === selectedMagicSport;
+    return matchMetric && matchSport;
+  });
 
   // Group and sort dates for collapse/expand operations
   const dateGroups = React.useMemo(() => {
@@ -1291,7 +1296,10 @@ export default function MagicPredictionsTab({
 
       {/* Top Value Bet Leaderboard Carousel */}
       {predictions && predictions.length > 0 && (() => {
-        const allValueBets = scanAllValueBets(predictions);
+        const filteredPreds = selectedMagicSport === 'all'
+          ? predictions
+          : predictions.filter(p => (p.sport || 'football') === selectedMagicSport);
+        const allValueBets = scanAllValueBets(filteredPreds);
         const topBets = allValueBets.slice(0, 12);
 
         if (topBets.length === 0) return null;
@@ -1593,6 +1601,34 @@ export default function MagicPredictionsTab({
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
+            {/* Sport Filter Selector */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>Sport :</span>
+              <select
+                value={selectedMagicSport}
+                onChange={(e) => setSelectedMagicSport(e.target.value)}
+                style={{
+                  background: 'rgba(0, 0, 0, 0.25)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  color: 'var(--text-primary)',
+                  borderRadius: '8px',
+                  padding: '6px 12px',
+                  fontSize: '12.5px',
+                  fontFamily: 'Outfit',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  outline: 'none'
+                }}
+              >
+                <option value="all" style={{ background: '#1c1c1e', color: '#fff' }}>Tous les sports</option>
+                {availableSports.filter(sp => sp !== 'all').map(sp => (
+                  <option key={sp} value={sp} style={{ background: '#1c1c1e', color: '#fff' }}>
+                    {sp.charAt(0).toUpperCase() + sp.slice(1)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Global Sort Selector */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>Trier par :</span>

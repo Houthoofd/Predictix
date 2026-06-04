@@ -720,6 +720,7 @@ router.get('/predictions/magic', async (req, res) => {
             threshold: threshold,
             operator: operator,
             rationale: rationale,
+            sport: match.sport || 'football',
             scraped_at: match.scraped_at
           });
         }

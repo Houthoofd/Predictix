@@ -34,6 +34,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [trackerSubTab, setTrackerSubTab] = useState('journal');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [selectedMagicSport, setSelectedMagicSport] = useState('all');
   
   // Data State
   const [bankroll, setBankroll] = useState({ balance: 1000, initial_balance: 1000, currency: '€' });
@@ -1246,6 +1247,8 @@ export default function App() {
         setActiveTab={setActiveTab} 
         setShowResetBankrollModal={setShowResetBankrollModal} 
         basketCount={basketBets.length}
+        selectedMagicSport={selectedMagicSport}
+        setSelectedMagicSport={setSelectedMagicSport}
       />
 
       {/* Main interface content */}
@@ -1354,6 +1357,8 @@ export default function App() {
                   handleInstantPlaceBet={handleInstantPlaceBet}
                   selectedPredIds={selectedPredIds}
                   setSelectedPredIds={setSelectedPredIds}
+                  selectedMagicSport={selectedMagicSport}
+                  setSelectedMagicSport={setSelectedMagicSport}
                 />
               )}
 

@@ -9,12 +9,31 @@ import {
   ShieldAlert
 } from 'lucide-react';
 
+const sportLabels = {
+  football: 'Football',
+  basketball: 'Basketball',
+  tennis: 'Tennis',
+  rugby: 'Rugby',
+  handball: 'Handball',
+  volleyball: 'Volleyball',
+  hockey: 'Hockey sur glace',
+  baseball: 'Baseball',
+  'american-football': 'Football Américain',
+  'table-tennis': 'Tennis de table',
+  badminton: 'Badminton',
+  cricket: 'Cricket',
+  snooker: 'Snooker',
+  futsal: 'Futsal'
+};
+
 export default function Sidebar({ 
   sidebarCollapsed, 
   activeTab, 
   setActiveTab, 
   setShowResetBankrollModal,
-  basketCount = 0
+  basketCount = 0,
+  selectedMagicSport = 'all',
+  setSelectedMagicSport
 }) {
   return (
     <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
@@ -33,19 +52,81 @@ export default function Sidebar({
             <LayoutDashboard size={20} />
             {!sidebarCollapsed && <span>Tableau de Bord</span>}
           </button>
-          <button 
-            className={`nav-item ${activeTab === 'magic-predictions' ? 'active' : ''}`}
-            onClick={() => setActiveTab('magic-predictions')}
-            title={sidebarCollapsed ? "Pronostics Magiques" : ""}
-            style={{
-              '--item-accent': '#bf5af2',
-              borderLeft: activeTab === 'magic-predictions' ? '3px solid #bf5af2' : undefined,
-              color: activeTab === 'magic-predictions' ? '#bf5af2' : undefined
-            }}
-          >
-            <Sparkles size={20} style={{ color: '#bf5af2' }} />
-            {!sidebarCollapsed && <span style={{ fontWeight: activeTab === 'magic-predictions' ? 700 : 500 }}>Pronostics Magiques</span>}
-          </button>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <button 
+              className={`nav-item ${activeTab === 'magic-predictions' ? 'active' : ''}`}
+              onClick={() => setActiveTab('magic-predictions')}
+              title={sidebarCollapsed ? "Pronostics Magiques" : ""}
+              style={{
+                '--item-accent': '#bf5af2',
+                borderLeft: activeTab === 'magic-predictions' ? '3px solid #bf5af2' : undefined,
+                color: activeTab === 'magic-predictions' ? '#bf5af2' : undefined,
+                marginBottom: activeTab === 'magic-predictions' && !sidebarCollapsed ? '2px' : undefined
+              }}
+            >
+              <Sparkles size={20} style={{ color: '#bf5af2' }} />
+              {!sidebarCollapsed && <span style={{ fontWeight: activeTab === 'magic-predictions' ? 700 : 500 }}>Pronostics Magiques</span>}
+            </button>
+            
+            {activeTab === 'magic-predictions' && !sidebarCollapsed && (
+              <div 
+                style={{ 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  paddingLeft: '12px', 
+                  gap: '2px',
+                  marginTop: '2px',
+                  marginBottom: '10px',
+                  maxHeight: '260px',
+                  overflowY: 'auto',
+                  borderLeft: '1px solid rgba(255, 255, 255, 0.05)',
+                  marginLeft: '26px'
+                }}
+              >
+                {['all', 'football', 'basketball', 'tennis', 'rugby', 'handball', 'volleyball', 'hockey', 'baseball', 'american-football', 'table-tennis', 'badminton', 'cricket', 'snooker', 'futsal'].map((sportKey) => {
+                  const label = sportKey === 'all' ? 'Tous les sports' : (sportLabels[sportKey] || sportKey);
+                  const isSportActive = selectedMagicSport === sportKey;
+                  return (
+                    <button
+                      key={sportKey}
+                      onClick={() => setSelectedMagicSport(sportKey)}
+                      style={{
+                        border: 'none',
+                        textAlign: 'left',
+                        color: isSportActive ? '#bf5af2' : 'var(--text-secondary)',
+                        fontSize: '11.5px',
+                        padding: '6px 8px',
+                        cursor: 'pointer',
+                        fontWeight: isSportActive ? 700 : 500,
+                        borderRadius: '4px',
+                        transition: 'all 0.15s',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        background: isSportActive ? 'rgba(191, 90, 242, 0.06)' : 'transparent'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isSportActive) e.currentTarget.style.color = '#bf5af2';
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isSportActive) e.currentTarget.style.color = 'var(--text-secondary)';
+                      }}
+                    >
+                      <span style={{ 
+                        width: '4px', 
+                        height: '4px', 
+                        borderRadius: '50%', 
+                        background: isSportActive ? '#bf5af2' : 'rgba(255, 255, 255, 0.2)', 
+                        display: 'inline-block',
+                        flexShrink: 0
+                      }}></span>
+                      <span>{label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
           <button 
             className={`nav-item ${activeTab === 'basket' ? 'active' : ''}`}
             onClick={() => setActiveTab('basket')}
