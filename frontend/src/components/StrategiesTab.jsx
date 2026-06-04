@@ -27,6 +27,7 @@ export default function StrategiesTab() {
   const [backtestingId, setBacktestingId] = useState(null);
   const [backtestResults, setBacktestResults] = useState(null);
   const [defaultOdds, setDefaultOdds] = useState('1.80');
+  const [minCoverage, setMinCoverage] = useState('50');
 
 
   const creationSteps = [
@@ -142,7 +143,10 @@ export default function StrategiesTab() {
       const res = await fetch(`http://localhost:5000/api/strategies/backtest/${id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ defaultOdds: parseFloat(defaultOdds) || 1.80 })
+        body: JSON.stringify({ 
+          defaultOdds: parseFloat(defaultOdds) || 1.80,
+          minCoverage: parseFloat(minCoverage) || 50
+        })
       });
       const json = await res.json();
       if (json.success) {
@@ -410,27 +414,54 @@ export default function StrategiesTab() {
               <Database size={18} style={{ color: 'var(--color-accent-solid)' }} />
               Vos Stratégies Actives ({strategies.length})
             </h4>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 700 }}>COTE BACKTEST :</span>
-              <input 
-                type="number" 
-                step="0.05" 
-                min="1.01" 
-                value={defaultOdds} 
-                onChange={(e) => setDefaultOdds(e.target.value)} 
-                style={{
-                  width: '65px',
-                  padding: '4px 8px',
-                  background: 'var(--bg-tertiary)',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: '6px',
-                  color: '#fff',
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  textAlign: 'center',
-                  outline: 'none'
-                }}
-              />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 700 }}>COTE :</span>
+                <input 
+                  type="number" 
+                  step="0.05" 
+                  min="1.01" 
+                  value={defaultOdds} 
+                  onChange={(e) => setDefaultOdds(e.target.value)} 
+                  style={{
+                    width: '55px',
+                    padding: '4px 6px',
+                    background: 'var(--bg-tertiary)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '6px',
+                    color: '#fff',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    textAlign: 'center',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 700 }} title="Seuil de couverture statistique minimum par championnat">COUVERTURE MIN :</span>
+                <select
+                  value={minCoverage}
+                  onChange={(e) => setMinCoverage(e.target.value)}
+                  style={{
+                    padding: '4px 6px',
+                    background: 'var(--bg-tertiary)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '6px',
+                    color: '#fff',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    outline: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="0">0% (Tout)</option>
+                  <option value="10">10%</option>
+                  <option value="30">30%</option>
+                  <option value="50">50%</option>
+                  <option value="70">70%</option>
+                  <option value="90">90%</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -576,7 +607,7 @@ export default function StrategiesTab() {
           </div>
 
           {/* Stats Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '25px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '16px', marginBottom: '25px' }}>
             <div style={{ background: 'rgba(0,0,0,0.15)', border: '1px solid var(--border-color)', padding: '14px', borderRadius: '10px', textAlign: 'center' }}>
               <div style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>PARIS ÉVALUÉS</div>
               <div style={{ fontSize: '24px', fontFamily: 'Outfit', fontWeight: 800, marginTop: '6px' }}>{backtestResults.total_bets}</div>
@@ -598,6 +629,15 @@ export default function StrategiesTab() {
               <div style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>PROFIT NET TOTAL</div>
               <div style={{ fontSize: '24px', fontFamily: 'Outfit', fontWeight: 800, color: backtestResults.total_profit >= 0 ? '#2ecc71' : '#e74c3c', marginTop: '6px' }}>
                 {backtestResults.total_profit >= 0 ? '+' : ''}{backtestResults.total_profit} U
+              </div>
+            </div>
+            <div style={{ background: 'rgba(0,0,0,0.15)', border: '1px solid var(--border-color)', padding: '14px', borderRadius: '10px', textAlign: 'center' }}>
+              <div style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>MATCHS EXCLUS</div>
+              <div style={{ fontSize: '24px', fontFamily: 'Outfit', fontWeight: 800, color: 'var(--text-muted)', marginTop: '6px' }}>
+                {backtestResults.skipped_low_coverage + backtestResults.skipped_missing_stats}
+              </div>
+              <div style={{ fontSize: '9px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                {backtestResults.skipped_low_coverage} couv. / {backtestResults.skipped_missing_stats} stats
               </div>
             </div>
           </div>
@@ -651,8 +691,53 @@ export default function StrategiesTab() {
                 </table>
               </div>
             </div>
-
           </div>
+
+          {/* League Coverage Details */}
+          {backtestResults.leagues_coverage && backtestResults.leagues_coverage.length > 0 && (
+            <details style={{ marginTop: '20px', borderTop: '1px solid var(--border-color)', paddingTop: '15px' }}>
+              <summary style={{ cursor: 'pointer', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', outline: 'none' }}>
+                Afficher le détail de la couverture par championnat ({backtestResults.leagues_coverage.length} championnats)
+              </summary>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '10px', marginTop: '12px', maxHeight: '150px', overflowY: 'auto', paddingRight: '5px' }}>
+                {backtestResults.leagues_coverage.map((lc, idx) => {
+                  const isFiltered = lc.coverage_rate < parseFloat(minCoverage);
+                  return (
+                    <div 
+                      key={idx} 
+                      style={{ 
+                        background: 'rgba(0,0,0,0.15)', 
+                        border: '1px solid var(--border-color)', 
+                        borderRadius: '6px', 
+                        padding: '8px 12px', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'space-between',
+                        opacity: isFiltered ? 0.4 : 1
+                      }}
+                    >
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 600, color: '#fff', maxWidth: '170px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={lc.tournament}>
+                          {lc.tournament}
+                        </span>
+                        <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>
+                          {lc.matches_with_stats} / {lc.total_matches} matchs
+                        </span>
+                      </div>
+                      <span style={{ 
+                        fontSize: '11px', 
+                        fontWeight: 700, 
+                        color: lc.coverage_rate >= 70 ? '#2ecc71' : lc.coverage_rate >= 40 ? '#f1c40f' : '#e74c3c' 
+                      }}>
+                        {lc.coverage_rate}% {isFiltered && '❌'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </details>
+          )}
+
         </div>
       )}
 

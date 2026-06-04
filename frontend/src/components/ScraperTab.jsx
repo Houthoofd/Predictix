@@ -628,7 +628,7 @@ export default function ScraperTab({
                                   border: '1px solid rgba(255,255,255,0.02)'
                                 }}>
                                   <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, marginRight: '10px' }}>
-                                    <span style={{ color: 'var(--text-muted)', fontSize: '10.5px' }}>{h.date ? h.date.substring(0, 10) : ''} • </span>
+                                    <span style={{ color: 'var(--text-muted)', fontSize: '10.5px' }}>{h.date ? (h.date.includes('-') && h.date.includes('T') ? h.date.substring(0, 10) : h.date) : ''} • </span>
                                     <strong style={{ color: 'var(--text-primary)' }}>{h.home_team} {h.score} {h.away_team}</strong>
                                   </div>
                                   <div style={{ fontSize: '11px', fontWeight: 700, color: hHasCorners ? '#34c759' : 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>

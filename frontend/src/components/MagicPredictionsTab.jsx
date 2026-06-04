@@ -413,6 +413,49 @@ const formatHumanDate = (dateStr) => {
   return dateStr;
 };
 
+const parseFrenchDate = (dateStr) => {
+  if (!dateStr) return new Date(0);
+  
+  // Standard format check: YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    return new Date(dateStr);
+  }
+  
+  // French format check: "DD month YYYY"
+  const months = {
+    janvier: 0,
+    'février': 1,
+    'fevrier': 1,
+    mars: 2,
+    avril: 3,
+    mai: 4,
+    juin: 5,
+    juillet: 6,
+    'août': 7,
+    'aout': 7,
+    septembre: 8,
+    octobre: 9,
+    novembre: 10,
+    'décembre': 11,
+    'decembre': 11
+  };
+  
+  const parts = dateStr.trim().toLowerCase().split(/\s+/);
+  if (parts.length === 3) {
+    const day = parseInt(parts[0], 10);
+    const monthStr = parts[1];
+    const year = parseInt(parts[2], 10);
+    const month = months[monthStr];
+    if (month !== undefined && !isNaN(day) && !isNaN(year)) {
+      return new Date(year, month, day);
+    }
+  }
+  
+  // Fallback to native Date parser
+  const parsed = new Date(dateStr);
+  return isNaN(parsed.getTime()) ? new Date(0) : parsed;
+};
+
 export default function MagicPredictionsTab({ 
   predictions, 
   handleQuickPlaceBet, 
@@ -429,6 +472,7 @@ export default function MagicPredictionsTab({
   const [selectedBets, setSelectedBets] = React.useState({});
   const [activeKebabId, setActiveKebabId] = React.useState(null);
   const [sortBy, setSortBy] = React.useState('date'); // 'date' or 'confidence'
+  const [minCoverage, setMinCoverage] = React.useState('50');
   const scannerCarouselRef = React.useRef(null);
 
   const scrollScanner = (direction) => {
@@ -460,7 +504,7 @@ export default function MagicPredictionsTab({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('http://localhost:5000/api/predictions/magic');
+      const res = await fetch(`http://localhost:5000/api/predictions/magic?minCoverage=${minCoverage}`);
       const json = await res.json();
       if (json.success) {
         setSignals(json.data || []);
@@ -476,7 +520,7 @@ export default function MagicPredictionsTab({
 
   React.useEffect(() => {
     fetchSignals();
-  }, []);
+  }, [minCoverage]);
 
   const getMetricBadgeStyle = (metric) => {
     switch (metric) {
@@ -1124,15 +1168,44 @@ export default function MagicPredictionsTab({
               Pour tous les types de statistiques (corners, fautes, cartons, tirs), notre algorithme estime précisément les probabilités sur 3 périodes : **1ère Mi-Temps, 2ème Mi-Temps et Match Complet** grâce à la **distribution de Poisson Bivariée**.
             </p>
           </div>
-          <button 
-            className="btn btn-secondary" 
-            onClick={fetchSignals} 
-            disabled={loading}
-            style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '40px', alignSelf: 'center' }}
-          >
-            <RefreshCw size={16} className={loading ? 'spin-animation' : ''} />
-            <span>Actualiser</span>
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px', alignSelf: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 700 }}>COUVERTURE MIN :</span>
+              <select
+                value={minCoverage}
+                onChange={(e) => setMinCoverage(e.target.value)}
+                style={{
+                  padding: '6px 10px',
+                  background: 'var(--bg-tertiary)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '6px',
+                  color: '#fff',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  outline: 'none',
+                  cursor: 'pointer',
+                  height: '38px'
+                }}
+              >
+                <option value="0">0% (Aucun filtre)</option>
+                <option value="10">10%</option>
+                <option value="30">30%</option>
+                <option value="50">50%</option>
+                <option value="70">70%</option>
+                <option value="90">90%</option>
+              </select>
+            </div>
+
+            <button 
+              className="btn btn-secondary" 
+              onClick={fetchSignals} 
+              disabled={loading}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '38px' }}
+            >
+              <RefreshCw size={16} className={loading ? 'spin-animation' : ''} />
+              <span>Actualiser</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1493,7 +1566,9 @@ export default function MagicPredictionsTab({
               dateGroups[dateVal].push(sig);
             });
 
-            const sortedDates = Object.keys(dateGroups).sort((a, b) => b.localeCompare(a));
+            const sortedDates = Object.keys(dateGroups).sort((a, b) => {
+              return parseFrenchDate(b).getTime() - parseFrenchDate(a).getTime();
+            });
 
             return sortedDates.map((dateStr, dIdx) => {
               const signalsInDate = dateGroups[dateStr];

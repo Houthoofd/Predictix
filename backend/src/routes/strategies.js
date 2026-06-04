@@ -100,6 +100,27 @@ function parsePromptToStrategy(prompt) {
    MAGIC STRATEGY API ENDPOINTS
    ======================================================================== */
 
+// Get stats data coverage for all leagues
+router.get('/strategies/leagues-coverage', async (req, res) => {
+  try {
+    const sql = `
+      SELECT 
+        tournament,
+        COUNT(*) as total_matches,
+        SUM(CASE WHEN statistics_json IS NOT NULL THEN 1 ELSE 0 END) as matches_with_stats,
+        ROUND(CAST(SUM(CASE WHEN statistics_json IS NOT NULL THEN 1 ELSE 0 END) AS REAL) / COUNT(*) * 100, 1) as coverage_rate
+      FROM scraped_predictions
+      WHERE is_historical = 0 AND is_finished = 1
+      GROUP BY tournament
+      ORDER BY total_matches DESC, coverage_rate DESC
+    `;
+    const coverage = await dbQuery(sql);
+    res.json({ success: true, data: coverage });
+  } catch (error) {
+    res.status(500).json({ success: false, error: { message: error.message } });
+  }
+});
+
 // Get all custom strategies
 router.get('/strategies/magic', async (req, res) => {
   try {
@@ -192,6 +213,7 @@ router.delete('/strategies/magic/:id', async (req, res) => {
 router.post('/strategies/backtest/:id', async (req, res) => {
   const { id } = req.params;
   const defaultOddsInput = parseFloat(req.body.defaultOdds) || 1.80;
+  const minCoverage = req.body.minCoverage !== undefined ? parseFloat(req.body.minCoverage) : 50.0;
 
   try {
     // 1. Get the strategy
@@ -206,10 +228,26 @@ router.post('/strategies/backtest/:id', async (req, res) => {
     const operator = conditions.operator || '>=';
     const threshold = parseFloat(conditions.threshold);
 
+    // Fetch coverage rate per league
+    const coverageRows = await dbQuery(`
+      SELECT 
+        tournament,
+        COUNT(*) as total_matches,
+        SUM(CASE WHEN statistics_json IS NOT NULL THEN 1 ELSE 0 END) as matches_with_stats,
+        ROUND(CAST(SUM(CASE WHEN statistics_json IS NOT NULL THEN 1 ELSE 0 END) AS REAL) / COUNT(*) * 100, 1) as coverage_rate
+      FROM scraped_predictions
+      WHERE is_historical = 0 AND is_finished = 1
+      GROUP BY tournament
+    `);
+    const coverageMap = new Map();
+    for (const row of coverageRows) {
+      coverageMap.set(row.tournament, row.coverage_rate);
+    }
+
     // 2. Fetch all completed main matches (is_historical = 0, is_finished = 1)
     const finishedMatches = await dbQuery(`
       SELECT * FROM scraped_predictions 
-      WHERE is_historical = 0 AND is_finished = 1 AND statistics_json IS NOT NULL 
+      WHERE is_historical = 0 AND is_finished = 1
       ORDER BY date ASC, time ASC
     `);
 
@@ -219,6 +257,9 @@ router.post('/strategies/backtest/:id', async (req, res) => {
     let losses = 0;
     let cumulativeProfit = 0;
     const profitTimeline = [];
+    
+    let skippedLowCoverage = 0;
+    let skippedMissingStats = 0;
 
     // Helper map for metric labels in French
     const metricLabels = {
@@ -233,6 +274,13 @@ router.post('/strategies/backtest/:id', async (req, res) => {
 
     // 3. For each finished main match, simulate the prediction
     for (const match of finishedMatches) {
+      // Check league coverage rate first
+      const leagueCoverage = coverageMap.get(match.tournament) || 0.0;
+      if (leagueCoverage < minCoverage) {
+        skippedLowCoverage++;
+        continue;
+      }
+
       // Parse main match date
       const mainMatchDateStr = parseFrenchDate(match.date);
       if (!mainMatchDateStr) continue;
@@ -260,6 +308,7 @@ router.post('/strategies/backtest/:id', async (req, res) => {
       // Keep only up to the strategy limit
       const activeH2H = priorH2H.slice(0, limit);
       if (activeH2H.length === 0) {
+        skippedMissingStats++;
         continue; // No prior H2H data to evaluate strategy
       }
 
@@ -293,6 +342,7 @@ router.post('/strategies/backtest/:id', async (req, res) => {
       }
 
       if (values.length === 0) {
+        skippedMissingStats++;
         continue;
       }
 
@@ -315,24 +365,31 @@ router.post('/strategies/backtest/:id', async (req, res) => {
         // The strategy recommends placing a bet. Let's see if it won!
         let mainMatchStats = null;
         try {
-          mainMatchStats = JSON.parse(match.statistics_json);
+          if (match.statistics_json) {
+            mainMatchStats = JSON.parse(match.statistics_json);
+          }
         } catch (e) {
-          continue; // Missing stats for main match, skip
+          // parse error
         }
 
-        if (!mainMatchStats) continue;
+        if (!mainMatchStats) {
+          skippedMissingStats++;
+          continue; // Missing stats for main match, skip
+        }
 
         let actualVal = 0;
         if (metric === 'possession') {
           if (mainMatchStats.possession && mainMatchStats.possession.home !== undefined) {
             actualVal = parseFloat(mainMatchStats.possession.home);
           } else {
+            skippedMissingStats++;
             continue;
           }
         } else {
           if (mainMatchStats[metric] && mainMatchStats[metric].home !== undefined && mainMatchStats[metric].away !== undefined) {
             actualVal = parseFloat(mainMatchStats[metric].home) + parseFloat(mainMatchStats[metric].away);
           } else {
+            skippedMissingStats++;
             continue;
           }
         }
@@ -402,7 +459,10 @@ router.post('/strategies/backtest/:id', async (req, res) => {
         roi: roi,
         total_profit: parseFloat(cumulativeProfit.toFixed(2)),
         profit_timeline: profitTimeline,
-        logs: betLogs
+        logs: betLogs,
+        skipped_low_coverage: skippedLowCoverage,
+        skipped_missing_stats: skippedMissingStats,
+        leagues_coverage: coverageRows
       }
     });
 
@@ -413,11 +473,27 @@ router.post('/strategies/backtest/:id', async (req, res) => {
 
 // GET /api/predictions/magic - Reactive Screener comparing matches against active custom strategies
 router.get('/predictions/magic', async (req, res) => {
+  const minCoverage = req.query.minCoverage !== undefined ? parseFloat(req.query.minCoverage) : 50.0;
+
   try {
     // 1. Get all active strategies
     const activeStrategies = await dbQuery("SELECT * FROM custom_strategies WHERE status = 'ACTIVE'");
     if (activeStrategies.length === 0) {
       return res.json({ success: true, data: [] });
+    }
+
+    // Fetch coverage rate per league
+    const coverageRows = await dbQuery(`
+      SELECT 
+        tournament,
+        ROUND(CAST(SUM(CASE WHEN statistics_json IS NOT NULL THEN 1 ELSE 0 END) AS REAL) / COUNT(*) * 100, 1) as coverage_rate
+      FROM scraped_predictions
+      WHERE is_historical = 0 AND is_finished = 1
+      GROUP BY tournament
+    `);
+    const coverageMap = new Map();
+    for (const row of coverageRows) {
+      coverageMap.set(row.tournament, row.coverage_rate);
     }
 
     // 2. Get all matches (including finished ones)
@@ -438,6 +514,12 @@ router.get('/predictions/magic', async (req, res) => {
 
     // 3. For each upcoming match, check active strategies
     for (const match of upcomingMatches) {
+      // Check league coverage rate first
+      const leagueCoverage = coverageMap.get(match.tournament) || 0.0;
+      if (leagueCoverage < minCoverage) {
+        continue;
+      }
+
       // Find historical finished H2H matches (up to 15 to cover potential limits)
       const h2hMatches = await dbQuery(`
         SELECT * FROM scraped_predictions 
