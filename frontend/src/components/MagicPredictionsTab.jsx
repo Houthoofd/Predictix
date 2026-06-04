@@ -13,7 +13,9 @@ import {
   ShoppingCart,
   Zap,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 // Pure Poisson CDF calculations and helper functions
@@ -473,7 +475,15 @@ export default function MagicPredictionsTab({
   const [activeKebabId, setActiveKebabId] = React.useState(null);
   const [sortBy, setSortBy] = React.useState('date'); // 'date' or 'confidence'
   const [minCoverage, setMinCoverage] = React.useState('50');
+  const [collapsedDates, setCollapsedDates] = React.useState({});
   const scannerCarouselRef = React.useRef(null);
+
+  const toggleDateCollapse = (dateStr) => {
+    setCollapsedDates(prev => ({
+      ...prev,
+      [dateStr]: !prev[dateStr]
+    }));
+  };
 
   const scrollScanner = (direction) => {
     if (scannerCarouselRef.current) {
@@ -557,6 +567,39 @@ export default function MagicPredictionsTab({
   const filteredSignals = filterMetric === 'all' 
     ? signals 
     : signals.filter(s => s.metric === filterMetric);
+
+  // Group and sort dates for collapse/expand operations
+  const dateGroups = React.useMemo(() => {
+    const groups = {};
+    filteredSignals.forEach(sig => {
+      const dateVal = sig.date || 'Date inconnue';
+      if (!groups[dateVal]) groups[dateVal] = [];
+      groups[dateVal].push(sig);
+    });
+    return groups;
+  }, [filteredSignals]);
+
+  const sortedDates = React.useMemo(() => {
+    return Object.keys(dateGroups).sort((a, b) => {
+      try {
+        return parseFrenchDate(b).getTime() - parseFrenchDate(a).getTime();
+      } catch (e) {
+        return 0;
+      }
+    });
+  }, [dateGroups]);
+
+  const collapseAllDates = () => {
+    const nextCollapsed = {};
+    sortedDates.forEach(d => {
+      nextCollapsed[d] = true;
+    });
+    setCollapsedDates(nextCollapsed);
+  };
+
+  const expandAllDates = () => {
+    setCollapsedDates({});
+  };
 
   // Helper card renderer
   const renderSignalCard = (sig) => {
@@ -1150,6 +1193,14 @@ export default function MagicPredictionsTab({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
+      <style>{`
+        .date-section-header:hover {
+          color: #bf5af2 !important;
+        }
+        .date-section-header:hover span {
+          color: #fff !important;
+        }
+      `}</style>
       
       {/* Header and explanation */}
       <div className="glass-card accent-left" style={{
@@ -1537,6 +1588,53 @@ export default function MagicPredictionsTab({
               </select>
             </div>
 
+            {sortBy === 'date' && sortedDates.length > 0 && (
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button
+                  className="btn btn-secondary"
+                  style={{ 
+                    padding: '4px 10px', 
+                    fontSize: '11px', 
+                    height: '28px',
+                    borderRadius: '6px',
+                    background: 'rgba(255, 255, 255, 0.03)',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-secondary)',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                  onClick={collapseAllDates}
+                  title="Replier toutes les sections de date"
+                >
+                  Tout replier
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  style={{ 
+                    padding: '4px 10px', 
+                    fontSize: '11px', 
+                    height: '28px',
+                    borderRadius: '6px',
+                    background: 'rgba(255, 255, 255, 0.03)',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-secondary)',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                  onClick={expandAllDates}
+                  title="Déplier toutes les sections de date"
+                >
+                  Tout déplier
+                </button>
+              </div>
+            )}
+
             <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 600 }}>
               Signaux détectés : <strong style={{ color: '#bf5af2' }}>{filteredSignals.length}</strong>
             </span>
@@ -1559,34 +1657,36 @@ export default function MagicPredictionsTab({
       ) : filteredSignals.length > 0 ? (
         (() => {
           if (sortBy === 'date') {
-            const dateGroups = {};
-            filteredSignals.forEach(sig => {
-              const dateVal = sig.date || 'Date inconnue';
-              if (!dateGroups[dateVal]) dateGroups[dateVal] = [];
-              dateGroups[dateVal].push(sig);
-            });
-
-            const sortedDates = Object.keys(dateGroups).sort((a, b) => {
-              return parseFrenchDate(b).getTime() - parseFrenchDate(a).getTime();
-            });
-
             return sortedDates.map((dateStr, dIdx) => {
               const signalsInDate = dateGroups[dateStr];
+              const isCollapsed = !!collapsedDates[dateStr];
 
               return (
                 <div key={dIdx} style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
                   {/* Date Section Header */}
-                  <div style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '8px', 
-                    padding: '8px 0', 
-                    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-                    fontFamily: 'Outfit',
-                    fontSize: '15px',
-                    fontWeight: 800,
-                    color: 'var(--text-primary)'
-                  }}>
+                  <div 
+                    onClick={() => toggleDateCollapse(dateStr)}
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '8px', 
+                      padding: '8px 0', 
+                      borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                      fontFamily: 'Outfit',
+                      fontSize: '15px',
+                      fontWeight: 800,
+                      color: 'var(--text-primary)',
+                      cursor: 'pointer',
+                      userSelect: 'none',
+                      transition: 'color 0.2s ease-in-out'
+                    }}
+                    className="date-section-header"
+                  >
+                    {isCollapsed ? (
+                      <ChevronRight size={16} style={{ color: '#bf5af2', marginRight: '2px' }} />
+                    ) : (
+                      <ChevronDown size={16} style={{ color: '#bf5af2', marginRight: '2px' }} />
+                    )}
                     <Calendar size={16} style={{ color: '#bf5af2' }} />
                     <span>{formatHumanDate(dateStr)}</span>
                     <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500, background: 'rgba(255, 255, 255, 0.05)', padding: '2px 8px', borderRadius: '10px', marginLeft: '6px' }}>
@@ -1594,9 +1694,11 @@ export default function MagicPredictionsTab({
                     </span>
                   </div>
 
-                  <div className="grid-3" style={{ animation: 'fadeIn 0.3s ease-out' }}>
-                    {signalsInDate.map((sig) => renderSignalCard(sig))}
-                  </div>
+                  {!isCollapsed && (
+                    <div className="grid-3" style={{ animation: 'fadeIn 0.3s ease-out' }}>
+                      {signalsInDate.map((sig) => renderSignalCard(sig))}
+                    </div>
+                  )}
                 </div>
               );
             });
