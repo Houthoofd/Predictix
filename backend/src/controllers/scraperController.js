@@ -435,17 +435,28 @@ class ScraperController {
       scriptName = 'scrape-matchendirect.sh';
     }
 
+    const sportsToScrape = (sport === 'all' && scraper === 'flashscore')
+      ? ['football', 'basketball', 'tennis', 'rugby', 'handball', 'volleyball', 'hockey', 'baseball', 'american-football', 'table-tennis', 'badminton', 'cricket', 'snooker', 'futsal']
+      : [sport];
+
     try {
-      const matches = await runDiscoveryProcess(scraperPath, scriptName, outputDirs, formattedDate, (child) => {
-        activeScraperProcess = child;
-      }, scraper, sport);
+      let discoveredMatches = [];
+      for (const sp of sportsToScrape) {
+        console.log(`[Predictix Discovery] Discovering matches for: ${sp}`);
+        const matches = await runDiscoveryProcess(scraperPath, scriptName, outputDirs, formattedDate, (child) => {
+          activeScraperProcess = child;
+        }, scraper, sp);
+        
+        const withSport = matches.map(m => ({ ...m, sport: sp }));
+        discoveredMatches = discoveredMatches.concat(withSport);
+      }
 
       activeScraperProcess = null;
 
       return res.json({
         success: true,
-        count: matches.length,
-        matches: matches.map(m => ({
+        count: discoveredMatches.length,
+        matches: discoveredMatches.map(m => ({
           match_id: m.match_id,
           time: m.time,
           tournament: m.tournament,
@@ -454,7 +465,8 @@ class ScraperController {
           home_logo: m.home_logo,
           away_logo: m.away_logo,
           score: m.score,
-          href: m.historical_links?.[0] || ''
+          href: m.historical_links?.[0] || m.href || '',
+          sport: m.sport
         }))
       });
     } catch (err) {
@@ -582,12 +594,26 @@ class ScraperController {
 
       // 4. Discovery Phase (gets daily matches listing)
       const sourceName = scraper === 'flashscore' ? 'Flashscore' : 'Match en Direct';
-      sendEvent('log', { message: `[Predictix] Phase 1/4 : Découverte des matchs du jour sur ${sourceName} (${sport})...` });
       
+      const sportsToScrape = (sport === 'all' && scraper === 'flashscore')
+        ? ['football', 'basketball', 'tennis', 'rugby', 'handball', 'volleyball', 'hockey', 'baseball', 'american-football', 'table-tennis', 'badminton', 'cricket', 'snooker', 'futsal']
+        : [sport];
+
       let discoveredMatches = [];
-      discoveredMatches = await runDiscoveryProcess(scraperPath, scriptName, outputDirs, formattedDate, (child) => {
-        activeScraperProcess = child;
-      }, scraper, sport);
+      for (const sp of sportsToScrape) {
+        if (stopScraperRequested) break;
+        sendEvent('log', { message: `[Predictix] Phase 1/4 : Découverte des matchs du jour sur ${sourceName} (${sp})...` });
+        try {
+          const matches = await runDiscoveryProcess(scraperPath, scriptName, outputDirs, formattedDate, (child) => {
+            activeScraperProcess = child;
+          }, scraper, sp);
+          
+          const withSport = matches.map(m => ({ ...m, sport: sp }));
+          discoveredMatches = discoveredMatches.concat(withSport);
+        } catch (err) {
+          sendEvent('log', { message: `[Predictix] [Warning] Échec de la découverte pour ${sp} : ${err.message}` });
+        }
+      }
 
       activeScraperProcess = null;
 
@@ -614,11 +640,12 @@ class ScraperController {
           if (index >= matchesToScrape.length) break;
           
           const m = matchesToScrape[index];
-          sendEvent('log', { message: `[Tor Port ${socksPort}] Scraping détails pour : ${m.home_team} vs ${m.away_team}...` });
+          const matchSport = m.sport || sport;
+          sendEvent('log', { message: `[Tor Port ${socksPort}] Scraping détails pour [${matchSport}] : ${m.home_team} vs ${m.away_team}...` });
           
           const details = await scrapeSingleMatch(scraperPath, m.href || m.match_url || m.match_id, false, (child) => {
             // Can be used to register child PID if desired
-          }, socksPort, scraper, sport);
+          }, socksPort, scraper, matchSport);
           
           if (details) {
             let finalFirstHalfCornersHome = details.first_half_corners_home;
@@ -636,6 +663,13 @@ class ScraperController {
               }
             }
 
+            // Skip match if no stats are available after both attempts
+            const hasStats = finalStatistics && Object.keys(finalStatistics).some(k => k !== 'stats_source' && finalStatistics[k] !== null && finalStatistics[k] !== undefined);
+            if (!hasStats) {
+              sendEvent('log', { message: `[Tor Port ${socksPort}] [Ignoré] Match ${details.home_team || m.home_team} vs ${details.away_team || m.away_team} ignoré car aucune statistique n'est disponible.` });
+              continue;
+            }
+
             const enriched = {
               match_id: m.match_id || m.href || '',
               time: m.time || 'Finished',
@@ -650,14 +684,15 @@ class ScraperController {
               first_half_corners_away: finalFirstHalfCornersAway,
               historical_links: details.historical_links,
               match_url: m.href || m.match_url || '',
-              statistics: finalStatistics
+              statistics: finalStatistics,
+              sport: matchSport
             };
             
             scrapedMatches.push(enriched);
             sendEvent('match_scraped', { match: enriched });
             
             const scoreText = enriched.score ? ` (${enriched.score})` : '';
-            sendEvent('log', { message: `[Tor Port ${socksPort}] ✓ Match enrichi : ${enriched.home_team} vs ${enriched.away_team}${scoreText}` });
+            sendEvent('log', { message: `[Tor Port ${socksPort}] ✓ Match enrichi [${matchSport}] : ${enriched.home_team} vs ${enriched.away_team}${scoreText}` });
           } else {
             sendEvent('log', { message: `[Tor Port ${socksPort}] [Erreur] Échec du crawl détails pour : ${m.home_team} vs ${m.away_team}` });
           }
@@ -686,6 +721,7 @@ class ScraperController {
       sendEvent('log', { message: `[Predictix] Phase 4/4 : Analyse et crawl des confrontations H2H en parallèle...` });
       
       const uncachedLinksSet = new Set();
+      const linkSports = new Map();
       for (const match of scrapedMatches) {
         if (!match.home_team || !match.away_team) continue;
 
@@ -727,6 +763,7 @@ class ScraperController {
               const hasNoStats = cached.length > 0 && cached[0].first_half_corners_home === null;
               if (cached.length === 0 || isPlaceholder || hasNoStats) {
                 uncachedLinksSet.add(link);
+                linkSports.set(link, match.sport || sport);
                 matchAddedCount++;
               } else {
                 const score = cached[0].score || '-';
@@ -741,7 +778,8 @@ class ScraperController {
                   score: score,
                   date: cached[0].date,
                   first_half_corners_home: cached[0].first_half_corners_home,
-                  first_half_corners_away: cached[0].first_half_corners_away
+                  first_half_corners_away: cached[0].first_half_corners_away,
+                  sport: match.sport || sport
                 }});
               }
             }
@@ -762,7 +800,8 @@ class ScraperController {
           importSkippedMatch,
           onH2HScraped: (h2hData) => sendEvent('h2h_scraped', { h2h: h2hData }),
           scraper: scraper,
-          sport: sport
+          sport: sport,
+          linkSports: linkSports
         });
       }
       
@@ -1035,6 +1074,10 @@ class ScraperController {
 
       (async () => {
         try {
+          const isFlashscore = match.sport !== 'football' || (match.match_url && !match.match_url.startsWith('/live-score/'));
+          const scraperSource = isFlashscore ? 'flashscore' : 'matchendirect';
+          const matchSport = match.sport || 'football';
+
           let activeLinks = [...links];
 
           if (activeLinks.length === 1 && activeLinks[0].startsWith('/live-score/')) {
@@ -1046,7 +1089,7 @@ class ScraperController {
             }
 
             console.log(`[Predictix On-Demand Background] Crawling primary match page: ${targetLink}`);
-            const primaryDetails = await scrapeSingleMatch(scraperPath, targetLink, false, onSpawn);
+            const primaryDetails = await scrapeSingleMatch(scraperPath, targetLink, false, onSpawn, 9050, scraperSource, matchSport);
 
             if (primaryDetails) {
               await enrichPrimaryMatch(matchId, primaryDetails, targetLink, match);
@@ -1078,7 +1121,9 @@ class ScraperController {
               shouldStop: () => stopScraperRequested || !activeCrawlHistoryMatches.has(matchId),
               log: (msg) => console.log(`[Predictix On-Demand Background] ${msg}`),
               importHistoricalMatch,
-              importSkippedMatch
+              importSkippedMatch,
+              scraper: scraperSource,
+              sport: matchSport
             });
           }
           console.log(`[Predictix On-Demand Background] ✓ Finished background crawl of H2H matches for primary match ${matchId}!`);

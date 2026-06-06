@@ -34,12 +34,31 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [trackerSubTab, setTrackerSubTab] = useState('journal');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [selectedMagicSport, setSelectedMagicSport] = useState('all');
+  const [selectedMagicSport, setSelectedMagicSport] = useState('football');
   
   // Data State
   const [bankroll, setBankroll] = useState({ balance: 1000, initial_balance: 1000, currency: '€' });
   const [bets, setBets] = useState([]);
   const [predictions, setPredictions] = useState([]);
+
+  // Lifted Magic Predictions states
+  const [magicSignals, setMagicSignals] = useState([]);
+  const [magicLoading, setMagicLoading] = useState(true);
+  const [minCoverage, setMinCoverage] = useState('50');
+  const [magicError, setMagicError] = useState(null);
+
+  // Compute sport match counts dynamically from magic signals
+  const sportCounts = React.useMemo(() => {
+    const counts = {};
+    if (magicSignals && Array.isArray(magicSignals)) {
+      magicSignals.forEach(s => {
+        const sportKey = s.sport || 'football';
+        counts[sportKey] = (counts[sportKey] || 0) + 1;
+      });
+    }
+    return counts;
+  }, [magicSignals]);
+
   const [stats, setStats] = useState({
     summary: { total_profit: 0, total_stake: 0, roi: 0, win_rate: 0, current_month_profit: 0, counts: { total: 0, won: 0, lost: 0, pending: 0, refunded: 0, settled: 0 } },
     charts: { history: [], leagues: [], bookmakers: [], monthly: [] }
@@ -180,6 +199,11 @@ export default function App() {
   useEffect(() => {
     fetchAllData();
   }, []);
+
+  // Fetch magic predictions whenever minCoverage or predictions change
+  useEffect(() => {
+    fetchMagicSignals();
+  }, [minCoverage, predictions]);
 
   // Scroll console to bottom when logs update
   useEffect(() => {
@@ -363,6 +387,24 @@ export default function App() {
     const res = await fetch(url);
     const json = await res.json();
     if (json.success) setPredictions(json.data);
+  };
+
+  const fetchMagicSignals = async (coverage = minCoverage) => {
+    setMagicLoading(true);
+    setMagicError(null);
+    try {
+      const res = await fetch(`/api/predictions/magic?minCoverage=${coverage}`);
+      const json = await res.json();
+      if (json.success) {
+        setMagicSignals(json.data || []);
+      } else {
+        setMagicError(json.error?.message || 'Impossible de charger les pronostics magiques.');
+      }
+    } catch (err) {
+      setMagicError('Erreur réseau lors de la récupération des signaux.');
+    } finally {
+      setMagicLoading(false);
+    }
   };
 
   const handleCrawlHistory = async (matchId) => {
@@ -984,7 +1026,9 @@ export default function App() {
     setTotalDeep(0);
     setLiveScrapedMatches([]);
     const dateLogSuffix = scraperTargetDate ? ` pour la date ${scraperTargetDate}` : " du jour";
-    const sourceName = selectedScraperSource === 'flashscore' ? `Flashscore (${selectedScraperSport})` : "Match en Direct";
+    const sourceName = selectedScraperSource === 'flashscore'
+      ? `Flashscore (${selectedScraperSport === 'all' ? 'Tous les sports' : selectedScraperSport})`
+      : "Match en Direct";
     setScraperLogs([{ message: `[Predictix] Lancement de la découverte des matchs ${dateLogSuffix} via ${sourceName}...`, type: 'system' }]);
     showToast("Découverte des matchs lancée...", "info");
     
@@ -1249,6 +1293,7 @@ export default function App() {
         basketCount={basketBets.length}
         selectedMagicSport={selectedMagicSport}
         setSelectedMagicSport={setSelectedMagicSport}
+        sportCounts={sportCounts}
       />
 
       {/* Main interface content */}
@@ -1359,6 +1404,12 @@ export default function App() {
                   setSelectedPredIds={setSelectedPredIds}
                   selectedMagicSport={selectedMagicSport}
                   setSelectedMagicSport={setSelectedMagicSport}
+                  magicSignals={magicSignals}
+                  magicLoading={magicLoading}
+                  magicError={magicError}
+                  fetchMagicSignals={fetchMagicSignals}
+                  minCoverage={minCoverage}
+                  setMinCoverage={setMinCoverage}
                 />
               )}
 

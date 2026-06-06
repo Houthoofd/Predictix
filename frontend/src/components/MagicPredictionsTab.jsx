@@ -18,6 +18,23 @@ import {
   ChevronUp
 } from 'lucide-react';
 
+const sportLabels = {
+  football: 'Football',
+  basketball: 'Basketball',
+  tennis: 'Tennis',
+  rugby: 'Rugby',
+  handball: 'Handball',
+  volleyball: 'Volleyball',
+  hockey: 'Hockey sur glace',
+  baseball: 'Baseball',
+  'american-football': 'Football Américain',
+  'table-tennis': 'Tennis de table',
+  badminton: 'Badminton',
+  cricket: 'Cricket',
+  snooker: 'Snooker',
+  futsal: 'Futsal'
+};
+
 // Pure Poisson CDF calculations and helper functions
 const poissonUnder = (lambda, line) => {
   if (lambda <= 0) return 1;
@@ -481,19 +498,29 @@ export default function MagicPredictionsTab({
   handleInstantPlaceBet,
   selectedPredIds,
   setSelectedPredIds,
-  selectedMagicSport = 'all',
-  setSelectedMagicSport
+  selectedMagicSport = 'football',
+  setSelectedMagicSport,
+  magicSignals = [],
+  magicLoading = false,
+  magicError = null,
+  fetchMagicSignals,
+  minCoverage = '50',
+  setMinCoverage
 }) {
-  const [signals, setSignals] = React.useState([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState(null);
   const [filterMetric, setFilterMetric] = React.useState('all');
   const [selectedBets, setSelectedBets] = React.useState({});
-  const [activeKebabId, setActiveKebabId] = React.useState(null);
+  const [activeKebabId, ReactActiveKebabId] = React.useState(null);
   const [sortBy, setSortBy] = React.useState('date'); // 'date' or 'confidence'
-  const [minCoverage, setMinCoverage] = React.useState('50');
   const [collapsedDates, setCollapsedDates] = React.useState({});
   const scannerCarouselRef = React.useRef(null);
+
+  const signals = magicSignals;
+  const loading = magicLoading;
+  const error = magicError;
+
+  const setActiveKebabId = (val) => {
+    ReactActiveKebabId(val);
+  };
 
   const toggleDateCollapse = (dateStr) => {
     setCollapsedDates(prev => ({
@@ -514,7 +541,7 @@ export default function MagicPredictionsTab({
 
   React.useEffect(() => {
     const handleOutsideClick = () => {
-      setActiveKebabId(null);
+      ReactActiveKebabId(null);
     };
     document.addEventListener('click', handleOutsideClick);
     return () => {
@@ -524,30 +551,19 @@ export default function MagicPredictionsTab({
 
   const toggleKebab = (e, sigId) => {
     e.stopPropagation();
-    setActiveKebabId(prev => prev === sigId ? null : sigId);
+    ReactActiveKebabId(prev => prev === sigId ? null : sigId);
   };
 
   const fetchSignals = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`http://localhost:5000/api/predictions/magic?minCoverage=${minCoverage}`);
-      const json = await res.json();
-      if (json.success) {
-        setSignals(json.data || []);
-      } else {
-        setError(json.error?.message || 'Impossible de charger les pronostics magiques.');
-      }
-    } catch (err) {
-      setError('Erreur réseau lors de la récupération des signaux.');
-    } finally {
-      setLoading(false);
+    if (typeof fetchMagicSignals === 'function') {
+      fetchMagicSignals();
     }
   };
 
   React.useEffect(() => {
-    fetchSignals();
-  }, [minCoverage, predictions]);
+    // Automatically expand all dates when the sport filter changes
+    setCollapsedDates({});
+  }, [selectedMagicSport]);
 
   const getMetricBadgeStyle = (metric) => {
     switch (metric) {
@@ -580,7 +596,7 @@ export default function MagicPredictionsTab({
 
   // Extract unique metrics and sports in active signals for filtering
   const availableMetrics = ['all', ...new Set(signals.map(s => s.metric))];
-  const availableSports = ['all', ...new Set(signals.map(s => s.sport || 'football'))];
+  const availableSports = [...new Set(signals.map(s => s.sport || 'football'))];
 
   const filteredSignals = signals.filter(s => {
     const matchMetric = filterMetric === 'all' || s.metric === filterMetric;
@@ -1620,10 +1636,9 @@ export default function MagicPredictionsTab({
                   outline: 'none'
                 }}
               >
-                <option value="all" style={{ background: '#1c1c1e', color: '#fff' }}>Tous les sports</option>
-                {availableSports.filter(sp => sp !== 'all').map(sp => (
+                {availableSports.map(sp => (
                   <option key={sp} value={sp} style={{ background: '#1c1c1e', color: '#fff' }}>
-                    {sp.charAt(0).toUpperCase() + sp.slice(1)}
+                    {sportLabels[sp] || (sp.charAt(0).toUpperCase() + sp.slice(1))}
                   </option>
                 ))}
               </select>

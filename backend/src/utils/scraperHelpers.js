@@ -282,6 +282,9 @@ export async function scrapeSingleMatch(scraperPath, link, skipOdds = false, onS
             const rawData = fs.readFileSync(tmpOutFile, 'utf-8');
             const parsed = JSON.parse(rawData);
             const matchData = (parsed.all_matches || parsed.matches || [])[0];
+            if (matchData) {
+              matchData.sport = sport;
+            }
             
             if (fs.existsSync(tmpOutFile)) fs.unlinkSync(tmpOutFile);
             resolve(matchData || null);
@@ -409,7 +412,8 @@ export async function crawlH2HLinksBatch(linksToScrape, scraperPath, options = {
     importSkippedMatch,
     onH2HScraped,
     scraper = 'matchendirect',
-    sport = 'football'
+    sport = 'football',
+    linkSports = null
   } = options;
 
   let currentIndex = 0;
@@ -422,8 +426,9 @@ export async function crawlH2HLinksBatch(linksToScrape, scraperPath, options = {
       if (index >= linksToScrape.length) break;
       
       const link = linksToScrape[index];
+      const matchSport = (linkSports && linkSports.get(link)) || sport;
       
-      const histMatch = await scrapeSingleMatch(scraperPath, link, true, onSpawn, socksPort, scraper, sport);
+      const histMatch = await scrapeSingleMatch(scraperPath, link, true, onSpawn, socksPort, scraper, matchSport);
  
       if (histMatch && histMatch.home_team && histMatch.away_team) {
         if (importHistoricalMatch) await importHistoricalMatch(link, histMatch);

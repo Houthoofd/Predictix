@@ -171,7 +171,9 @@ export default function ScraperTab({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px', borderBottom: scraping ? '1px solid var(--border-color)' : 'none', paddingBottom: scraping ? '16px' : '0', transition: 'all 0.3s ease' }}>
           <div>
             <h3 style={{ fontSize: '18px', fontFamily: 'Outfit', fontWeight: 700 }}>
-              {selectedScraperSource === 'flashscore' ? `Lancer le Scraper Go (Flashscore - ${selectedScraperSport.charAt(0).toUpperCase() + selectedScraperSport.slice(1)})` : 'Lancer le Scraper Go (MatchEnDirect.fr)'}
+              {selectedScraperSource === 'flashscore' 
+                ? `Lancer le Scraper Go (Flashscore - ${selectedScraperSport === 'all' ? 'Tous les sports' : (selectedScraperSport.charAt(0).toUpperCase() + selectedScraperSport.slice(1))})` 
+                : 'Lancer le Scraper Go (MatchEnDirect.fr)'}
             </h3>
             <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
               {selectedScraperSource === 'flashscore' ? 'Compile et démarre le scraper Flashscore pour extraire les matchs, scores et statistiques du sport sélectionné.' : 'Compile et démarre le serveur de workflow, navigue sur MatchEnDirect pour extraire les statistiques et cotes.'}
@@ -245,6 +247,7 @@ export default function ScraperTab({
                     cursor: 'pointer'
                   }}
                 >
+                  <option value="all" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>Tous les sports</option>
                   <option value="football" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>Football</option>
                   <option value="basketball" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>Basketball</option>
                   <option value="tennis" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>Tennis</option>
