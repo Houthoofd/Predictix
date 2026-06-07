@@ -124,7 +124,7 @@ export default function App() {
           setTheme={navigation.setTheme}
           bankroll={bets.bankroll}
           notifications={notify.notifications}
-          setNotifications={setNotify.setNotifications}
+          setNotifications={notify.setNotifications}
         />
 
         <div className="page-body">

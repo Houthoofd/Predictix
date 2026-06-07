@@ -33,37 +33,7 @@ export default function Header({
     };
   }, []);
 
-  // Dynamically update App.jsx's page-title and subtitle without modifying App.jsx
-  React.useEffect(() => {
-    const titleEl = document.querySelector('.page-title');
-    const subtitleEl = document.querySelector('.header-subtitle');
-    
-    const updateText = () => {
-      if (titleEl) {
-        if (titleEl.textContent === 'Pronostics Magiques') {
-          titleEl.textContent = 'Sports';
-        } else if (titleEl.textContent === 'Configuration Scraper') {
-          titleEl.textContent = 'Collecteur de Données';
-        }
-      }
-      if (subtitleEl) {
-        if (subtitleEl.textContent === 'Signaux de value-bets basés sur vos stratégies personnalisées sur-mesure.') {
-          subtitleEl.textContent = 'Consultez les signaux de value-bets et l’analyse statistique par sport.';
-        } else if (subtitleEl.textContent === 'Gérez et exécutez le scraper de match-en-direct.fr en temps réel.') {
-          subtitleEl.textContent = 'Gérez et exécutez le collecteur de données de match-en-direct.fr en temps réel.';
-        }
-      }
-    };
 
-    updateText();
-
-    const observer = new MutationObserver(updateText);
-    const config = { characterData: true, childList: true, subtree: true };
-    if (titleEl) observer.observe(titleEl, config);
-    if (subtitleEl) observer.observe(subtitleEl, config);
-
-    return () => observer.disconnect();
-  }, [activeTab]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
