@@ -8,8 +8,10 @@ import {
   bootstrapTorInstances 
 } from '../utils/scraperHelpers.js';
 import { processQueueItem } from './integrityWorker.js';
+import { updateKeepAwakeStatus } from '../utils/keepAwake.js';
 
 export async function runIntegrityBatchLoop() {
+  await updateKeepAwakeStatus(true);
   const activeIntegrityBatch = scraperState.activeIntegrityBatch;
   const scraperPath = process.env.SCRAPER_PATH || 'E:\\Developpement\\scrapper-v3';
 
@@ -37,6 +39,7 @@ export async function runIntegrityBatchLoop() {
   if (activePorts.length === 0) {
     activeIntegrityBatch.status = 'idle';
     activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Erreur] Erreur : Aucun port proxy Tor actif détecté. Réparation annulée.`);
+    await updateKeepAwakeStatus(false);
     return;
   }
 
@@ -105,4 +108,5 @@ export async function runIntegrityBatchLoop() {
   } else if (activeIntegrityBatch.status === 'paused') {
     activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Pause] Réparation globale mise en pause.`);
   }
+  await updateKeepAwakeStatus(false);
 }

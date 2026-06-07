@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
-export default function useModalManager({ showToast, showConfirm, predictions, basketBets, setBasketBets }) {
+export default function useModalManager({ showToast, showConfirm, predictions, basketBets, setBasketBets, globalSettings }) {
   const [showAddBetModal, setShowAddBetModal] = useState(false);
   const [showEditBetModal, setShowEditBetModal] = useState(false);
   const [betPlacedSuccess, setBetPlacedSuccess] = useState(false);
@@ -18,6 +18,16 @@ export default function useModalManager({ showToast, showConfirm, predictions, b
     best_tip: 'Over', card_line: 4.5, odds: 1.85, stake: 50, probability: '',
     bookmaker: 'Unibet', status: 'PENDING', notes: '', match_url: '', sport: 'football'
   });
+
+  useEffect(() => {
+    if (globalSettings) {
+      setNewBetForm(prev => ({
+        ...prev,
+        bookmaker: globalSettings.default_bookmaker || 'Unibet',
+        stake: Math.round(50) // dummy fallback, we will set it on prefill anyway
+      }));
+    }
+  }, [globalSettings]);
 
   const [batchBetsForm, setBatchBetsForm] = useState([]);
   const [batchGlobalStake, setBatchGlobalStake] = useState('');
@@ -108,9 +118,9 @@ export default function useModalManager({ showToast, showConfirm, predictions, b
       best_tip: pred.best_tip || 'Over',
       card_line: isNaN(lineNum) ? 4.5 : lineNum,
       odds: isNaN(oddsNum) ? 1.85 : oddsNum,
-      stake: Math.round(balance * 0.05),
+      stake: Math.round(balance * (parseFloat(globalSettings?.default_stake_pct || 5) / 100)),
       probability: isNaN(probNum) ? '' : probNum,
-      bookmaker: 'Unibet',
+      bookmaker: globalSettings?.default_bookmaker || 'Unibet',
       status: 'PENDING',
       notes: pred.notes || `Placé depuis la prédiction Predictix (Probabilité: ${pred.probability})`,
       match_url: pred.match_url || '',
@@ -141,9 +151,9 @@ export default function useModalManager({ showToast, showConfirm, predictions, b
       best_tip: pred.best_tip || 'Over',
       card_line: isNaN(lineNum) ? 4.5 : lineNum,
       odds: isNaN(oddsNum) ? 1.85 : oddsNum,
-      stake: Math.round(balance * 0.05),
+      stake: Math.round(balance * (parseFloat(globalSettings?.default_stake_pct || 5) / 100)),
       probability: isNaN(probNum) ? '' : probNum,
-      bookmaker: 'Unibet',
+      bookmaker: globalSettings?.default_bookmaker || 'Unibet',
       status: 'PENDING',
       notes: pred.notes || `Ajouté depuis les Pronostics Magiques.`,
       match_url: pred.match_url || '',
@@ -170,9 +180,9 @@ export default function useModalManager({ showToast, showConfirm, predictions, b
       best_tip: pred.best_tip || 'Over',
       card_line: isNaN(lineNum) ? 4.5 : lineNum,
       odds: isNaN(oddsNum) ? 1.85 : oddsNum,
-      stake: Math.round(balance * 0.05),
+      stake: Math.round(balance * (parseFloat(globalSettings?.default_stake_pct || 5) / 100)),
       probability: isNaN(probNum) ? '' : probNum,
-      bookmaker: 'Unibet',
+      bookmaker: globalSettings?.default_bookmaker || 'Unibet',
       status: 'PENDING',
       notes: pred.notes || `Placement direct depuis les Pronostics Magiques.`,
       match_url: pred.match_url || '',
@@ -217,9 +227,9 @@ export default function useModalManager({ showToast, showConfirm, predictions, b
         best_tip: pred.best_tip || 'Over',
         card_line: isNaN(lineNum) ? 4.5 : lineNum,
         odds: isNaN(oddsNum) ? 1.85 : oddsNum,
-        stake: Math.round(balance * 0.05) || 50,
+        stake: Math.round(balance * (parseFloat(globalSettings?.default_stake_pct || 5) / 100)) || 50,
         probability: isNaN(probNum) ? '' : probNum,
-        bookmaker: 'Unibet',
+        bookmaker: globalSettings?.default_bookmaker || 'Unibet',
         status: 'PENDING',
         notes: `Placé en lot depuis Predictix (Probabilité: ${pred.probability})`,
         match_url: pred.match_url || '',
@@ -228,8 +238,8 @@ export default function useModalManager({ showToast, showConfirm, predictions, b
     });
     
     setBatchBetsForm(defaultBets);
-    setBatchGlobalStake(Math.round(balance * 0.05) || 50);
-    setBatchGlobalBookmaker('Unibet');
+    setBatchGlobalStake(Math.round(balance * (parseFloat(globalSettings?.default_stake_pct || 5) / 100)) || 50);
+    setBatchGlobalBookmaker(globalSettings?.default_bookmaker || 'Unibet');
     setShowBatchBetModal(true);
   };
 

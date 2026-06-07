@@ -33,10 +33,12 @@ app.use((req, res, next) => {
 import betsRoutes from './routes/bets.js';
 import scraperRoutes from './routes/scraper.js';
 import strategiesRoutes from './routes/strategies.js';
+import settingsRoutes from './routes/settings.js';
 
 app.use('/api', betsRoutes);
 app.use('/api', scraperRoutes);
 app.use('/api', strategiesRoutes);
+app.use('/api', settingsRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

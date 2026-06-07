@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-export default function useNotificationManager() {
+export default function useNotificationManager(globalSettings) {
   const [toasts, setToasts] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [notification, setNotification] = useState({
@@ -61,16 +61,21 @@ export default function useNotificationManager() {
     }
   };
 
-  // Synchronize notifications list on mount and start polling
+  // Synchronize notifications list on mount and start polling depending on settings
   useEffect(() => {
     fetchNotifications(true);
+    
+    const isRealtime = !globalSettings || globalSettings.realtime_notifications !== 'false';
+    if (!isRealtime) {
+      return;
+    }
     
     const interval = setInterval(() => {
       fetchNotifications(false);
     }, 15000);
     
     return () => clearInterval(interval);
-  }, []);
+  }, [globalSettings]);
 
   const showNotification = (title, message, type = 'success') => {
     setNotification({

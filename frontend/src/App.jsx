@@ -23,10 +23,12 @@ import CronsTab from './components/CronsTab';
 import AppModals from './components/AppModals';
 import AppToasts from './components/AppToasts';
 import PageHeaderTitle from './components/PageHeaderTitle';
+import SettingsTab from './components/SettingsTab';
 
 export default function App() {
+  const [settings, setSettings] = useState(null);
   const navigation = useNavigationState();
-  const notify = useNotificationManager();
+  const notify = useNotificationManager(settings);
   
   const predictions = usePredictionsManager({
     showToast: notify.showToast
@@ -62,7 +64,8 @@ export default function App() {
     showConfirm: notify.showConfirm,
     predictions: predictions.predictions,
     basketBets: bets.basketBets,
-    setBasketBets: bets.setBasketBets
+    setBasketBets: bets.setBasketBets,
+    globalSettings: settings
   });
 
   const [initialLoading, setInitialLoading] = useState(true);
@@ -71,6 +74,16 @@ export default function App() {
   // Initial Data Fetch
   useEffect(() => {
     const init = async () => {
+      try {
+        const resSettings = await fetch('/api/settings');
+        const jsonSettings = await resSettings.json();
+        if (jsonSettings.success) {
+          setSettings(jsonSettings.data);
+        }
+      } catch (e) {
+        console.error("Error fetching settings on mount:", e);
+      }
+
       try {
         await Promise.all([
           bets.fetchBankroll(),
@@ -266,6 +279,14 @@ export default function App() {
 
               {activeTab === 'crons' && (
                 <CronsTab showNotification={notify.showNotification} />
+              )}
+
+              {activeTab === 'settings' && (
+                <SettingsTab 
+                  showToast={notify.showToast} 
+                  setShowResetBankrollModal={modals.setShowResetBankrollModal}
+                  onSettingsChanged={setSettings}
+                />
               )}
             </>
           )}

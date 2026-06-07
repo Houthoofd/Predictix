@@ -25,7 +25,7 @@ export { evaluateSmartScrapingFilter } from './smartScraperFilter.js';
 /**
  * Enriches a single match predictions with regressed averages, Poisson calculations, and Value Bets edges
  */
-export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatches, awayMatches, activeCrawlHistoryMatches = new Set(), customLogosMap = {}) {
+export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatches, awayMatches, activeCrawlHistoryMatches = new Set(), customLogosMap = {}, valueBetMinEdge = 5, footballCornerLine = 4.5) {
   const cleanHomeTeamKey = (row.home_team || '').toLowerCase().trim();
   const cleanAwayTeamKey = (row.away_team || '').toLowerCase().trim();
   const homeLogo = customLogosMap[cleanHomeTeamKey] || row.home_logo;
@@ -122,7 +122,7 @@ export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatc
   const { homeRegressed, awayRegressed } = calculateRegressedAverages(row, leagueAverages, homeAvg, awayAvg);
   const lambda1MT = homeRegressed + awayRegressed;
 
-  const targetLine = 4.5;
+  const targetLine = footballCornerLine;
   const overProb = poissonOver(lambda1MT, targetLine);
   const underProb = poissonUnder(lambda1MT, targetLine);
 
@@ -133,11 +133,11 @@ export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatc
 
   if (overProb >= underProb) {
     dynamicBestTip = "Plus de";
-    dynamicCardLine = "4.5";
+    dynamicCardLine = String(footballCornerLine);
     dynamicProbability = `${Math.round(overProb * 100)}%`;
   } else {
     dynamicBestTip = "Moins de";
-    dynamicCardLine = "4.5";
+    dynamicCardLine = String(footballCornerLine);
     dynamicProbability = `${Math.round(underProb * 100)}%`;
   }
 
@@ -183,8 +183,9 @@ export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatc
     const overValue = o.over_decimal ? overProb * o.over_decimal : 0;
     const underValue = o.under_decimal ? underProb * o.under_decimal : 0;
     
-    const overValueBet = overValue > 1.05;
-    const underValueBet = underValue > 1.05;
+    const edgeThreshold = 1 + (valueBetMinEdge / 100);
+    const overValueBet = overValue > edgeThreshold;
+    const underValueBet = underValue > edgeThreshold;
     
     return {
       ...o,
@@ -374,6 +375,20 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
   const leagueAverages = computeLeagueAverages(allHistoricalMatches);
   const enrichedRows = [];
 
+  let valueBetMinEdge = 5;
+  let footballCornerLine = 4.5;
+  try {
+    const settingsRows = await dbQueryFn("SELECT * FROM settings WHERE key IN ('value_bet_min_edge', 'football_corner_line')");
+    if (settingsRows && Array.isArray(settingsRows)) {
+      settingsRows.forEach(r => {
+        if (r.key === 'value_bet_min_edge') valueBetMinEdge = parseFloat(r.value) || 5;
+        if (r.key === 'football_corner_line') footballCornerLine = parseFloat(r.value) || 4.5;
+      });
+    }
+  } catch (err) {
+    console.warn("[Prediction Engine] Settings table might not exist or failed to query:", err.message);
+  }
+
   let customLogosMap = {};
   try {
     const customLogosRows = await dbQueryFn("SELECT * FROM custom_team_logos");
@@ -427,7 +442,7 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
 
     const normalizedAway = awayMatches.map(normalizeMatchRow);
     
-    const enriched = enrichMatchPredictions(row, leagueAverages, normalizedH2H, normalizedHome, normalizedAway, activeCrawlHistoryMatches, customLogosMap);
+    const enriched = enrichMatchPredictions(row, leagueAverages, normalizedH2H, normalizedHome, normalizedAway, activeCrawlHistoryMatches, customLogosMap, valueBetMinEdge, footballCornerLine);
     enrichedRows.push(enriched);
   }
 

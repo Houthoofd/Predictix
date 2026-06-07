@@ -263,6 +263,31 @@ function initDb() {
         completed_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // 9. Table settings (configuration parameters)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT
+      )
+    `, () => {
+      const defaults = [
+        ['keep_awake_mode', 'active_only'],
+        ['cron_integrity_repair', 'true'],
+        ['cron_db_cleanup', 'true'],
+        ['value_bet_min_edge', '5'],
+        ['default_stake_pct', '5'],
+        ['default_bookmaker', 'Unibet'],
+        ['football_corner_line', '4.5'],
+        ['realtime_notifications', 'true'],
+        ['cron_retry_interval_live', '10'],
+        ['cron_retry_interval_fail', '15'],
+        ['cron_max_retries', '5']
+      ];
+      for (const [key, val] of defaults) {
+        db.run('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)', [key, val]);
+      }
+    });
     
     // 6. Performance Indexes
     db.run("CREATE INDEX IF NOT EXISTS idx_predictions_historical_date ON scraped_predictions(is_historical, date)");

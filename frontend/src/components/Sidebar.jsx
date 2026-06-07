@@ -8,7 +8,8 @@ import {
   ShoppingCart,
   ShieldAlert,
   ChevronDown,
-  Clock
+  Clock,
+  Settings
 } from 'lucide-react';
 import { sportLabels, ALL_SPORTS } from '../utils/labels';
 import { sportIcons } from './SidebarIcons';
@@ -254,6 +255,19 @@ export default function Sidebar({
           >
             <ShieldAlert size={20} style={{ color: activeTab === 'integrity' ? '#ff3b30' : undefined }} />
             {!sidebarCollapsed && <span>Qualité des Données</span>}
+          </button>
+          <button 
+            className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`}
+            onClick={() => setActiveTab('settings')}
+            title={sidebarCollapsed ? "Paramètres" : ""}
+            style={{
+              '--item-accent': '#8e8e93',
+              borderLeft: activeTab === 'settings' ? '3px solid #8e8e93' : undefined,
+              color: activeTab === 'settings' ? '#8e8e93' : undefined
+            }}
+          >
+            <Settings size={20} style={{ color: activeTab === 'settings' ? '#8e8e93' : undefined }} />
+            {!sidebarCollapsed && <span>Paramètres</span>}
           </button>
         </nav>
       </div>
