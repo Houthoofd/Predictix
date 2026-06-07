@@ -3,7 +3,7 @@ import scraperController from '../controllers/scraperController.js';
 import discoveryController from '../controllers/discoveryController.js';
 import integrityController from '../controllers/integrityController.js';
 import customDataController from '../controllers/customDataController.js';
-import { getScheduledCrons, reScrapeMatch, cancelScheduledReScrape } from '../services/cronService.js';
+import { getScheduledCrons, reScrapeMatch, cancelScheduledReScrape, getCronLogs } from '../services/cronService.js';
 import { dbQuery, dbRun } from '../db/database.js';
 
 const router = express.Router();
@@ -39,6 +39,15 @@ router.delete('/scraper/crons/:matchId', async (req, res) => {
   try {
     const cancelled = cancelScheduledReScrape(matchId);
     res.json({ success: true, cancelled, message: `Planification annulée pour le match ${matchId}.` });
+  } catch (error) {
+    res.status(500).json({ success: false, error: { message: error.message } });
+  }
+});
+
+router.get('/scraper/crons/logs', (req, res) => {
+  try {
+    const logs = getCronLogs();
+    res.json({ success: true, data: logs });
   } catch (error) {
     res.status(500).json({ success: false, error: { message: error.message } });
   }

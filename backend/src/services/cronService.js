@@ -5,6 +5,17 @@ const scheduledTimeouts = new Map();
 const retryCounts = new Map();
 const MAX_RETRIES = 5;
 
+// Buffer for logs console
+const cronLogs = [];
+export const getCronLogs = () => cronLogs;
+
+const logCron = (msg, lvl = 'info') => {
+  const f = `[${new Date().toLocaleTimeString('fr-FR')}] [${lvl.toUpperCase()}] ${msg}`;
+  cronLogs.push(f);
+  if (cronLogs.length > 100) cronLogs.shift();
+  console[lvl === 'info' ? 'log' : lvl === 'warn' ? 'warn' : 'error'](f);
+};
+
 // Helper to determine match duration based on sport
 function getMatchDurationMinutes(sport) {
   const s = (sport || 'football').toLowerCase().trim();
@@ -41,14 +52,14 @@ function reschedule(matchId, minutes) {
   
   const retries = retryCounts.get(matchId) || 0;
   if (retries >= MAX_RETRIES) {
-    console.warn(`[Predictix Re-Scraper] Max retries (${MAX_RETRIES}) reached for match ${matchId}. Stopping re-scraping attempts.`);
+    logCron(`Max retries (${MAX_RETRIES}) reached for match ${matchId}. Stopping re-scraping attempts.`, 'warn');
     dbGet('SELECT home_team, away_team FROM scraped_predictions WHERE match_id = ?', [matchId])
       .then(match => {
         if (match) {
           insertNotification(`Échec du re-scraping automatique de ${match.home_team} vs ${match.away_team} (Max retries atteint).`, 'warning');
         }
       })
-      .catch(e => console.error(e));
+      .catch(e => logCron(`Error inserting failure notification: ${e.message}`, 'error'));
     retryCounts.delete(matchId);
     scheduledTimeouts.delete(matchId);
     return;
@@ -63,16 +74,16 @@ function reschedule(matchId, minutes) {
 
 // Re-scraping execution logic
 export async function reScrapeMatch(matchId) {
-  console.log(`[Predictix Re-Scraper] Running re-scrape for match ID: ${matchId}`);
+  logCron(`Running re-scrape for match ID: ${matchId}`);
   try {
     const match = await dbGet('SELECT * FROM scraped_predictions WHERE match_id = ?', [matchId]);
     if (!match) {
-      console.warn(`[Predictix Re-Scraper] Match ${matchId} not found in database.`);
+      logCron(`Match ${matchId} not found in database.`, 'warn');
       return;
     }
 
     if (match.is_finished) {
-      console.log(`[Predictix Re-Scraper] Match ${matchId} is already marked as finished.`);
+      logCron(`Match ${matchId} is already marked as finished.`);
       scheduledTimeouts.delete(matchId);
       retryCounts.delete(matchId);
       return;
@@ -80,7 +91,7 @@ export async function reScrapeMatch(matchId) {
 
     const activePort = await getTorPortFromPool();
     if (!activePort) {
-      console.warn(`[Predictix Re-Scraper] No active Tor SOCKS port found in pool. Will retry in 10 minutes.`);
+      logCron(`No active Tor SOCKS port found in pool. Will retry in 10 minutes.`, 'warn');
       reschedule(matchId, 10);
       return;
     }
@@ -94,10 +105,10 @@ export async function reScrapeMatch(matchId) {
       link = `/live-score/${link}`;
     }
 
-    console.log(`[Predictix Re-Scraper] Scraping details for match ${matchId} via ${scraper} (${sport}) using Tor Port ${activePort}...`);
+    logCron(`Scraping details for match ${matchId} via ${scraper} (${sport}) using Tor Port ${activePort}...`);
     const details = await scrapeSingleMatch(scraperPath, link, true, null, activePort, scraper, sport);
     if (!details) {
-      console.warn(`[Predictix Re-Scraper] Scraping failed for match ${matchId}. Will retry in 15 minutes.`);
+      logCron(`Scraping failed for match ${matchId}. Will retry in 15 minutes.`, 'warn');
       reschedule(matchId, 15);
       return;
     }
@@ -106,7 +117,7 @@ export async function reScrapeMatch(matchId) {
       (details.score && details.score.trim() !== '-' && details.score.trim() !== '' && details.score.includes('-')) ||
       (details.time && (details.time.toLowerCase().includes('fin') || details.time.toLowerCase().includes('terminé') || details.time.toLowerCase() === 'ter' || details.time.toLowerCase() === 'ter.'));
 
-    console.log(`[Predictix Re-Scraper] Scrape outcome for ${matchId} - isFinished: ${isFinished}, score: ${details.score || 'N/A'}`);
+    logCron(`Scrape outcome for ${matchId} - isFinished: ${isFinished}, score: ${details.score || 'N/A'}`);
 
     const enriched = {
       match_id: matchId,
@@ -132,16 +143,16 @@ export async function reScrapeMatch(matchId) {
     await importScrapedMatches([enriched], new Date().toISOString());
 
     if (!isFinished) {
-      console.log(`[Predictix Re-Scraper] Match ${matchId} is still not finished. Rescheduling check in 10 minutes.`);
+      logCron(`Match ${matchId} is still not finished. Rescheduling check in 10 minutes.`);
       reschedule(matchId, 10);
     } else {
-      console.log(`[Predictix Re-Scraper] Match ${matchId} successfully settled and marked as finished!`);
+      logCron(`Match ${matchId} successfully settled and marked as finished!`);
       insertNotification(`Match terminé : ${details.home_team} vs ${details.away_team} (Score: ${details.score || 'N/A'})`, 'info');
       scheduledTimeouts.delete(matchId);
       retryCounts.delete(matchId);
     }
   } catch (err) {
-    console.error(`[Predictix Re-Scraper] Error re-scraping match ${matchId}:`, err);
+    logCron(`Error re-scraping match ${matchId}: ${err.message}`, 'error');
     reschedule(matchId, 15);
   }
 }
@@ -152,12 +163,11 @@ export function scheduleMatchReScraping(matchId, dateStr, timeStr, sport) {
   if (!endTime) return;
 
   if (scheduledTimeouts.has(matchId)) {
-    // Already scheduled, no need to overwrite unless the details changed
     return;
   }
 
   const delay = endTime.getTime() - Date.now();
-  console.log(`[Predictix Re-Scraper] Scheduling re-scrape for match ${matchId} in ${Math.round(delay / 1000 / 60)} minutes (Expected End: ${endTime.toISOString()})`);
+  logCron(`Scheduling re-scrape for match ${matchId} in ${Math.round(delay / 1000 / 60)} minutes (Expected End: ${endTime.toISOString()})`);
 
   const timer = setTimeout(() => {
     reScrapeMatch(matchId);
@@ -172,7 +182,7 @@ export function cancelScheduledReScrape(matchId) {
     clearTimeout(scheduledTimeouts.get(matchId));
     scheduledTimeouts.delete(matchId);
     retryCounts.delete(matchId);
-    console.log(`[Predictix Re-Scraper] Cancelled scheduling for match ${matchId}`);
+    logCron(`Cancelled scheduling for match ${matchId}`);
     return true;
   }
   return false;
@@ -200,11 +210,10 @@ export async function getScheduledCrons() {
         status: retries > 0 ? `Retrying (Attempt ${retries}/${MAX_RETRIES})` : 'Scheduled'
       });
     } catch (e) {
-      console.error(`[Predictix Re-Scraper] Error fetching scheduled cron info for ${matchId}:`, e);
+      logCron(`Error fetching scheduled cron info for ${matchId}: ${e.message}`, 'error');
     }
   }
   
-  // Sort by expected end time ascending
   return list.sort((a, b) => {
     if (!a.expected_end_time) return 1;
     if (!b.expected_end_time) return -1;
@@ -214,7 +223,7 @@ export async function getScheduledCrons() {
 
 // Initial bootstrapper to recover pending re-scrapes on server launch
 export async function initReScraper() {
-  console.log('[Predictix Re-Scraper] Initializing background match re-scraper service...');
+  logCron('Initializing background match re-scraper service...');
   try {
     const unfinishedMatches = await dbQuery(`
       SELECT match_id, date, time, sport 
@@ -223,7 +232,7 @@ export async function initReScraper() {
         AND is_historical = 0
     `);
 
-    console.log(`[Predictix Re-Scraper] Found ${unfinishedMatches.length} unfinished matches in database.`);
+    logCron(`Found ${unfinishedMatches.length} unfinished matches in database.`);
     
     let immediateCount = 0;
     for (const match of unfinishedMatches) {
@@ -243,12 +252,12 @@ export async function initReScraper() {
     }
     
     if (immediateCount > 0) {
-      console.log(`[Predictix Re-Scraper] Scheduled ${immediateCount} past-due matches for immediate staggered execution.`);
+      logCron(`Scheduled ${immediateCount} past-due matches for immediate staggered execution.`);
     }
 
     // Fallback periodic check every 15 minutes
     setInterval(async () => {
-      console.log('[Predictix Re-Scraper] Fallback checker running...');
+      logCron('Fallback checker running...');
       try {
         const pending = await dbQuery(`
           SELECT match_id, date, time, sport 
@@ -260,17 +269,17 @@ export async function initReScraper() {
           const end = getExpectedEndTime(m.date, m.time, m.sport);
           if (end && end.getTime() <= Date.now()) {
             if (!scheduledTimeouts.has(m.match_id)) {
-              console.log(`[Predictix Re-Scraper Fallback] Found past-due unscheduled match: ${m.match_id}. Launching re-scrape.`);
+              logCron(`Found past-due unscheduled match: ${m.match_id}. Launching re-scrape.`);
               reScrapeMatch(m.match_id);
             }
           }
         }
       } catch (err) {
-        console.error('[Predictix Re-Scraper Fallback] Error in interval check:', err);
+        logCron(`Error in interval check: ${err.message}`, 'error');
       }
     }, 15 * 60 * 1000);
 
   } catch (err) {
-    console.error('[Predictix Re-Scraper Initialization Error]:', err);
+    logCron(`Initialization Error: ${err.message}`, 'error');
   }
 }

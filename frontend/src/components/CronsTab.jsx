@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Clock, Play, Trash2, RefreshCw, AlertCircle, Search, Calendar } from 'lucide-react';
+import { Clock, Play, Trash2, RefreshCw, AlertCircle, Search, Calendar, Terminal, ChevronDown, ChevronUp } from 'lucide-react';
 import { sportIcons } from './SidebarIcons';
 import { sportLabels } from '../utils/labels';
 
@@ -15,6 +15,11 @@ export default function CronsTab({ showNotification }) {
   const [selectedSport, setSelectedSport] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  
+  // Logs console states
+  const [showLogs, setShowLogs] = useState(true);
+  const [logs, setLogs] = useState([]);
+  const logEndRef = React.useRef(null);
 
   const fetchCrons = async () => {
     setLoading(true);
@@ -35,6 +40,18 @@ export default function CronsTab({ showNotification }) {
     }
   };
 
+  const fetchLogs = async () => {
+    try {
+      const res = await fetch('http://localhost:5000/api/scraper/crons/logs');
+      const json = await res.json();
+      if (json.success) {
+        setLogs(json.data || []);
+      }
+    } catch (err) {
+      console.error('Erreur lors de la récupération des logs de cron:', err);
+    }
+  };
+
   useEffect(() => {
     fetchCrons();
     const timer = setInterval(() => {
@@ -42,6 +59,20 @@ export default function CronsTab({ showNotification }) {
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (showLogs) {
+      fetchLogs();
+      const interval = setInterval(fetchLogs, 4000);
+      return () => clearInterval(interval);
+    }
+  }, [showLogs]);
+
+  useEffect(() => {
+    if (logEndRef.current) {
+      logEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [logs, showLogs]);
 
   // Reset to first page when search or sport filter changes
   useEffect(() => {
@@ -549,6 +580,77 @@ export default function CronsTab({ showNotification }) {
           </div>
         </div>
       )}
+      {/* Logs Console Panel */}
+      <div className="glass-card" style={{ padding: '0px', overflow: 'hidden', border: '1px solid rgba(255, 255, 255, 0.08)', marginTop: '10px' }}>
+        {/* Header */}
+        <div 
+          onClick={() => setShowLogs(!showLogs)}
+          style={{ 
+            padding: '12px 20px', 
+            background: 'rgba(255, 255, 255, 0.03)', 
+            borderBottom: showLogs ? '1px solid rgba(255, 255, 255, 0.08)' : 'none',
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            cursor: 'pointer',
+            userSelect: 'none'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Terminal size={15} style={{ color: '#0a84ff' }} />
+            <span style={{ fontSize: '12.5px', fontWeight: 700, fontFamily: 'Outfit' }}>
+              Console de Logs du Planificateur d'Arrière-plan
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {showLogs && (
+              <span style={{ fontSize: '10px', color: '#0a84ff', background: 'rgba(10, 132, 255, 0.1)', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>
+                Temps Réel Actif
+              </span>
+            )}
+            {showLogs ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </div>
+        </div>
+
+        {/* Content */}
+        {showLogs && (
+          <div style={{ 
+            background: 'rgba(0, 0, 0, 0.35)', 
+            padding: '14px 20px', 
+            height: '160px', 
+            overflowY: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '2px'
+          }}>
+            {logs.length === 0 ? (
+              <div style={{ color: 'var(--text-secondary)', fontSize: '11.5px', fontFamily: 'Courier, monospace', fontStyle: 'italic', padding: '10px 0' }}>
+                Aucun log enregistré pour le moment. Le scheduler va inscrire des événements dès qu'un re-scraping se déclenchera.
+              </div>
+            ) : (
+              logs.map((line, idx) => {
+                let color = '#34d399'; // Default info/green
+                if (line.includes('[WARN]')) color = '#fbbf24'; // Warn/amber
+                if (line.includes('[ERROR]')) color = '#f87171'; // Error/red
+                return (
+                  <div key={idx} style={{ 
+                    fontFamily: 'Courier, monospace', 
+                    fontSize: '11.5px', 
+                    lineHeight: '1.5', 
+                    color, 
+                    whiteSpace: 'pre-wrap',
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.01)',
+                    padding: '1px 0'
+                  }}>
+                    {line}
+                  </div>
+                );
+              })
+            )}
+            <div ref={logEndRef} />
+          </div>
+        )}
+      </div>
 
     </div>
   );
