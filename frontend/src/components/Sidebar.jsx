@@ -25,6 +25,7 @@ export default function Sidebar({
   sportCounts = {}
 }) {
   const [isMagicExpanded, setIsMagicExpanded] = React.useState(activeTab === 'magic-predictions');
+  const [showMagicPopover, setShowMagicPopover] = React.useState(false);
 
   React.useEffect(() => {
     if (activeTab === 'magic-predictions') {
@@ -32,7 +33,12 @@ export default function Sidebar({
     } else {
       setIsMagicExpanded(false);
     }
+    setShowMagicPopover(false);
   }, [activeTab]);
+
+  React.useEffect(() => {
+    setShowMagicPopover(false);
+  }, [selectedMagicSport]);
 
   return (
     <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
@@ -51,14 +57,18 @@ export default function Sidebar({
             <LayoutDashboard size={20} />
             {!sidebarCollapsed && <span>Tableau de Bord</span>}
           </button>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
             <button 
               className={`nav-item ${activeTab === 'magic-predictions' ? 'active' : ''}`}
               onClick={() => {
-                if (activeTab === 'magic-predictions') {
-                  setIsMagicExpanded(prev => !prev);
+                if (sidebarCollapsed) {
+                  setShowMagicPopover(prev => !prev);
                 } else {
-                  setActiveTab('magic-predictions');
+                  if (activeTab === 'magic-predictions') {
+                    setIsMagicExpanded(prev => !prev);
+                  } else {
+                    setActiveTab('magic-predictions');
+                  }
                 }
               }}
               title={sidebarCollapsed ? "Sports" : ""}
@@ -86,6 +96,115 @@ export default function Sidebar({
                 />
               )}
             </button>
+
+            {sidebarCollapsed && showMagicPopover && (
+              <>
+                {/* Backdrop overlay */}
+                <div 
+                  onClick={() => setShowMagicPopover(false)}
+                  style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    zIndex: 999,
+                    background: 'transparent',
+                    cursor: 'default'
+                  }}
+                />
+                {/* Floating Dropdown */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: '60px',
+                    top: '0px',
+                    background: '#0a0f1d',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    borderRadius: '10px',
+                    padding: '8px',
+                    boxShadow: '0 8px 30px rgba(0,0,0,0.65)',
+                    zIndex: 1000,
+                    minWidth: '180px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}
+                >
+                  <div style={{ fontSize: '10px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', padding: '4px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)', marginBottom: '4px' }}>
+                    Sélectionner un Sport
+                  </div>
+                  {ALL_SPORTS.map((sportKey) => {
+                    const label = sportLabels[sportKey] || (sportKey.charAt(0).toUpperCase() + sportKey.slice(1));
+                    const isSportActive = selectedMagicSport === sportKey;
+                    const count = sportCounts[sportKey] || 0;
+                    const SportIcon = sportIcons[sportKey] || Sparkles;
+                    return (
+                      <button
+                        key={sportKey}
+                        onClick={() => {
+                          setSelectedMagicSport(sportKey);
+                          setActiveTab('magic-predictions');
+                          setShowMagicPopover(false);
+                        }}
+                        style={{
+                          border: 'none',
+                          textAlign: 'left',
+                          color: isSportActive ? '#bf5af2' : 'var(--text-secondary)',
+                          fontSize: '12px',
+                          padding: '8px 10px',
+                          cursor: 'pointer',
+                          fontWeight: isSportActive ? 700 : 500,
+                          borderRadius: '6px',
+                          transition: 'all 0.2s ease',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          background: isSportActive ? 'rgba(191, 90, 242, 0.08)' : 'transparent',
+                          outline: 'none'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = isSportActive ? 'rgba(191, 90, 242, 0.08)' : 'rgba(255, 255, 255, 0.03)';
+                          if (!isSportActive) {
+                            e.currentTarget.style.color = '#bf5af2';
+                            const svg = e.currentTarget.querySelector('svg');
+                            if (svg) svg.style.color = '#bf5af2';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = isSportActive ? 'rgba(191, 90, 242, 0.08)' : 'transparent';
+                          if (!isSportActive) {
+                            e.currentTarget.style.color = 'var(--text-secondary)';
+                            const svg = e.currentTarget.querySelector('svg');
+                            if (svg) svg.style.color = 'var(--text-secondary)';
+                          }
+                        }}
+                      >
+                        <SportIcon size={14} style={{ 
+                          color: isSportActive ? '#bf5af2' : 'var(--text-secondary)',
+                          flexShrink: 0,
+                          transition: 'color 0.2s ease'
+                        }} />
+                        <span>{label}</span>
+                        <span style={{
+                          marginLeft: 'auto',
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          padding: '1px 5px',
+                          borderRadius: '10px',
+                          background: isSportActive ? 'rgba(191, 90, 242, 0.16)' : 'rgba(255, 255, 255, 0.06)',
+                          color: isSportActive ? '#bf5af2' : 'var(--text-secondary)',
+                          transition: 'all 0.2s ease',
+                          fontFamily: 'Outfit'
+                        }}>
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
             
             <div 
               className="sports-submenu"
