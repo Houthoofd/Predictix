@@ -5,7 +5,7 @@ import { sportLabels, getMetricLabel, parseTournament } from '../utils/labels';
 import MagicPredictionsFilters from './MagicPredictionsFilters';
 import MagicPredictionsGroup from './MagicPredictionsGroup';
 import MagicMatchCard from './MagicMatchCard';
-import MagicValueScannerCarousel from './MagicValueScannerCarousel';
+
 
 export default function MagicPredictionsTab({
   predictions,
@@ -142,12 +142,7 @@ export default function MagicPredictionsTab({
         fetchSignals={fetchSignals}
       />
 
-      <MagicValueScannerCarousel
-        predictions={predictions}
-        selectedMagicSport={selectedMagicSport}
-        handleAddToBasket={handleAddToBasket}
-        handleQuickPlaceBet={handleQuickPlaceBet}
-      />
+
 
       {signals.length > 0 && (
         <div className="glass-card" style={{ padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px' }}>
