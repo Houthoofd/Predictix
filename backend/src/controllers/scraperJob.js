@@ -11,7 +11,8 @@ import {
   bootstrapTorInstances, 
   cleanupSpawnedTor, 
   tryResolveSofaStatsFallback,
-  ensureScraperCompiled
+  ensureScraperCompiled,
+  parseFrenchDate
 } from '../utils/scraperHelpers.js';
 import { evaluateSmartScrapingFilter } from '../utils/predictionEngine.js';
 import { importScrapedMatches, importHistoricalMatch, importSkippedMatch } from '../db/importer.js';
@@ -26,16 +27,11 @@ export async function runScrapeJob(options, sendEvent) {
 
   sendEvent('log', { message: `[Predictix] Initialisation du scraping (${scraper} - ${sport}) dans : ${scraperPath}` });
   
-  if (!fs.existsSync(scraperPath)) {
-    sendEvent('error', { message: `Dossier du scraper introuvable à l'emplacement configuré : ${scraperPath}` });
-    return;
-  }
-
+  if (!fs.existsSync(scraperPath)) return sendEvent('error', { message: `Dossier du scraper introuvable à l'emplacement configuré : ${scraperPath}` });
   try {
     await ensureScraperCompiled(scraperPath);
   } catch (compileErr) {
-    sendEvent('error', { message: `Erreur de compilation du scraper Go : ${compileErr.message}` });
-    return;
+    return sendEvent('error', { message: `Erreur de compilation du scraper Go : ${compileErr.message}` });
   }
 
   const scriptName = process.platform === 'win32' ? 'scrape-matchendirect.bat' : 'scrape-matchendirect.sh';
@@ -48,21 +44,14 @@ export async function runScrapeJob(options, sendEvent) {
 
   const freeRAMMB = os.freemem() / (1024 * 1024);
   const recommendedWorkers = Math.max(1, Math.min(12, Math.floor(Math.max(0, freeRAMMB - 1500) / 180)));
-
   sendEvent('log', { message: `[Predictix] Diagnostic RAM : ${Math.round(freeRAMMB)} Mo libres. Marge 1,5 Go réservée. Allocation ciblée : ${recommendedWorkers} instances Tor.` });
-
-  await bootstrapTorInstances(recommendedWorkers, scraperPath, (msg) => {
-    sendEvent('log', { message: msg });
-  });
-
+  await bootstrapTorInstances(recommendedWorkers, scraperPath, (msg) => sendEvent('log', { message: msg }));
   const possiblePorts = [9050, 9052, 9054, 9056, 9058, 9060, 9062, 9064, 9066, 9068, 9070, 9072].slice(0, recommendedWorkers);
   const activePorts = (await Promise.all(possiblePorts.map(async p => (await isTorActive(p)) ? p : null))).filter(Boolean);
-
   if (activePorts.length === 0) {
     sendEvent('error', { message: "Aucun port proxy Tor opérationnel détecté. Scraping annulé." });
     return;
   }
-
   sendEvent('log', { message: `[Predictix] Détection réseau : ${activePorts.length} proxy Tor actifs (Ports: ${activePorts.join(', ')}).` });
 
   const sourceName = scraper === 'flashscore' ? 'Flashscore' : 'Match en Direct';
@@ -128,6 +117,14 @@ export async function runScrapeJob(options, sendEvent) {
       }, socksPort, scraper, matchSport);
       
       if (details) {
+        const matchDateRaw = details.date || m.date || '';
+        const matchDateNormalized = parseFrenchDate(matchDateRaw) || matchDateRaw;
+        const expectedIsoDate = targetDate || new Date().toISOString().substring(0, 10);
+        if (matchDateNormalized && expectedIsoDate && matchDateNormalized.substring(0, 10) !== expectedIsoDate) {
+          sendEvent('log', { message: `[Tor Port ${socksPort}] [Date Filter] [Ignoré] Match ${details.home_team || m.home_team} vs ${details.away_team || m.away_team} ignoré car sa date (${matchDateNormalized.substring(0, 10)}) ne correspond pas à la date cible (${expectedIsoDate}).` });
+          continue;
+        }
+
         let finalFirstHalfCornersHome = details.first_half_corners_home;
         let finalFirstHalfCornersAway = details.first_half_corners_away;
         let finalStatistics = details.statistics;
