@@ -198,22 +198,22 @@ export async function initReScraper() {
     await loadCronSettings();
     await reevaluateKeepAwake();
     scheduleNightlyTasks();
-    const unfinishedMatches = await dbQuery('SELECT match_id, date, time, sport FROM scraped_predictions WHERE is_finished = 0 AND is_historical = 0');
-    logCron(`Found ${unfinishedMatches.length} unfinished matches.`);
-    let immediateCount = 0;
-    for (const match of unfinishedMatches) {
-      const endTime = getExpectedEndTime(match.date, match.time, match.sport);
-      if (!endTime) continue;
-      const delay = endTime.getTime() - Date.now();
-      if (delay > 0) scheduleMatchReScraping(match.match_id, match.date, match.time, match.sport);
-      else {
-        immediateCount++;
-        scheduledTimeouts.set(match.match_id, setTimeout(() => reScrapeMatch(match.match_id), immediateCount * 10000));
-      }
+    try {
+      const { default: ic } = await import('../controllers/integrityController.js');
+      await ic.restoreIntegrityBatch();
+    } catch (e) { logCron(`Error restoring batch: ${e.message}`, 'error'); }
+    const unfinished = await dbQuery('SELECT match_id, date, time, sport FROM scraped_predictions WHERE is_finished = 0 AND is_historical = 0');
+    logCron(`Found ${unfinished.length} unfinished matches.`);
+    let immediate = 0;
+    for (const m of unfinished) {
+      const end = getExpectedEndTime(m.date, m.time, m.sport);
+      if (!end) continue;
+      const delay = end.getTime() - Date.now();
+      if (delay > 0) scheduleMatchReScraping(m.match_id, m.date, m.time, m.sport);
+      else scheduledTimeouts.set(m.match_id, setTimeout(() => reScrapeMatch(m.match_id), ++immediate * 10000));
     }
-    if (immediateCount > 0) logCron(`Scheduled ${immediateCount} past-due matches for staggered execution.`);
+    if (immediate > 0) logCron(`Scheduled ${immediate} past-due matches for staggered execution.`);
     setInterval(async () => {
-      logCron('Fallback checker running...');
       try {
         const pending = await dbQuery('SELECT match_id, date, time, sport FROM scraped_predictions WHERE is_finished = 0 AND is_historical = 0');
         for (const m of pending) {
@@ -233,10 +233,8 @@ const __dirname = path.dirname(__filename);
 
 export async function runNightlyBackup() {
   try {
-    const rowEnabled = await dbGet("SELECT value FROM settings WHERE key = 'cron_db_backup'");
-    if (rowEnabled?.value === 'false') return logCron('Nightly database backup disabled.');
-    const rowKeepDays = await dbGet("SELECT value FROM settings WHERE key = 'cron_db_backup_keep_days'");
-    const keepDays = parseInt(rowKeepDays?.value) || 7;
+    if ((await dbGet("SELECT value FROM settings WHERE key = 'cron_db_backup'"))?.value === 'false') return logCron('Nightly database backup disabled.');
+    const keepDays = parseInt((await dbGet("SELECT value FROM settings WHERE key = 'cron_db_backup_keep_days'"))?.value) || 7;
     logCron('Starting nightly database backup...');
     const backupsDir = path.resolve(__dirname, '../../../backups');
     if (!fs.existsSync(backupsDir)) fs.mkdirSync(backupsDir, { recursive: true });
@@ -261,21 +259,18 @@ export async function runNightlyBackup() {
 
 async function runNightlyRepair() {
   try {
-    const row = await dbGet("SELECT value FROM settings WHERE key = 'cron_integrity_repair'");
-    if (row?.value === 'false') return logCron('Nightly auto-repair disabled.');
+    if ((await dbGet("SELECT value FROM settings WHERE key = 'cron_integrity_repair'"))?.value === 'false') return logCron('Nightly auto-repair disabled.');
     logCron('Starting nightly auto-repair batch...');
-    const { default: integrityController } = await import('../controllers/integrityController.js');
-    await integrityController.startIntegrityBatch({}, { status: () => ({ json: (d) => logCron(`Repair response: ${d.message || JSON.stringify(d)}`) }) });
+    const { default: ic } = await import('../controllers/integrityController.js');
+    await ic.startIntegrityBatch({}, { status: () => ({ json: (d) => logCron(`Repair response: ${d.message || JSON.stringify(d)}`) }) });
   } catch (err) { logCron(`Error in nightly repair: ${err.message}`, 'error'); }
 }
 
 async function runNightlyCleanup() {
   try {
-    const row = await dbGet("SELECT value FROM settings WHERE key = 'cron_db_cleanup'");
-    if (row?.value === 'false') return logCron('Nightly cleanup disabled.');
+    if ((await dbGet("SELECT value FROM settings WHERE key = 'cron_db_cleanup'"))?.value === 'false') return logCron('Nightly cleanup disabled.');
     logCron('Starting nightly DB cleanup & VACUUM...');
     await dbRun('DELETE FROM notifications WHERE timestamp < date("now", "-7 days")');
-    logCron('Cleaned old notifications.');
     await dbRun('VACUUM');
     logCron('Database VACUUM completed.');
   } catch (err) { logCron(`Error in nightly cleanup: ${err.message}`, 'error'); }

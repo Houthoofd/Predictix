@@ -5,6 +5,7 @@ import { getEnrichedPredictions } from '../utils/predictionFetcher.js';
 import { scraperState } from './scraperState.js';
 import { runIntegrityBatchLoop } from './integrityBatchRunner.js';
 import { crawlMatchHistory as crawlMatchHistoryFn } from './historyCrawler.js';
+import { saveIntegrityState } from './integrityStatePersist.js';
 
 class IntegrityController {
   async startIntegrityBatch(req, res) {
@@ -101,6 +102,7 @@ class IntegrityController {
       activeIntegrityBatch.logs = [`[${new Date().toLocaleTimeString()}] 🚀 Démarrage de la réparation globale pour ${incompleteMatches.length} matchs (Tri par priorité actif).`];
       activeIntegrityBatch.status = 'running';
 
+      await saveIntegrityState(activeIntegrityBatch);
       runIntegrityBatchLoop();
 
       res.json({ success: true, message: "Réparation globale lancée en arrière-plan.", total: incompleteMatches.length });
@@ -118,6 +120,7 @@ class IntegrityController {
 
     activeIntegrityBatch.status = 'paused';
     activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ⏸ Mise en pause demandée. Arrêt après le match courant...`);
+    await saveIntegrityState(activeIntegrityBatch);
     res.json({ success: true, message: "Mise en pause planifiée." });
   }
 
@@ -140,6 +143,7 @@ class IntegrityController {
     activeIntegrityBatch.spawnedChildren.clear();
     activeIntegrityBatch.queue = [];
     activeIntegrityBatch.currentIndex = 0;
+    await saveIntegrityState(activeIntegrityBatch);
 
     res.json({ success: true, message: "Batcher arrêté et réinitialisé." });
   }
@@ -182,6 +186,7 @@ class IntegrityController {
       queue.splice(activeIntegrityBatch.currentIndex, 0, matchObj);
       
       activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ⚡ Priorisation manuelle : ${matchObj.home_team} vs ${matchObj.away_team}`);
+      await saveIntegrityState(activeIntegrityBatch);
       res.json({ success: true, message: "Match priorisé avec succès." });
     } catch (err) {
       res.status(500).json({ success: false, error: { message: err.message } });
@@ -246,15 +251,35 @@ class IntegrityController {
           activeIntegrityBatch.errorCount = 0;
           activeIntegrityBatch.logs = [`[${new Date().toLocaleTimeString()}] 🚀 Démarrage automatique suite à l'injection d'un match.`];
           activeIntegrityBatch.status = 'running';
+          await saveIntegrityState(activeIntegrityBatch);
           runIntegrityBatchLoop();
         } else {
           activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] ⚠ Match injecté en file d'attente, mais Tor n'est pas actif pour démarrer.`);
+          await saveIntegrityState(activeIntegrityBatch);
         }
+      } else {
+        await saveIntegrityState(activeIntegrityBatch);
       }
       
       res.json({ success: true, message: "Match injecté avec succès et placé en tête de file." });
     } catch (err) {
       res.status(500).json({ success: false, error: { message: err.message } });
+    }
+  }
+
+  async restoreIntegrityBatch() {
+    try {
+      const { loadIntegrityState } = await import('./integrityStatePersist.js');
+      const saved = await loadIntegrityState();
+      if (saved && saved.status === 'running') {
+        const batch = scraperState.activeIntegrityBatch;
+        Object.assign(batch, saved);
+        batch.logs.push(`[${new Date().toLocaleTimeString()}] ♻ Reprise automatique après redémarrage (Index: ${batch.currentIndex + 1}/${batch.queue.length}).`);
+        console.log(`[Predictix Integrity] Resuming batch at index ${batch.currentIndex}`);
+        runIntegrityBatchLoop();
+      }
+    } catch (e) {
+      console.error('[Predictix] Error resuming batch:', e.message);
     }
   }
 

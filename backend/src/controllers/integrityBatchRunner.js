@@ -9,6 +9,7 @@ import {
 } from '../utils/scraperHelpers.js';
 import { processQueueItem } from './integrityWorker.js';
 import { updateKeepAwakeStatus } from '../utils/keepAwake.js';
+import { saveIntegrityState } from './integrityStatePersist.js';
 
 export async function runIntegrityBatchLoop() {
   await updateKeepAwakeStatus(true);
@@ -86,6 +87,8 @@ export async function runIntegrityBatchLoop() {
         }
       }
 
+      await saveIntegrityState(activeIntegrityBatch);
+
       if (activeIntegrityBatch.status === 'running') {
         await new Promise(r => setTimeout(r, 3000));
       }
@@ -108,5 +111,6 @@ export async function runIntegrityBatchLoop() {
   } else if (activeIntegrityBatch.status === 'paused') {
     activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Pause] Réparation globale mise en pause.`);
   }
+  await saveIntegrityState(activeIntegrityBatch);
   await updateKeepAwakeStatus(false);
 }

@@ -263,6 +263,21 @@ function initDb() {
         completed_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
+ 
+    // 10. Table integrity_batch_state (persistence of the active integrity batcher state)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS integrity_batch_state (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        status TEXT NOT NULL,
+        queue TEXT NOT NULL,
+        current_index INTEGER NOT NULL,
+        processed_count INTEGER NOT NULL,
+        success_count INTEGER NOT NULL,
+        error_count INTEGER NOT NULL,
+        logs TEXT NOT NULL,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
 
     // 9. Table settings (configuration parameters)
     db.run(`
