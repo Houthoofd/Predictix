@@ -18,11 +18,14 @@ export default function MatchDetailsPoissonSimulator({
   getMetricTitle
 }) {
   const isBasket = selectedMatchDetails?.sport === 'basketball';
-  const [simPeriod, setSimPeriod] = useState(isBasket ? 'quarter_1' : 'first_half');
+  const isHockey = selectedMatchDetails?.sport === 'hockey' || selectedMatchDetails?.sport === 'ice-hockey';
+  const isTennis = selectedMatchDetails?.sport === 'tennis';
+  const initialPeriod = isBasket ? 'quarter_1' : (isHockey ? 'period_1' : 'first_half');
+  const [simPeriod, setSimPeriod] = useState(initialPeriod);
 
   React.useEffect(() => {
-    setSimPeriod(isBasket ? 'quarter_1' : 'first_half');
-  }, [selectedMatchDetails?.match_id, isBasket]);
+    setSimPeriod(initialPeriod);
+  }, [selectedMatchDetails?.match_id, isBasket, isHockey, isTennis]);
 
   const [payoutRatio, setPayoutRatio] = useState(0.93);
   const [userOdds, setUserOdds] = useState({});
@@ -74,9 +77,12 @@ export default function MatchDetailsPoissonSimulator({
     }
     
     let ratio = getMetricPeriodRatio(activeMetric, simPeriod);
-    if (selectedMatchDetails?.sport === 'basketball') {
-      const qRatios = { quarter_1: 0.254, quarter_2: 0.248, quarter_3: 0.250, quarter_4: 0.248, first_half: 0.502, second_half: 0.498, full_time: 1.00 };
-      ratio = qRatios[simPeriod] || 0.25;
+    if (isBasket) {
+      ratio = { quarter_1: 0.254, quarter_2: 0.248, quarter_3: 0.250, quarter_4: 0.248, first_half: 0.502, second_half: 0.498, full_time: 1.00 }[simPeriod] || 0.25;
+    } else if (isHockey) {
+      ratio = { period_1: 0.333, period_2: 0.333, period_3: 0.334, full_time: 1.00 }[simPeriod] || 0.333;
+    } else if (isTennis) {
+      ratio = { first_half: 0.50, second_half: 0.50, full_time: 1.00 }[simPeriod] || 0.50;
     }
     meanHome = hAvg * ratio;
     meanAway = aAvg * ratio;
@@ -104,17 +110,31 @@ export default function MatchDetailsPoissonSimulator({
     }
   };
 
+  const labelsMap = isBasket
+    ? { quarter_1: 'Q1', quarter_2: 'Q2', quarter_3: 'Q3', quarter_4: 'Q4', full_time: 'Match Entier' }
+    : isHockey
+    ? { period_1: 'P1', period_2: 'P2', period_3: 'P3', full_time: 'Match Entier' }
+    : isTennis
+    ? { first_half: 'Set 1', second_half: 'Set 2', full_time: 'Match Entier' }
+    : { first_half: '1ère MT', second_half: '2ème MT', full_time: 'Match Entier' };
+
+  const longLabelsMap = isBasket
+    ? { quarter_1: 'Q1', quarter_2: 'Q2', quarter_3: 'Q3', quarter_4: 'Q4', full_time: 'Match' }
+    : isHockey
+    ? { period_1: '1ère Période', period_2: '2ème Période', period_3: '3ème Période', full_time: 'Match' }
+    : isTennis
+    ? { first_half: '1er Set', second_half: '2ème Set', full_time: 'Match' }
+    : { first_half: '1ère MT', second_half: '2ème MT', full_time: 'Match' };
+
+  const periodNote = labelsMap[simPeriod] || 'Match Entier';
+  const periodLabel = longLabelsMap[simPeriod] || 'Match';
+
   const handlePlaceBetFromSimulator = (line, option, prob, fairOdds, bookieOdds, customOddsInputVal) => {
     if (!handleQuickPlaceBet) return;
     
     const isOver = option === 'Over';
     const oddsVal = parseFloat(customOddsInputVal);
     const selectedOdds = !isNaN(oddsVal) && oddsVal > 0 ? oddsVal : parseFloat(bookieOdds);
-
-    const isBasket = selectedMatchDetails?.sport === 'basketball';
-    const periodNote = isBasket
-      ? (simPeriod === 'quarter_1' ? 'Q1' : simPeriod === 'quarter_2' ? 'Q2' : simPeriod === 'quarter_3' ? 'Q3' : simPeriod === 'quarter_4' ? 'Q4' : 'Match Entier')
-      : (simPeriod === 'first_half' ? '1ère MT' : simPeriod === 'second_half' ? '2ème MT' : 'Match Entier');
 
     const pred = {
       match_id: selectedMatchDetails.match_id,
@@ -136,10 +156,6 @@ export default function MatchDetailsPoissonSimulator({
     handleQuickPlaceBet(pred);
     setSelectedMatchDetails(null);
   };
-
-  const periodLabel = isBasket
-    ? (simPeriod === 'quarter_1' ? 'Q1' : simPeriod === 'quarter_2' ? 'Q2' : simPeriod === 'quarter_3' ? 'Q3' : simPeriod === 'quarter_4' ? 'Q4' : 'Match')
-    : (simPeriod === 'first_half' ? '1ère MT' : simPeriod === 'second_half' ? '2ème MT' : 'Match');
 
   return (
     <div style={{
@@ -165,30 +181,9 @@ export default function MatchDetailsPoissonSimulator({
         </span>
       </div>
 
-      <div style={{
-        background: 'rgba(127, 0, 255, 0.04)',
-        border: '1px solid rgba(127, 0, 255, 0.15)',
-        borderRadius: '10px',
-        padding: '12px 16px',
-        fontSize: '11.5px',
-        lineHeight: '1.5',
-        color: 'var(--text-secondary)'
-      }}>
-        <div style={{ fontWeight: 800, color: '#bf5af2', marginBottom: '6px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <Lightbulb size={14} style={{ color: '#bf5af2' }} />
-          <span>Comment utiliser ce simulateur en 3 étapes simples :</span>
-        </div>
-        <ul style={{ margin: 0, paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <li>
-            <strong>1. Ajustez le Payout</strong> : Réglez le curseur sur le taux de retour de votre bookmaker (ex: 93% en France, 95% à l'étranger).
-          </li>
-          <li>
-            <strong>2. Comparez la Cote Estimée Bookie</strong> : Elle représente la cote normale que propose le marché pour cette ligne.
-          </li>
-          <li>
-            <strong>3. Saisissez votre cote</strong> : Entrez la cote de votre bookmaker. Si elle s'allume en <strong style={{ color: '#10b981' }}>Vert (VALUE)</strong>, le pari est rentable à long terme !
-          </li>
-        </ul>
+      <div style={{ background: 'rgba(127, 0, 255, 0.03)', border: '1px solid rgba(127, 0, 255, 0.12)', borderRadius: '10px', padding: '10px 14px', fontSize: '11px', color: 'var(--text-secondary)' }}>
+        <span style={{ fontWeight: 800, color: '#bf5af2', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}><Lightbulb size={13} /> Aide rapide :</span>
+        <span>Ajustez le <strong>Payout</strong> (taux de retour), puis comparez/saisissez la cote bookmaker. Les cotes affichant <strong style={{ color: '#10b981' }}>VALUE</strong> sont rentables à long terme.</span>
       </div>
 
       <div style={{ display: 'flex', gap: '4px', background: 'rgba(0,0,0,0.25)', padding: '3px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.03)' }}>
@@ -198,6 +193,19 @@ export default function MatchDetailsPoissonSimulator({
               { id: 'quarter_2', label: '2ème QT' },
               { id: 'quarter_3', label: '3ème QT' },
               { id: 'quarter_4', label: '4ème QT' },
+              { id: 'full_time', label: 'Match Entier' }
+            ]
+          : isHockey
+          ? [
+              { id: 'period_1', label: '1ère Période' },
+              { id: 'period_2', label: '2ème Période' },
+              { id: 'period_3', label: '3ème Période' },
+              { id: 'full_time', label: 'Match Entier' }
+            ]
+          : isTennis
+          ? [
+              { id: 'first_half', label: '1er Set' },
+              { id: 'second_half', label: '2ème Set' },
               { id: 'full_time', label: 'Match Entier' }
             ]
           : [
@@ -251,26 +259,10 @@ export default function MatchDetailsPoissonSimulator({
         />
       </div>
 
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr 1fr',
-        gap: '10px',
-        background: 'rgba(0,0,0,0.1)',
-        borderRadius: '6px',
-        padding: '8px 12px',
-        fontSize: '10px',
-        color: 'var(--text-muted)',
-        border: '1px solid rgba(255,255,255,0.015)'
-      }}>
-        <div>
-          <strong style={{ color: 'var(--text-secondary)' }}>Cote Juste</strong> : Cote sans marge de profit.
-        </div>
-        <div>
-          <strong style={{ color: 'var(--text-secondary)' }}>Cote Estimée Bookie</strong> : Cote marché avec marge incluse.
-        </div>
-        <div>
-          <strong style={{ color: 'var(--text-secondary)' }}>Value Edge</strong> : Avantage statistique attendu.
-        </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', background: 'rgba(0,0,0,0.1)', borderRadius: '6px', padding: '8px 12px', fontSize: '10px', color: 'var(--text-muted)', border: '1px solid rgba(255,255,255,0.015)' }}>
+        <div><strong style={{ color: 'var(--text-secondary)' }}>Cote Juste</strong> : Sans marge.</div>
+        <div><strong style={{ color: 'var(--text-secondary)' }}>Cote Estimée Bookie</strong> : Avec marge.</div>
+        <div><strong style={{ color: 'var(--text-secondary)' }}>Value Edge</strong> : Avantage attendu.</div>
       </div>
 
       <PoissonSimulatorTable
