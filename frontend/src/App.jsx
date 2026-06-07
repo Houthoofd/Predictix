@@ -19,6 +19,7 @@ import MagicPredictionsTab from './components/MagicPredictionsTab';
 import StrategiesTab from './components/StrategiesTab';
 import BasketTab from './components/BasketTab';
 import IntegrityTab from './components/IntegrityTab';
+import CronsTab from './components/CronsTab';
 import AppModals from './components/AppModals';
 import AppToasts from './components/AppToasts';
 import PageHeaderTitle from './components/PageHeaderTitle';
@@ -260,6 +261,10 @@ export default function App() {
                   onCrawlMatchHistory={predictions.handleCrawlHistory}
                   onRefreshPredictions={predictions.fetchPredictions}
                 />
+              )}
+
+              {activeTab === 'crons' && (
+                <CronsTab showNotification={notify.showNotification} />
               )}
             </>
           )}

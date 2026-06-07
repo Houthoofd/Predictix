@@ -3,6 +3,7 @@ import scraperController from '../controllers/scraperController.js';
 import discoveryController from '../controllers/discoveryController.js';
 import integrityController from '../controllers/integrityController.js';
 import customDataController from '../controllers/customDataController.js';
+import { getScheduledCrons, reScrapeMatch, cancelScheduledReScrape } from '../services/cronService.js';
 
 const router = express.Router();
 
@@ -11,6 +12,36 @@ router.post('/predictions/scrape/discover', discoveryController.discoverMatches)
 router.post('/predictions/scrape', scraperController.startScraping);
 router.post('/predictions/scrape/stop', scraperController.stopScraping);
 router.post('/predictions/:matchId/crawl-history', integrityController.crawlMatchHistory);
+
+// Cron/scheduler endpoints
+router.get('/scraper/crons', async (req, res) => {
+  try {
+    const crons = await getScheduledCrons();
+    res.json({ success: true, data: crons });
+  } catch (error) {
+    res.status(500).json({ success: false, error: { message: error.message } });
+  }
+});
+
+router.post('/scraper/crons/:matchId/run', async (req, res) => {
+  const { matchId } = req.params;
+  try {
+    await reScrapeMatch(matchId);
+    res.json({ success: true, message: `Match ${matchId} re-scrappé avec succès.` });
+  } catch (error) {
+    res.status(500).json({ success: false, error: { message: error.message } });
+  }
+});
+
+router.delete('/scraper/crons/:matchId', async (req, res) => {
+  const { matchId } = req.params;
+  try {
+    const cancelled = cancelScheduledReScrape(matchId);
+    res.json({ success: true, cancelled, message: `Planification annulée pour le match ${matchId}.` });
+  } catch (error) {
+    res.status(500).json({ success: false, error: { message: error.message } });
+  }
+});
 
 // Custom logo override endpoints
 router.get('/custom-logos', customDataController.getCustomLogos);

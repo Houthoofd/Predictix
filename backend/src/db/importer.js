@@ -102,16 +102,22 @@ export async function importScrapedMatches(matches, scrapedAt) {
     importedCount++;
 
     // Auto-settle any pending bets for this primary match in real time
-    if (match.first_half_corners_home !== null && match.first_half_corners_home !== undefined &&
-        match.first_half_corners_away !== null && match.first_half_corners_away !== undefined) {
-      try {
-        const resolved = await autoSettleBetsForMatch(matchId, match.first_half_corners_home, match.first_half_corners_away);
-        if (resolved && resolved.length > 0) {
-          settledBetsList.push(...resolved);
-        }
-      } catch (err) {
-        console.error('[Predictix Import] Failed to auto-settle bet:', err.message);
+    try {
+      const resolved = await autoSettleBetsForMatch(matchId);
+      if (resolved && resolved.length > 0) {
+        settledBetsList.push(...resolved);
       }
+    } catch (err) {
+      console.error('[Predictix Import] Failed to auto-settle bet:', err.message);
+    }
+
+    // Schedule background re-scraping if match is not finished
+    if (!isFinished) {
+      import('../services/cronService.js')
+        .then(({ scheduleMatchReScraping }) => {
+          scheduleMatchReScraping(matchId, match.date, match.time, sport);
+        })
+        .catch(err => console.error('[Predictix Import] Failed to schedule re-scrape:', err));
     }
   }
 
@@ -271,7 +277,7 @@ export async function enrichPrimaryMatch(matchId, primaryDetails, targetLink, ma
 
   // Auto-settle any pending bets for this primary match in real time
   try {
-    await autoSettleBetsForMatch(matchId, primaryDetails.first_half_corners_home, primaryDetails.first_half_corners_away);
+    await autoSettleBetsForMatch(matchId);
   } catch (err) {
     console.error('[Predictix On-Demand Background] Failed to auto-settle bet:', err.message);
   }

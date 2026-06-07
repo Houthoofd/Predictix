@@ -10,6 +10,7 @@ export default function PageHeaderTitle({ activeTab }) {
       case 'tracker': return 'Tracker de Paris';
       case 'strategies': return 'Stratégies Personnalisées';
       case 'integrity': return 'Qualité des Données';
+      case 'crons': return 'Tâches Planifiées';
       default: return '';
     }
   };
@@ -23,6 +24,7 @@ export default function PageHeaderTitle({ activeTab }) {
       case 'tracker': return 'Journalisez vos paris sportifs pour optimiser votre capital.';
       case 'strategies': return 'Analyse et configuration de vos cibles de paris à forte espérance mathématique.';
       case 'integrity': return 'Analysez les données manquantes, forcer le crawl et gérez les logos personnalisés.';
+      case 'crons': return 'Gérez et suivez le statut des crons de re-scraping pour la résolution de vos paris.';
       default: return '';
     }
   };

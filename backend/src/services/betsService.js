@@ -43,34 +43,50 @@ export async function syncBankroll() {
   }
 }
 
-// Auto-settle any PENDING bets for a specific match when its corners are scraped/updated
-export async function autoSettleBetsForMatch(matchId, homeCorners, awayCorners) {
-  if (homeCorners === null || homeCorners === undefined || awayCorners === null || awayCorners === undefined) {
-    return [];
-  }
-  
+// Auto-settle any PENDING bets for a specific match using its latest database predictions records
+export async function autoSettleBetsForMatch(matchId) {
   try {
-    // Look up any pending bets for this match
+    const match = await dbGet('SELECT * FROM scraped_predictions WHERE match_id = ?', [matchId]);
+    if (!match) return [];
+
     const pendingBets = await dbQuery("SELECT * FROM bets WHERE status = 'PENDING' AND match_id = ?", [matchId]);
     if (pendingBets.length === 0) return [];
     
-    const totalCorners = parseFloat(homeCorners) + parseFloat(awayCorners);
-    console.log(`[Predictix Auto-Settle] Found ${pendingBets.length} pending bet(s) for match ${matchId}. Settling with corners: ${totalCorners} (${homeCorners}-${awayCorners})`);
+    const sport = (match.sport || 'football').toLowerCase().trim();
+    console.log(`[Predictix Auto-Settle] Found ${pendingBets.length} pending bet(s) for [${sport}] match ${matchId}.`);
     
     const resolved = [];
 
     for (const bet of pendingBets) {
       const cardLine = parseFloat(bet.card_line);
       const tip = bet.best_tip.toLowerCase();
-      
       let newStatus = 'PENDING';
+      let totalMetric = null;
+
+      if (sport === 'football') {
+        const homeCorners = match.first_half_corners_home;
+        const awayCorners = match.first_half_corners_away;
+        if (homeCorners === null || homeCorners === undefined || awayCorners === null || awayCorners === undefined) {
+          continue;
+        }
+        totalMetric = parseFloat(homeCorners) + parseFloat(awayCorners);
+      } else {
+        const score = match.score;
+        if (!score || score.trim() === '' || score.trim() === '-' || !score.includes('-')) {
+          continue;
+        }
+        const scoreMatch = score.match(/(\d+)\s*-\s*(\d+)/);
+        if (!scoreMatch) continue;
+        totalMetric = parseFloat(scoreMatch[1]) + parseFloat(scoreMatch[2]);
+      }
+
       if (tip === 'over' || tip === 'plus de') {
-        if (totalCorners > cardLine) newStatus = 'WON';
-        else if (totalCorners < cardLine) newStatus = 'LOST';
+        if (totalMetric > cardLine) newStatus = 'WON';
+        else if (totalMetric < cardLine) newStatus = 'LOST';
         else newStatus = 'REFUNDED';
       } else if (tip === 'under' || tip === 'moins de') {
-        if (totalCorners < cardLine) newStatus = 'WON';
-        else if (totalCorners > cardLine) newStatus = 'LOST';
+        if (totalMetric < cardLine) newStatus = 'WON';
+        else if (totalMetric > cardLine) newStatus = 'LOST';
         else newStatus = 'REFUNDED';
       }
       
@@ -89,7 +105,7 @@ export async function autoSettleBetsForMatch(matchId, homeCorners, awayCorners) 
         
         console.log(`[Predictix Auto-Settle] ✓ Bet ID ${bet.id} resolved successfully: ${newStatus} (Payout: ${payout})`);
         
-        resolved.push({
+        const resItem = {
           id: bet.id,
           home_team: bet.home_team,
           away_team: bet.away_team,
@@ -99,15 +115,24 @@ export async function autoSettleBetsForMatch(matchId, homeCorners, awayCorners) 
           odds: bet.odds,
           best_tip: bet.best_tip,
           card_line: bet.card_line,
-          total_corners: totalCorners,
-          home_corners: parseFloat(homeCorners),
-          away_corners: parseFloat(awayCorners)
-        });
+          sport
+        };
+
+        if (sport === 'football') {
+          resItem.total_corners = totalMetric;
+          resItem.home_corners = parseFloat(match.first_half_corners_home);
+          resItem.away_corners = parseFloat(match.first_half_corners_away);
+        } else {
+          resItem.total_score = totalMetric;
+          resItem.score = match.score;
+        }
+        resolved.push(resItem);
       }
     }
     
-    // Sync the bankroll to immediately reflect won/lost amounts and pending stakes!
-    await syncBankroll();
+    if (resolved.length > 0) {
+      await syncBankroll();
+    }
     return resolved;
   } catch (error) {
     console.error(`[Predictix Auto-Settle Error] Failed to auto-settle bets for match ${matchId}:`, error);

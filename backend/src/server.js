@@ -52,6 +52,13 @@ const server = app.listen(PORT, () => {
   console.log(` DB:      SQLite (predictix.db)`);
   console.log(` Scraper: ${process.env.SCRAPER_PATH || 'E:\\Developpement\\scrapper-v3'}`);
   console.log(`========================================================================`);
+  
+  // Initialize background match re-scraper cron service
+  import('./services/cronService.js')
+    .then(({ initReScraper }) => {
+      initReScraper();
+    })
+    .catch(err => console.error('[Predictix Server] Failed to initialize re-scraper service:', err));
 });
 
 // Completely disable all server-level request, connection, and header timeouts for long scraper operations

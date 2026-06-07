@@ -7,7 +7,8 @@ import {
   Sparkles,
   ShoppingCart,
   ShieldAlert,
-  ChevronDown
+  ChevronDown,
+  Clock
 } from 'lucide-react';
 import { sportLabels, ALL_SPORTS } from '../utils/labels';
 import { sportIcons } from './SidebarIcons';
@@ -211,6 +212,19 @@ export default function Sidebar({
           >
             <RefreshCcw size={20} />
             {!sidebarCollapsed && <span>Collecteur de Données</span>}
+          </button>
+          <button 
+            className={`nav-item ${activeTab === 'crons' ? 'active' : ''}`}
+            onClick={() => setActiveTab('crons')}
+            title={sidebarCollapsed ? "Planifications" : ""}
+            style={{
+              '--item-accent': '#0a84ff',
+              borderLeft: activeTab === 'crons' ? '3px solid #0a84ff' : undefined,
+              color: activeTab === 'crons' ? '#0a84ff' : undefined
+            }}
+          >
+            <Clock size={20} style={{ color: activeTab === 'crons' ? '#0a84ff' : undefined }} />
+            {!sidebarCollapsed && <span>Planifications</span>}
           </button>
           <button 
             className={`nav-item ${activeTab === 'tracker' ? 'active' : ''}`}

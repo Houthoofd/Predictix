@@ -1,4 +1,4 @@
-import { dbQuery, dbGet, dbRun } from '../db/database.js';
+import { dbQuery, dbGet } from '../db/database.js';
 import { scrapeSingleMatch, isTorActive } from '../utils/scraperHelpers.js';
 import { syncBankroll } from './betsService.js';
 
@@ -27,77 +27,67 @@ export async function resolveSingleBet(id, scraperPath) {
   if (!link) {
     throw new Error('Ce pari ne dispose d\'aucun lien de match pour mise à jour automatique.');
   }
-  if (!link.startsWith('/live-score/') && !link.startsWith('http')) {
+
+  const sport = (bet.sport || 'football').toLowerCase().trim();
+  const scraper = sport === 'football' ? 'matchendirect' : 'flashscore';
+
+  if (sport === 'football' && !link.startsWith('/live-score/') && !link.startsWith('http')) {
     link = `/live-score/${link}`;
   }
 
-  console.log(`[Predictix Bet Auto-Settle] Refreshing bet ${id} for match: ${link}`);
+  console.log(`[Predictix Bet Auto-Settle] Refreshing bet ${id} for match: ${link} (${sport})`);
   
-  const matchData = await scrapeSingleMatch(scraperPath, link, true);
+  const matchData = await scrapeSingleMatch(scraperPath, link, true, null, 9050, scraper, sport);
   if (!matchData) {
-    throw new Error('Impossible de joindre Matchendirect pour récupérer le score.');
+    throw new Error(`Impossible de joindre le scraper ${scraper} pour récupérer le score.`);
   }
 
-  const homeCorners = matchData.first_half_corners_home;
-  const awayCorners = matchData.first_half_corners_away;
+  const isFinished = matchData.is_finished === true || 
+    (matchData.score && matchData.score.trim() !== '-' && matchData.score.trim() !== '' && matchData.score.includes('-')) ||
+    (matchData.time && (matchData.time.toLowerCase().includes('fin') || matchData.time.toLowerCase().includes('terminé') || matchData.time.toLowerCase() === 'ter' || matchData.time.toLowerCase() === 'ter.'));
 
-  if (homeCorners === null || homeCorners === undefined || awayCorners === null || awayCorners === undefined) {
-    return {
-      resolved: false,
-      message: 'Les statistiques de corners 1MT ne sont pas encore disponibles (match en cours ou non commencé).'
-    };
-  }
+  const enriched = {
+    match_id: bet.match_id || link,
+    time: matchData.time || 'Finished',
+    date: matchData.date || bet.date || '',
+    tournament: (matchData.tournament && matchData.tournament !== 'Flashscore Match' && matchData.tournament !== 'Match en Direct') ? matchData.tournament : (bet.league || ''),
+    home_team: matchData.home_team || bet.home_team,
+    away_team: matchData.away_team || bet.away_team,
+    home_logo: matchData.home_logo || null,
+    away_logo: matchData.away_logo || null,
+    score: matchData.score || '',
+    first_half_corners_home: matchData.first_half_corners_home,
+    first_half_corners_away: matchData.first_half_corners_away,
+    historical_links: matchData.historical_links,
+    match_url: link,
+    statistics: matchData.statistics,
+    sport: sport,
+    is_finished: isFinished ? 1 : 0,
+    status: isFinished ? 'Finished' : 'Live'
+  };
 
-  const totalCorners = parseFloat(homeCorners) + parseFloat(awayCorners);
-  const cardLine = parseFloat(bet.card_line);
-  const tip = bet.best_tip.toLowerCase();
+  const { importScrapedMatches } = await import('../db/importer.js');
+  await importScrapedMatches([enriched], new Date().toISOString());
 
-  let newStatus = 'PENDING';
-  if (tip === 'over' || tip === 'plus de') {
-    if (totalCorners > cardLine) newStatus = 'WON';
-    else if (totalCorners < cardLine) newStatus = 'LOST';
-    else newStatus = 'REFUNDED';
-  } else if (tip === 'under' || tip === 'moins de') {
-    if (totalCorners < cardLine) newStatus = 'WON';
-    else if (totalCorners > cardLine) newStatus = 'LOST';
-    else newStatus = 'REFUNDED';
-  }
-
-  if (newStatus === 'PENDING') {
-    return {
-      resolved: false,
-      message: `Match analysé, mais le résultat est indéterminé. Corners 1MT: ${totalCorners} contre une ligne de ${cardLine}.`,
-      data: { bet, corners: { home: homeCorners, away: awayCorners, total: totalCorners } }
-    };
-  }
-
-  let payout = 0.0;
-  if (newStatus === 'WON') {
-    payout = bet.stake * bet.odds;
-  } else if (newStatus === 'REFUNDED') {
-    payout = bet.stake;
-  }
-
-  await dbRun(
-    'UPDATE bets SET status = ?, payout = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-    [newStatus, payout, id]
-  );
-
-  const bankroll = await syncBankroll();
   const updatedBet = await dbGet('SELECT * FROM bets WHERE id = ?', [id]);
+  const bankroll = await syncBankroll();
+
+  if (updatedBet.status !== 'PENDING') {
+    const detailText = sport === 'football'
+      ? `Corners 1MT: ${parseFloat(matchData.first_half_corners_home) + parseFloat(matchData.first_half_corners_away)} (${matchData.first_half_corners_home}-${matchData.first_half_corners_away})`
+      : `Score final: ${matchData.score}`;
+      
+    return {
+      resolved: true,
+      message: `Pari résolu avec succès ! ${detailText} contre une ligne de ${updatedBet.card_line}. Résultat: ${updatedBet.status}.`,
+      data: { bet: updatedBet, bankroll }
+    };
+  }
 
   return {
-    resolved: true,
-    message: `Pari résolu avec succès ! Corners 1MT: ${totalCorners} (${homeCorners}-${awayCorners}) contre une ligne de ${cardLine}. Résultat: ${newStatus === 'WON' ? 'Gagné' : newStatus === 'LOST' ? 'Perdu' : 'Remboursé'}.`,
-    data: {
-      bet: {
-        ...updatedBet,
-        total_corners: totalCorners,
-        home_corners: parseFloat(homeCorners),
-        away_corners: parseFloat(awayCorners)
-      },
-      bankroll
-    }
+    resolved: false,
+    message: 'Match analysé, mais le résultat est toujours indéterminé.',
+    data: { bet: updatedBet, bankroll }
   };
 }
 
@@ -120,6 +110,7 @@ export async function resolveAllPendingBets(scraperPath) {
 
   const results = [];
   let updatedCount = 0;
+  const settledBetsList = [];
 
   const processBet = async (bet) => {
     let link = bet.match_url;
@@ -135,93 +126,73 @@ export async function resolveAllPendingBets(scraperPath) {
     if (!link) {
       return { id: bet.id, match: `${bet.home_team} vs ${bet.away_team}`, status: 'ERROR', reason: 'Aucun lien de match disponible.' };
     }
-    if (!link.startsWith('/live-score/') && !link.startsWith('http')) {
+
+    const sport = (bet.sport || 'football').toLowerCase().trim();
+    const scraper = sport === 'football' ? 'matchendirect' : 'flashscore';
+
+    if (sport === 'football' && !link.startsWith('/live-score/') && !link.startsWith('http')) {
       link = `/live-score/${link}`;
     }
 
     try {
-      const matchData = await scrapeSingleMatch(scraperPath, link, true);
+      const matchData = await scrapeSingleMatch(scraperPath, link, true, null, 9050, scraper, sport);
       if (!matchData) {
-        return { id: bet.id, match: `${bet.home_team} vs ${bet.away_team}`, status: 'ERROR', reason: 'Liaison Matchendirect échouée.' };
+        return { id: bet.id, match: `${bet.home_team} vs ${bet.away_team}`, status: 'ERROR', reason: 'Liaison scraper échouée.' };
       }
 
-      const homeCorners = matchData.first_half_corners_home;
-      const awayCorners = matchData.first_half_corners_away;
+      const isFinished = matchData.is_finished === true || 
+        (matchData.score && matchData.score.trim() !== '-' && matchData.score.trim() !== '' && matchData.score.includes('-')) ||
+        (matchData.time && (matchData.time.toLowerCase().includes('fin') || matchData.time.toLowerCase().includes('terminé') || matchData.time.toLowerCase() === 'ter' || matchData.time.toLowerCase() === 'ter.'));
 
-      if (homeCorners === null || homeCorners === undefined || awayCorners === null || awayCorners === undefined) {
-        return { id: bet.id, match: `${bet.home_team} vs ${bet.away_team}`, status: 'PENDING', reason: 'Corners 1MT non encore disponibles.' };
-      }
+      const enriched = {
+        match_id: bet.match_id || link,
+        time: matchData.time || 'Finished',
+        date: matchData.date || bet.date || '',
+        tournament: (matchData.tournament && matchData.tournament !== 'Flashscore Match' && matchData.tournament !== 'Match en Direct') ? matchData.tournament : (bet.league || ''),
+        home_team: matchData.home_team || bet.home_team,
+        away_team: matchData.away_team || bet.away_team,
+        home_logo: matchData.home_logo || null,
+        away_logo: matchData.away_logo || null,
+        score: matchData.score || '',
+        first_half_corners_home: matchData.first_half_corners_home,
+        first_half_corners_away: matchData.first_half_corners_away,
+        historical_links: matchData.historical_links,
+        match_url: link,
+        statistics: matchData.statistics,
+        sport: sport,
+        is_finished: isFinished ? 1 : 0,
+        status: isFinished ? 'Finished' : 'Live'
+      };
 
-      const totalCorners = parseFloat(homeCorners) + parseFloat(awayCorners);
-      const cardLine = parseFloat(bet.card_line);
-      const tip = bet.best_tip.toLowerCase();
+      const { importScrapedMatches } = await import('../db/importer.js');
+      const { settledBetsList: newlySettled } = await importScrapedMatches([enriched], new Date().toISOString());
 
-      let newStatus = 'PENDING';
-      if (tip === 'over' || tip === 'plus de') {
-        if (totalCorners > cardLine) newStatus = 'WON';
-        else if (totalCorners < cardLine) newStatus = 'LOST';
-        else newStatus = 'REFUNDED';
-      } else if (tip === 'under' || tip === 'moins de') {
-        if (totalCorners < cardLine) newStatus = 'WON';
-        else if (totalCorners > cardLine) newStatus = 'LOST';
-        else newStatus = 'REFUNDED';
-      }
-
-      if (newStatus !== 'PENDING') {
-        let payout = 0.0;
-        if (newStatus === 'WON') {
-          payout = bet.stake * bet.odds;
-        } else if (newStatus === 'REFUNDED') {
-          payout = bet.stake;
-        }
-
-        await dbRun(
-          'UPDATE bets SET status = ?, payout = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-          [newStatus, payout, bet.id]
-        );
+      if (newlySettled && newlySettled.length > 0) {
         updatedCount++;
-        return {
-          id: bet.id,
-          home_team: bet.home_team,
-          away_team: bet.away_team,
-          status: newStatus,
-          payout: payout,
-          stake: bet.stake,
-          odds: bet.odds,
-          best_tip: bet.best_tip,
-          card_line: bet.card_line,
-          total_corners: totalCorners,
-          home_corners: parseFloat(homeCorners),
-          away_corners: parseFloat(awayCorners)
-        };
+        const resolvedBet = newlySettled.find(b => b.id === bet.id);
+        if (resolvedBet) {
+          settledBetsList.push(resolvedBet);
+          return resolvedBet;
+        }
       }
 
-      return { id: bet.id, match: `${bet.home_team} vs ${bet.away_team}`, status: 'PENDING', corners: `${homeCorners}-${awayCorners}`, line: cardLine };
+      const refreshedBet = await dbGet('SELECT * FROM bets WHERE id = ?', [bet.id]);
+      return { id: bet.id, match: `${bet.home_team} vs ${bet.away_team}`, status: refreshedBet.status, reason: 'Mis à jour en base.' };
+
     } catch (err) {
       console.error(`Error auto-settling bet ID ${bet.id}:`, err);
       return { id: bet.id, match: `${bet.home_team} vs ${bet.away_team}`, status: 'ERROR', reason: err.message };
     }
   };
 
-  const settledBetsList = [];
   const concurrency = 3;
   for (let i = 0; i < pendingBets.length; i += concurrency) {
     const chunk = pendingBets.slice(i, i + concurrency);
     const chunkResults = await Promise.all(chunk.map(bet => processBet(bet)));
-    for (const resItem of chunkResults) {
-      if (resItem && resItem.status && resItem.status !== 'PENDING' && resItem.status !== 'ERROR') {
-        settledBetsList.push(resItem);
-      }
-    }
     results.push(...chunkResults);
   }
 
-  let bankroll = null;
-  if (updatedCount > 0) {
-    bankroll = await syncBankroll();
-  } else {
-    bankroll = await dbGet('SELECT * FROM bankroll ORDER BY id DESC LIMIT 1');
-  }
+  const bankroll = await syncBankroll();
 
   return {
     updatedCount,
