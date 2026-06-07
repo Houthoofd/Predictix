@@ -140,9 +140,13 @@ export async function runScrapeJob(options, sendEvent) {
           }
         }
 
+        const isFinished = details.is_finished === true || 
+          (details.score && details.score.trim() !== '-' && details.score.trim() !== '' && details.score.includes('-')) ||
+          (details.time && (details.time.toLowerCase().includes('fin') || details.time.toLowerCase().includes('terminé') || details.time.toLowerCase() === 'ter' || details.time.toLowerCase() === 'ter.'));
+
         const hasStats = finalStatistics && Object.keys(finalStatistics).some(k => k !== 'stats_source' && finalStatistics[k] !== null && finalStatistics[k] !== undefined);
-        if (!hasStats) {
-          sendEvent('log', { message: `[Tor Port ${socksPort}] [Ignoré] Match ${details.home_team || m.home_team} vs ${details.away_team || m.away_team} ignoré car aucune statistique n'est disponible.` });
+        if (isFinished && !hasStats) {
+          sendEvent('log', { message: `[Tor Port ${socksPort}] [Ignoré] Match terminé ${details.home_team || m.home_team} vs ${details.away_team || m.away_team} ignoré car aucune statistique n'est disponible.` });
           continue;
         }
 
