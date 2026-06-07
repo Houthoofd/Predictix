@@ -119,7 +119,7 @@ export default function SettingsTab({ showToast, setShowResetBankrollModal, onSe
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '30px', maxWidth: '850px', margin: '0 auto' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '30px', width: '100%' }}>
       
       {/* Title block */}
       <div>
