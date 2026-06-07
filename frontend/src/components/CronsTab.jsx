@@ -16,6 +16,12 @@ export default function CronsTab({ showNotification }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   
+  // Sub-tabs states
+  const [activeSubTab, setActiveSubTab] = useState('active');
+  const [history, setHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState(null);
+
   // Logs console states
   const [showLogs, setShowLogs] = useState(true);
   const [logs, setLogs] = useState([]);
@@ -40,6 +46,25 @@ export default function CronsTab({ showNotification }) {
     }
   };
 
+  const fetchHistory = async () => {
+    setHistoryLoading(true);
+    setHistoryError(null);
+    try {
+      const res = await fetch('http://localhost:5000/api/scraper/crons/history');
+      const json = await res.json();
+      if (json.success) {
+        setHistory(json.data || []);
+      } else {
+        setHistoryError(json.error?.message || "Erreur lors de la récupération de l'historique.");
+      }
+    } catch (err) {
+      setHistoryError('Erreur de connexion avec le serveur.');
+      console.error(err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
   const fetchLogs = async () => {
     try {
       const res = await fetch('http://localhost:5000/api/scraper/crons/logs');
@@ -54,11 +79,20 @@ export default function CronsTab({ showNotification }) {
 
   useEffect(() => {
     fetchCrons();
+    fetchHistory();
     const timer = setInterval(() => {
       setTime(Date.now());
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (activeSubTab === 'history') {
+      fetchHistory();
+    } else {
+      fetchCrons();
+    }
+  }, [activeSubTab]);
 
   useEffect(() => {
     if (showLogs) {
@@ -74,10 +108,10 @@ export default function CronsTab({ showNotification }) {
     }
   }, [logs, showLogs]);
 
-  // Reset to first page when search or sport filter changes
+  // Reset to first page when search, sport filter, or tab changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedSport]);
+  }, [searchTerm, selectedSport, activeSubTab]);
 
   const handleRunCron = async (matchId) => {
     if (actionLoading) return;
@@ -157,13 +191,16 @@ export default function CronsTab({ showNotification }) {
     ].join(':');
   };
 
-  // Get list of sports that currently have active crons
+  // Get list of sports that currently have active crons or history crons
   const activeSportsList = useMemo(() => {
-    const sports = new Set(crons.map(c => c.sport).filter(Boolean));
+    const sports = new Set([
+      ...crons.map(c => c.sport),
+      ...history.map(h => h.sport)
+    ].filter(Boolean));
     return ['all', ...Array.from(sports)];
-  }, [crons]);
+  }, [crons, history]);
 
-  // Filter and search logic
+  // Filter and search logic for active crons
   const filteredCrons = useMemo(() => {
     return crons.filter(c => {
       const matchesSport = selectedSport === 'all' || c.sport === selectedSport;
@@ -174,13 +211,35 @@ export default function CronsTab({ showNotification }) {
     });
   }, [crons, selectedSport, searchTerm]);
 
-  // Paginated crons
+  // Paginated active crons
   const totalPages = Math.ceil(filteredCrons.length / itemsPerPage);
   
   const paginatedCrons = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
     return filteredCrons.slice(startIndex, startIndex + itemsPerPage);
   }, [filteredCrons, currentPage, itemsPerPage]);
+
+  // Filter and search logic for history crons
+  const filteredHistory = useMemo(() => {
+    return history.filter(c => {
+      const matchesSport = selectedSport === 'all' || c.sport === selectedSport;
+      const matchesSearch = searchTerm.trim() === '' ||
+        c.home_team.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        c.away_team.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesSport && matchesSearch;
+    });
+  }, [history, selectedSport, searchTerm]);
+
+  // Paginated history crons
+  const historyTotalPages = Math.ceil(filteredHistory.length / itemsPerPage);
+
+  const paginatedHistory = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredHistory.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredHistory, currentPage, itemsPerPage]);
+
+  // Choose unified pagination values
+  const currentTotalPages = activeSubTab === 'history' ? historyTotalPages : totalPages;
 
   // Count active stats
   const statsSummary = useMemo(() => {
@@ -236,14 +295,56 @@ export default function CronsTab({ showNotification }) {
         <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center' }}>
           <button 
             className="btn btn-secondary" 
-            onClick={fetchCrons}
+            onClick={activeSubTab === 'history' ? fetchHistory : fetchCrons}
             style={{ height: '48px', padding: '0 20px', display: 'flex', alignItems: 'center', gap: '8px' }}
-            disabled={loading}
+            disabled={activeSubTab === 'history' ? historyLoading : loading}
           >
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            <RefreshCw size={14} className={(activeSubTab === 'history' ? historyLoading : loading) ? 'animate-spin' : ''} />
             <span>Actualiser</span>
           </button>
         </div>
+      </div>
+
+      {/* Sub-tabs Selection */}
+      <div style={{ display: 'flex', gap: '12px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '0px' }}>
+        <button
+          onClick={() => setActiveSubTab('active')}
+          style={{
+            background: 'none',
+            border: 'none',
+            borderBottom: activeSubTab === 'active' ? '2.5px solid #0a84ff' : '2.5px solid transparent',
+            color: activeSubTab === 'active' ? '#fff' : 'var(--text-secondary)',
+            padding: '8px 16px',
+            fontSize: '13px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            fontFamily: 'Outfit',
+            transition: 'all 0.2s ease',
+            outline: 'none',
+            borderRadius: '0px'
+          }}
+        >
+          Planifications Actives ({crons.length})
+        </button>
+        <button
+          onClick={() => setActiveSubTab('history')}
+          style={{
+            background: 'none',
+            border: 'none',
+            borderBottom: activeSubTab === 'history' ? '2.5px solid #0a84ff' : '2.5px solid transparent',
+            color: activeSubTab === 'history' ? '#fff' : 'var(--text-secondary)',
+            padding: '8px 16px',
+            fontSize: '13px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            fontFamily: 'Outfit',
+            transition: 'all 0.2s ease',
+            outline: 'none',
+            borderRadius: '0px'
+          }}
+        >
+          Historique des Crons ({history.length})
+        </button>
       </div>
 
       {/* Filter and Search Bar */}
@@ -255,7 +356,10 @@ export default function CronsTab({ showNotification }) {
             const label = sport === 'all' ? 'Tous' : (sportLabels[sport] || sport);
             const isActive = selectedSport === sport;
             const SportIcon = sport === 'all' ? Clock : (sportIcons[sport] || Clock);
-            const count = sport === 'all' ? crons.length : crons.filter(c => c.sport === sport).length;
+            
+            const count = sport === 'all' 
+              ? (activeSubTab === 'history' ? history.length : crons.length) 
+              : (activeSubTab === 'history' ? history.filter(h => h.sport === sport).length : crons.filter(c => c.sport === sport).length);
             
             return (
               <button
@@ -299,7 +403,7 @@ export default function CronsTab({ showNotification }) {
           <Search size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
           <input
             type="text"
-            placeholder="Rechercher une équipe..."
+            placeholder={activeSubTab === 'history' ? "Rechercher dans l'historique..." : "Rechercher une équipe..."}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={{
@@ -321,186 +425,286 @@ export default function CronsTab({ showNotification }) {
       </div>
 
       {/* Error alert */}
-      {error && (
+      {(error || historyError) && (
         <div className="glass-card" style={{ borderLeft: '4px solid #ff3b30', background: 'rgba(255, 59, 48, 0.05)', display: 'flex', alignItems: 'center', gap: '12px', padding: '16px' }}>
           <AlertCircle size={20} style={{ color: '#ff3b30', flexShrink: 0 }} />
-          <span style={{ color: '#ff3b30', fontSize: '13px' }}>{error}</span>
+          <span style={{ color: '#ff3b30', fontSize: '13px' }}>{error || historyError}</span>
         </div>
       )}
 
       {/* Main compact list table */}
       <div className="glass-card" style={{ padding: '0px', overflow: 'hidden' }}>
-        {loading && paginatedCrons.length === 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px', gap: '12px' }}>
-            <RefreshCw size={24} className="animate-spin text-secondary" />
-            <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Chargement des planifications...</p>
-          </div>
-        ) : paginatedCrons.length === 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px', gap: '12px' }}>
-            <Clock size={32} style={{ color: 'var(--text-secondary)', opacity: 0.5 }} />
-            <p style={{ color: 'var(--text-secondary)', fontSize: '13.5px', fontWeight: 600 }}>Aucune planification correspondante.</p>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '12px', textAlign: 'center', maxWidth: '350px' }}>
-              Modifiez vos filtres ou lancez un scraping de découverte pour planifier des tâches de re-scraping.
-            </p>
-          </div>
-        ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table className="glass-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
-                  <th style={{ padding: '14px 20px', fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.05em' }}>MATCH</th>
-                  <th style={{ padding: '14px 20px', fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.05em' }}>HORAIRE</th>
-                  <th style={{ padding: '14px 20px', fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.05em' }}>COMPTE A REBOURS</th>
-                  <th style={{ padding: '14px 20px', fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.05em' }}>STATUT</th>
-                  <th style={{ padding: '14px 20px', fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.05em', textAlign: 'right' }}>ACTIONS</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedCrons.map((cron) => {
-                  const SportIcon = sportIcons[cron.sport] || Clock;
-                  const sportLabel = sportLabels[cron.sport] || cron.sport;
-                  const isPast = new Date(cron.expected_end_time).getTime() <= time;
-                  
-                  // Extract hours and minutes for start time
-                  const startHourStr = cron.start_time ? cron.start_time.substring(11, 16) : 'N/A';
-                  const endHourStr = cron.expected_end_time ? new Date(cron.expected_end_time).toLocaleTimeString(navigator.language, { hour: '2-digit', minute: '2-digit' }) : 'N/A';
-                  
-                  return (
-                    <tr 
-                      key={cron.match_id} 
-                      style={{ 
-                        borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
-                        transition: 'background 0.2s ease'
-                      }}
-                      className="hover-row"
-                    >
-                      {/* Column 1: Match with Sport Label */}
-                      <td style={{ padding: '14px 20px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <div style={{ 
-                            padding: '8px', 
-                            borderRadius: '8px', 
-                            background: 'rgba(255, 255, 255, 0.03)',
-                            border: '1px solid rgba(255, 255, 255, 0.05)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
+        {activeSubTab === 'active' ? (
+          loading && paginatedCrons.length === 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px', gap: '12px' }}>
+              <RefreshCw size={24} className="animate-spin text-secondary" />
+              <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Chargement des planifications...</p>
+            </div>
+          ) : paginatedCrons.length === 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px', gap: '12px' }}>
+              <Clock size={32} style={{ color: 'var(--text-secondary)', opacity: 0.5 }} />
+              <p style={{ color: 'var(--text-secondary)', fontSize: '13.5px', fontWeight: 600 }}>Aucune planification correspondante.</p>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '12px', textAlign: 'center', maxWidth: '350px' }}>
+                Modifiez vos filtres ou lancez un scraping de découverte pour planifier des tâches de re-scraping.
+              </p>
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table className="glass-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                    <th style={{ padding: '14px 20px', fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.05em' }}>MATCH</th>
+                    <th style={{ padding: '14px 20px', fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.05em' }}>HORAIRE</th>
+                    <th style={{ padding: '14px 20px', fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.05em' }}>COMPTE A REBOURS</th>
+                    <th style={{ padding: '14px 20px', fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.05em' }}>STATUT</th>
+                    <th style={{ padding: '14px 20px', fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.05em', textAlign: 'right' }}>ACTIONS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedCrons.map((cron) => {
+                    const SportIcon = sportIcons[cron.sport] || Clock;
+                    const sportLabel = sportLabels[cron.sport] || cron.sport;
+                    const isPast = new Date(cron.expected_end_time).getTime() <= time;
+                    
+                    // Extract hours and minutes for start time
+                    const startHourStr = cron.start_time ? cron.start_time.substring(11, 16) : 'N/A';
+                    const endHourStr = cron.expected_end_time ? new Date(cron.expected_end_time).toLocaleTimeString(navigator.language, { hour: '2-digit', minute: '2-digit' }) : 'N/A';
+                    
+                    return (
+                      <tr 
+                        key={cron.match_id} 
+                        style={{ 
+                          borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
+                          transition: 'background 0.2s ease'
+                        }}
+                        className="hover-row"
+                      >
+                        {/* Column 1: Match with Sport Label */}
+                        <td style={{ padding: '14px 20px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{ 
+                              padding: '8px', 
+                              borderRadius: '8px', 
+                              background: 'rgba(255, 255, 255, 0.03)',
+                              border: '1px solid rgba(255, 255, 255, 0.05)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}>
+                              <SportIcon size={14} style={{ color: 'var(--color-accent-solid)' }} />
+                            </div>
+                            <div>
+                              <div style={{ fontSize: '13px', fontWeight: 700, fontFamily: 'Outfit' }}>
+                                {cron.home_team} <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>vs</span> {cron.away_team}
+                              </div>
+                              <div style={{ fontSize: '10px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.02em', marginTop: '2px' }}>
+                                {sportLabel}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Column 2: Combined Times */}
+                        <td style={{ padding: '14px 20px' }}>
+                          <div style={{ fontSize: '12.5px', fontWeight: 600 }}>
+                            {startHourStr} <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>→</span> {endHourStr}
+                          </div>
+                          <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                            {cron.start_time ? cron.start_time.substring(8, 10) + '/' + cron.start_time.substring(5, 7) : ''}
+                          </div>
+                        </td>
+
+                        {/* Column 3: Countdown timer */}
+                        <td style={{ padding: '14px 20px' }}>
+                          <span style={{ 
+                            fontSize: '12.5px', 
+                            fontWeight: 700, 
+                            fontFamily: 'Courier, monospace',
+                            color: isPast ? '#34c759' : '#0a84ff' 
                           }}>
-                            <SportIcon size={14} style={{ color: 'var(--color-accent-solid)' }} />
+                            {formatCountdown(cron.expected_end_time)}
+                          </span>
+                        </td>
+
+                        {/* Column 4: Status and Retries */}
+                        <td style={{ padding: '14px 20px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                            <span style={{
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              fontSize: '9px',
+                              fontWeight: 800,
+                              background: cron.retries > 0 ? 'rgba(255, 159, 10, 0.12)' : (isPast ? 'rgba(52, 199, 89, 0.12)' : 'rgba(10, 132, 255, 0.12)'),
+                              color: cron.retries > 0 ? '#ff9f0a' : (isPast ? '#34c759' : '#0a84ff'),
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.02em'
+                            }}>
+                              {cron.retries > 0 ? 'Relance' : (isPast ? 'En Cours' : 'Planifié')}
+                            </span>
+                            {cron.retries > 0 && (
+                              <div style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                                Tentative {cron.retries}/5
+                              </div>
+                            )}
                           </div>
-                          <div>
-                            <div style={{ fontSize: '13px', fontWeight: 700, fontFamily: 'Outfit' }}>
-                              {cron.home_team} <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>vs</span> {cron.away_team}
+                        </td>
+
+                        {/* Column 5: Actions */}
+                        <td style={{ padding: '14px 20px', textAlign: 'right' }}>
+                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                            <button
+                              className="btn btn-secondary"
+                              onClick={() => handleRunCron(cron.match_id)}
+                              title="Lancer maintenant"
+                              style={{ 
+                                width: '28px',
+                                height: '28px',
+                                padding: '0', 
+                                borderRadius: '6px', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center',
+                                background: 'rgba(52, 199, 89, 0.08)',
+                                borderColor: 'rgba(52, 199, 89, 0.15)',
+                                color: '#34c759'
+                              }}
+                              disabled={actionLoading && actionLoading.matchId === cron.match_id}
+                            >
+                              <Play size={12} fill="currentColor" className={(actionLoading && actionLoading.matchId === cron.match_id && actionLoading.action === 'run') ? 'animate-spin' : ''} />
+                            </button>
+                            
+                            <button
+                              className="btn btn-secondary"
+                              onClick={() => handleCancelCron(cron.match_id)}
+                              title="Annuler planification"
+                              style={{ 
+                                width: '28px',
+                                height: '28px',
+                                padding: '0', 
+                                borderRadius: '6px', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center',
+                                background: 'rgba(255, 59, 48, 0.08)',
+                                borderColor: 'rgba(255, 59, 48, 0.15)',
+                                color: '#ff3b30'
+                              }}
+                              disabled={actionLoading && actionLoading.matchId === cron.match_id}
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )
+        ) : (
+          historyLoading && paginatedHistory.length === 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px', gap: '12px' }}>
+              <RefreshCw size={24} className="animate-spin text-secondary" />
+              <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Chargement de l'historique...</p>
+            </div>
+          ) : paginatedHistory.length === 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px', gap: '12px' }}>
+              <Clock size={32} style={{ color: 'var(--text-secondary)', opacity: 0.5 }} />
+              <p style={{ color: 'var(--text-secondary)', fontSize: '13.5px', fontWeight: 600 }}>Aucune tâche historique correspondante.</p>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '12px', textAlign: 'center', maxWidth: '350px' }}>
+                Les tâches de re-scraping terminées s'afficheront ici.
+              </p>
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table className="glass-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                    <th style={{ padding: '14px 20px', fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.05em' }}>MATCH</th>
+                    <th style={{ padding: '14px 20px', fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.05em' }}>HORAIRE COMPLET</th>
+                    <th style={{ padding: '14px 20px', fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.05em' }}>SCORE / DÉTAILS</th>
+                    <th style={{ padding: '14px 20px', fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.05em' }}>RELANCES</th>
+                    <th style={{ padding: '14px 20px', fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.05em', textAlign: 'right' }}>STATUT</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedHistory.map((cron) => {
+                    const SportIcon = sportIcons[cron.sport] || Clock;
+                    const sportLabel = sportLabels[cron.sport] || cron.sport;
+                    const isSuccess = cron.status === 'SUCCESS';
+                    
+                    const completedDateStr = cron.completed_at 
+                      ? new Date(cron.completed_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) 
+                      : 'N/A';
+                    
+                    return (
+                      <tr 
+                        key={cron.id} 
+                        style={{ 
+                          borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
+                          transition: 'background 0.2s ease'
+                        }}
+                        className="hover-row"
+                      >
+                        <td style={{ padding: '14px 20px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{ 
+                              padding: '8px', 
+                              borderRadius: '8px', 
+                              background: 'rgba(255, 255, 255, 0.03)',
+                              border: '1px solid rgba(255, 255, 255, 0.05)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}>
+                              <SportIcon size={14} style={{ color: 'var(--color-accent-solid)' }} />
                             </div>
-                            <div style={{ fontSize: '10px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.02em', marginTop: '2px' }}>
-                              {sportLabel}
+                            <div>
+                              <div style={{ fontSize: '13px', fontWeight: 700, fontFamily: 'Outfit' }}>
+                                {cron.home_team} <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>vs</span> {cron.away_team}
+                              </div>
+                              <div style={{ fontSize: '10px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.02em', marginTop: '2px' }}>
+                                {sportLabel}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </td>
-
-                      {/* Column 2: Combined Times */}
-                      <td style={{ padding: '14px 20px' }}>
-                        <div style={{ fontSize: '12.5px', fontWeight: 600 }}>
-                          {startHourStr} <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>→</span> {endHourStr}
-                        </div>
-                        <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                          {cron.start_time ? cron.start_time.substring(8, 10) + '/' + cron.start_time.substring(5, 7) : ''}
-                        </div>
-                      </td>
-
-                      {/* Column 3: Countdown timer */}
-                      <td style={{ padding: '14px 20px' }}>
-                        <span style={{ 
-                          fontSize: '12.5px', 
-                          fontWeight: 700, 
-                          fontFamily: 'Courier, monospace',
-                          color: isPast ? '#34c759' : '#0a84ff' 
-                        }}>
-                          {formatCountdown(cron.expected_end_time)}
-                        </span>
-                      </td>
-
-                      {/* Column 4: Status and Retries */}
-                      <td style={{ padding: '14px 20px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                        </td>
+                        <td style={{ padding: '14px 20px' }}>
+                          <div style={{ fontSize: '12.5px', fontWeight: 600 }}>{completedDateStr}</div>
+                        </td>
+                        <td style={{ padding: '14px 20px' }}>
+                          <div style={{ fontSize: '12.5px', fontWeight: 600 }}>{isSuccess ? `Score final : ${cron.score}` : (cron.error_message || 'Échec') }</div>
+                        </td>
+                        <td style={{ padding: '14px 20px' }}>
+                          <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>{cron.retries || 0} essai(s)</span>
+                        </td>
+                        <td style={{ padding: '14px 20px', textAlign: 'right' }}>
                           <span style={{
                             padding: '2px 6px',
                             borderRadius: '4px',
                             fontSize: '9px',
                             fontWeight: 800,
-                            background: cron.retries > 0 ? 'rgba(255, 159, 10, 0.12)' : (isPast ? 'rgba(52, 199, 89, 0.12)' : 'rgba(10, 132, 255, 0.12)'),
-                            color: cron.retries > 0 ? '#ff9f0a' : (isPast ? '#34c759' : '#0a84ff'),
+                            background: isSuccess ? 'rgba(52, 199, 89, 0.12)' : 'rgba(255, 59, 48, 0.12)',
+                            color: isSuccess ? '#34c759' : '#ff3b30',
                             textTransform: 'uppercase',
                             letterSpacing: '0.02em'
                           }}>
-                            {cron.retries > 0 ? 'Relance' : (isPast ? 'En Cours' : 'Planifié')}
+                            {isSuccess ? 'SUCCÈS' : 'ÉCHEC'}
                           </span>
-                          {cron.retries > 0 && (
-                            <div style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 500 }}>
-                              Tentative {cron.retries}/5
-                            </div>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Column 5: Actions */}
-                      <td style={{ padding: '14px 20px', textAlign: 'right' }}>
-                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
-                          <button
-                            className="btn btn-secondary"
-                            onClick={() => handleRunCron(cron.match_id)}
-                            title="Lancer maintenant"
-                            style={{ 
-                              width: '28px',
-                              height: '28px',
-                              padding: '0', 
-                              borderRadius: '6px', 
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              justifyContent: 'center',
-                              background: 'rgba(52, 199, 89, 0.08)',
-                              borderColor: 'rgba(52, 199, 89, 0.15)',
-                              color: '#34c759'
-                            }}
-                            disabled={actionLoading && actionLoading.matchId === cron.match_id}
-                          >
-                            <Play size={12} fill="currentColor" className={(actionLoading && actionLoading.matchId === cron.match_id && actionLoading.action === 'run') ? 'animate-spin' : ''} />
-                          </button>
-                          
-                          <button
-                            className="btn btn-secondary"
-                            onClick={() => handleCancelCron(cron.match_id)}
-                            title="Annuler planification"
-                            style={{ 
-                              width: '28px',
-                              height: '28px',
-                              padding: '0', 
-                              borderRadius: '6px', 
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              justifyContent: 'center',
-                              background: 'rgba(255, 59, 48, 0.08)',
-                              borderColor: 'rgba(255, 59, 48, 0.15)',
-                              color: '#ff3b30'
-                            }}
-                            disabled={actionLoading && actionLoading.matchId === cron.match_id}
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )
         )}
       </div>
 
       {/* Pagination Footer Controls */}
-      {totalPages > 1 && (
+      {currentTotalPages > 1 && (
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
@@ -559,19 +763,19 @@ export default function CronsTab({ showNotification }) {
             </button>
             
             <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'Outfit', color: 'var(--text-secondary)' }}>
-              Page {currentPage} sur {totalPages}
+              Page {currentPage} sur {currentTotalPages}
             </span>
 
             <button
-              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-              disabled={currentPage === totalPages}
+              onClick={() => setCurrentPage(prev => Math.min(currentTotalPages, prev + 1))}
+              disabled={currentPage === currentTotalPages}
               className="btn btn-secondary"
               style={{
                 padding: '4px 10px',
                 fontSize: '11.5px',
                 borderRadius: '6px',
-                cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
-                opacity: currentPage === totalPages ? 0.4 : 1,
+                cursor: currentPage === currentTotalPages ? 'not-allowed' : 'pointer',
+                opacity: currentPage === currentTotalPages ? 0.4 : 1,
                 border: '1px solid rgba(255, 255, 255, 0.06)'
               }}
             >

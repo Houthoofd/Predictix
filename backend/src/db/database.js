@@ -247,6 +247,22 @@ function initDb() {
         read INTEGER DEFAULT 0
       )
     `);
+
+    // 8. Table cron_history (re-scraping execution log)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS cron_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        match_id TEXT NOT NULL,
+        home_team TEXT NOT NULL,
+        away_team TEXT NOT NULL,
+        sport TEXT NOT NULL DEFAULT 'football',
+        status TEXT NOT NULL, -- SUCCESS, FAILED, RUNNING
+        retries INTEGER DEFAULT 0,
+        score TEXT,
+        error_message TEXT,
+        completed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
     
     // 6. Performance Indexes
     db.run("CREATE INDEX IF NOT EXISTS idx_predictions_historical_date ON scraped_predictions(is_historical, date)");

@@ -53,6 +53,15 @@ router.get('/scraper/crons/logs', (req, res) => {
   }
 });
 
+router.get('/scraper/crons/history', async (req, res) => {
+  try {
+    const history = await dbQuery('SELECT * FROM cron_history ORDER BY completed_at DESC LIMIT 100');
+    res.json({ success: true, data: history });
+  } catch (error) {
+    res.status(500).json({ success: false, error: { message: error.message } });
+  }
+});
+
 // Notifications endpoints
 router.get('/notifications', async (req, res) => {
   try {

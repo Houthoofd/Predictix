@@ -1,4 +1,4 @@
-import { dbQuery, dbGet, insertNotification } from '../db/database.js';
+import { dbQuery, dbGet, dbRun, insertNotification } from '../db/database.js';
 import { scrapeSingleMatch, getTorPortFromPool } from '../utils/scraperHelpers.js';
 
 const scheduledTimeouts = new Map();
@@ -53,10 +53,14 @@ function reschedule(matchId, minutes) {
   const retries = retryCounts.get(matchId) || 0;
   if (retries >= MAX_RETRIES) {
     logCron(`Max retries (${MAX_RETRIES}) reached for match ${matchId}. Stopping re-scraping attempts.`, 'warn');
-    dbGet('SELECT home_team, away_team FROM scraped_predictions WHERE match_id = ?', [matchId])
+    dbGet('SELECT home_team, away_team, sport FROM scraped_predictions WHERE match_id = ?', [matchId])
       .then(match => {
         if (match) {
           insertNotification(`Échec du re-scraping automatique de ${match.home_team} vs ${match.away_team} (Max retries atteint).`, 'warning');
+          dbRun(
+            'INSERT INTO cron_history (match_id, home_team, away_team, sport, status, retries, error_message) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [matchId, match.home_team, match.away_team, match.sport || 'football', 'FAILED', retries, 'Max retries reached']
+          ).catch(err => logCron(`Error inserting failure into cron_history: ${err.message}`, 'error'));
         }
       })
       .catch(e => logCron(`Error inserting failure notification: ${e.message}`, 'error'));
@@ -148,6 +152,11 @@ export async function reScrapeMatch(matchId) {
     } else {
       logCron(`Match ${matchId} successfully settled and marked as finished!`);
       insertNotification(`Match terminé : ${details.home_team} vs ${details.away_team} (Score: ${details.score || 'N/A'})`, 'info');
+      const retries = retryCounts.get(matchId) || 0;
+      dbRun(
+        'INSERT INTO cron_history (match_id, home_team, away_team, sport, status, retries, score) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [matchId, details.home_team || match.home_team, details.away_team || match.away_team, sport, 'SUCCESS', retries, details.score || 'N/A']
+      ).catch(err => logCron(`Error inserting success into cron_history: ${err.message}`, 'error'));
       scheduledTimeouts.delete(matchId);
       retryCounts.delete(matchId);
     }
