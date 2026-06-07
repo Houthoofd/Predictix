@@ -1,13 +1,12 @@
 import React from 'react';
-import { Calendar, ChevronRight, ChevronDown } from 'lucide-react';
+import { Trophy, ChevronRight, ChevronDown } from 'lucide-react';
 import MagicMatchCard from './MagicMatchCard';
 
 export default function MagicPredictionsGroup({
-  dateStr,
-  signalsInDate,
-  collapsedDates,
-  toggleDateCollapse,
-  formatHumanDate,
+  groupKey,
+  signalsInGroup,
+  collapsedLeagues,
+  toggleLeagueCollapse,
   predictions,
   selectedPredIds,
   setSelectedPredIds,
@@ -17,13 +16,14 @@ export default function MagicPredictionsGroup({
   handleInstantPlaceBet,
   getValueBetsForMatch
 }) {
-  const isCollapsed = !!collapsedDates[dateStr];
+  const isCollapsed = !!collapsedLeagues[groupKey];
+  const [country, league] = groupKey.split(' : ');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
-      {/* Date Section Header */}
+      {/* League Section Header */}
       <div 
-        onClick={() => toggleDateCollapse(dateStr)}
+        onClick={() => toggleLeagueCollapse(groupKey)}
         style={{ 
           display: 'flex', 
           alignItems: 'center', 
@@ -31,8 +31,8 @@ export default function MagicPredictionsGroup({
           padding: '8px 0', 
           borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
           fontFamily: 'Outfit',
-          fontSize: '15px',
-          fontWeight: 800,
+          fontSize: '14px',
+          fontWeight: 700,
           color: 'var(--text-primary)',
           cursor: 'pointer',
           userSelect: 'none',
@@ -41,20 +41,26 @@ export default function MagicPredictionsGroup({
         className="date-section-header"
       >
         {isCollapsed ? (
-          <ChevronRight size={16} style={{ color: '#bf5af2', marginRight: '2px' }} />
+          <ChevronRight size={15} style={{ color: '#bf5af2', marginRight: '2px' }} />
         ) : (
-          <ChevronDown size={16} style={{ color: '#bf5af2', marginRight: '2px' }} />
+          <ChevronDown size={15} style={{ color: '#bf5af2', marginRight: '2px' }} />
         )}
-        <Calendar size={16} style={{ color: '#bf5af2' }} />
-        <span>{formatHumanDate(dateStr)}</span>
-        <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500, background: 'rgba(255, 255, 255, 0.05)', padding: '2px 8px', borderRadius: '10px', marginLeft: '6px' }}>
-          {signalsInDate.length} signal{signalsInDate.length > 1 ? 'aux' : ''}
+        <Trophy size={14} style={{ color: '#bf5af2' }} />
+        <span style={{ textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>
+          {country}
+        </span>
+        <span style={{ color: 'var(--text-muted)' }}>:</span>
+        <span style={{ color: '#fff', fontWeight: 800 }}>
+          {league}
+        </span>
+        <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 700, background: 'rgba(191, 90, 242, 0.12)', padding: '2px 8px', borderRadius: '10px', marginLeft: '6px' }}>
+          {signalsInGroup.length} signal{signalsInGroup.length > 1 ? 'aux' : ''}
         </span>
       </div>
 
       {!isCollapsed && (
         <div className="grid-3" style={{ animation: 'fadeIn 0.3s ease-out' }}>
-          {signalsInDate.map((sig) => (
+          {signalsInGroup.map((sig) => (
             <MagicMatchCard
               key={sig.id}
               sig={sig}

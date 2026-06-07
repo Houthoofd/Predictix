@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Sparkles, AlertCircle } from 'lucide-react';
 import { getValueBetsForMatch } from '../utils/valueBetScanner';
-import { sportLabels, getMetricLabel } from '../utils/labels';
+import { sportLabels, getMetricLabel, parseTournament } from '../utils/labels';
 import MagicPredictionsFilters from './MagicPredictionsFilters';
 import MagicPredictionsGroup from './MagicPredictionsGroup';
 import MagicMatchCard from './MagicMatchCard';
@@ -25,7 +25,7 @@ export default function MagicPredictionsTab({
   setMinCoverage
 }) {
   const [filterMetric, setFilterMetric] = useState('all');
-  const [collapsedDates, setCollapsedDates] = useState({});
+  const [collapsedLeagues, setCollapsedLeagues] = useState({});
   const [sortBy, setSortBy] = useState('date');
   const [viewMode, setViewMode] = useState('today');
 
@@ -36,7 +36,7 @@ export default function MagicPredictionsTab({
   };
 
   React.useEffect(() => {
-    setCollapsedDates({});
+    setCollapsedLeagues({});
   }, [selectedMagicSport]);
 
   React.useEffect(() => {
@@ -44,35 +44,6 @@ export default function MagicPredictionsTab({
       fetchMagicSignals();
     }
   }, [predictions]);
-
-  const parseFrenchDate = (str) => {
-    if (!str) return new Date();
-    const cleanStr = str.replace(/^Le\s+/i, '').trim();
-    const ymd = cleanStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (ymd) {
-      return new Date(parseInt(ymd[1], 10), parseInt(ymd[2], 10) - 1, parseInt(ymd[3], 10));
-    }
-    return new Date(cleanStr);
-  };
-
-  const formatHumanDate = (dateStr) => {
-    try {
-      const parsed = parseFrenchDate(dateStr);
-      const today = new Date();
-      const tomorrow = new Date(today);
-      tomorrow.setDate(today.getDate() + 1);
-
-      if (parsed.toDateString() === today.toDateString()) {
-        return `Aujourd'hui, ${dateStr}`;
-      }
-      if (parsed.toDateString() === tomorrow.toDateString()) {
-        return `Demain, ${dateStr}`;
-      }
-      return dateStr;
-    } catch (e) {
-      return dateStr;
-    }
-  };
 
   const todayStr = useMemo(() => {
     const d = new Date();
@@ -93,35 +64,32 @@ export default function MagicPredictionsTab({
   const availableMetrics = ['all', ...new Set(signals.map(s => s.metric))];
   const availableSports = ['all', ...new Set(signals.map(s => s.sport || 'football'))];
 
-  const dateGroups = useMemo(() => {
+  const leagueGroups = useMemo(() => {
     const groups = {};
     filteredSignals.forEach(sig => {
-      const dateVal = sig.date || 'Date inconnue';
-      if (!groups[dateVal]) groups[dateVal] = [];
-      groups[dateVal].push(sig);
+      const { country, league } = parseTournament(sig.tournament);
+      const groupKey = `${country} : ${league}`;
+      if (!groups[groupKey]) {
+        groups[groupKey] = [];
+      }
+      groups[groupKey].push(sig);
     });
     return groups;
   }, [filteredSignals]);
 
-  const sortedDates = useMemo(() => {
-    return Object.keys(dateGroups).sort((a, b) => {
-      try {
-        return parseFrenchDate(b).getTime() - parseFrenchDate(a).getTime();
-      } catch (e) {
-        return 0;
-      }
-    });
-  }, [dateGroups]);
+  const sortedLeagues = useMemo(() => {
+    return Object.keys(leagueGroups).sort();
+  }, [leagueGroups]);
 
-  const collapseAllDates = () => {
+  const collapseAllLeagues = () => {
     const nextCollapsed = {};
-    sortedDates.forEach(d => { nextCollapsed[d] = true; });
-    setCollapsedDates(nextCollapsed);
+    sortedLeagues.forEach(g => { nextCollapsed[g] = true; });
+    setCollapsedLeagues(nextCollapsed);
   };
 
-  const expandAllDates = () => { setCollapsedDates({}); };
-  const toggleDateCollapse = (dateStr) => {
-    setCollapsedDates(prev => ({ ...prev, [dateStr]: !prev[dateStr] }));
+  const expandAllLeagues = () => { setCollapsedLeagues({}); };
+  const toggleLeagueCollapse = (groupKey) => {
+    setCollapsedLeagues(prev => ({ ...prev, [groupKey]: !prev[groupKey] }));
   };
 
   return (
@@ -207,10 +175,10 @@ export default function MagicPredictionsTab({
               </select>
             </div>
 
-            {sortBy === 'date' && sortedDates.length > 0 && (
+            {sortBy === 'date' && sortedLeagues.length > 0 && (
               <div style={{ display: 'flex', gap: '6px' }}>
-                <button className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '11px', height: '28px', borderRadius: '6px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600, cursor: 'pointer' }} onClick={collapseAllDates}>Tout replier</button>
-                <button className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '11px', height: '28px', borderRadius: '6px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600, cursor: 'pointer' }} onClick={expandAllDates}>Tout déplier</button>
+                <button className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '11px', height: '28px', borderRadius: '6px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600, cursor: 'pointer' }} onClick={collapseAllLeagues}>Tout replier</button>
+                <button className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '11px', height: '28px', borderRadius: '6px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600, cursor: 'pointer' }} onClick={expandAllLeagues}>Tout déplier</button>
               </div>
             )}
 
@@ -233,14 +201,13 @@ export default function MagicPredictionsTab({
       ) : filteredSignals.length > 0 ? (
         (() => {
           if (sortBy === 'date') {
-            return sortedDates.map((dateStr, dIdx) => (
+            return sortedLeagues.map((groupKey, gIdx) => (
               <MagicPredictionsGroup
-                key={dIdx}
-                dateStr={dateStr}
-                signalsInDate={dateGroups[dateStr]}
-                collapsedDates={collapsedDates}
-                toggleDateCollapse={toggleDateCollapse}
-                formatHumanDate={formatHumanDate}
+                key={gIdx}
+                groupKey={groupKey}
+                signalsInGroup={leagueGroups[groupKey]}
+                collapsedLeagues={collapsedLeagues}
+                toggleLeagueCollapse={toggleLeagueCollapse}
                 predictions={predictions}
                 selectedPredIds={selectedPredIds}
                 setSelectedPredIds={setSelectedPredIds}
