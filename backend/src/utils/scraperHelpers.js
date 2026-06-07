@@ -9,7 +9,9 @@ export {
   renewTorSession, 
   bootstrapTorInstances, 
   cleanupSpawnedTor, 
-  cleanupSpawnedTorSync 
+  cleanupSpawnedTorSync,
+  getActiveTorPorts,
+  getTorPortFromPool
 } from './torSessionManager.js';
 
 export { parseFrenchDate } from './dateParser.js';

@@ -1,12 +1,12 @@
 import { dbQuery, dbGet } from '../db/database.js';
-import { scrapeSingleMatch, isTorActive } from '../utils/scraperHelpers.js';
+import { scrapeSingleMatch, getTorPortFromPool } from '../utils/scraperHelpers.js';
 import { syncBankroll } from './betsService.js';
 
 // Resolves a single bet by scraping its match page
 export async function resolveSingleBet(id, scraperPath) {
-  const torActive = await isTorActive();
-  if (!torActive) {
-    throw new Error("Le proxy Tor local n'est pas actif sur le port 9050. Veuillez lancer Tor et réessayer.");
+  const activePort = await getTorPortFromPool();
+  if (!activePort) {
+    throw new Error("Aucun proxy Tor local n'est actif. Veuillez lancer Tor et réessayer.");
   }
 
   const bet = await dbGet('SELECT * FROM bets WHERE id = ?', [id]);
@@ -35,9 +35,9 @@ export async function resolveSingleBet(id, scraperPath) {
     link = `/live-score/${link}`;
   }
 
-  console.log(`[Predictix Bet Auto-Settle] Refreshing bet ${id} for match: ${link} (${sport})`);
+  console.log(`[Predictix Bet Auto-Settle] Refreshing bet ${id} for match: ${link} (${sport}) using Tor Port ${activePort}`);
   
-  const matchData = await scrapeSingleMatch(scraperPath, link, true, null, 9050, scraper, sport);
+  const matchData = await scrapeSingleMatch(scraperPath, link, true, null, activePort, scraper, sport);
   if (!matchData) {
     throw new Error(`Impossible de joindre le scraper ${scraper} pour récupérer le score.`);
   }
@@ -93,9 +93,9 @@ export async function resolveSingleBet(id, scraperPath) {
 
 // Resolves all pending bets in parallel batches
 export async function resolveAllPendingBets(scraperPath) {
-  const torActive = await isTorActive();
-  if (!torActive) {
-    throw new Error("Le proxy Tor local n'est pas actif sur le port 9050. Veuillez lancer Tor et réessayer.");
+  const activePort = await getTorPortFromPool();
+  if (!activePort) {
+    throw new Error("Aucun proxy Tor local n'est actif. Veuillez lancer Tor et réessayer.");
   }
 
   const pendingBets = await dbQuery("SELECT * FROM bets WHERE status = 'PENDING' AND match_id IS NOT NULL AND match_id != ''");
@@ -135,7 +135,9 @@ export async function resolveAllPendingBets(scraperPath) {
     }
 
     try {
-      const matchData = await scrapeSingleMatch(scraperPath, link, true, null, 9050, scraper, sport);
+      const betPort = await getTorPortFromPool() || activePort;
+      console.log(`[Predictix Bet Auto-Settle] Resolving pending bet ${bet.id} for match ${link} (${sport}) using Tor Port ${betPort}`);
+      const matchData = await scrapeSingleMatch(scraperPath, link, true, null, betPort, scraper, sport);
       if (!matchData) {
         return { id: bet.id, match: `${bet.home_team} vs ${bet.away_team}`, status: 'ERROR', reason: 'Liaison scraper échouée.' };
       }

@@ -31,6 +31,33 @@ export function isTorActive(socksPort = 9050) {
   });
 }
 
+let torRotationIndex = 0;
+
+/**
+ * Retrieve all currently active Tor SOCKS ports from the possible ports pool
+ */
+export async function getActiveTorPorts() {
+  const possiblePorts = [9050, 9052, 9054, 9056, 9058, 9060, 9062, 9064, 9066, 9068, 9070, 9072];
+  const checks = await Promise.all(possiblePorts.map(async (port) => {
+    const active = await isTorActive(port);
+    return active ? port : null;
+  }));
+  return checks.filter(Boolean);
+}
+
+/**
+ * Select the next active Tor SOCKS port from the pool using a round-robin rotation
+ */
+export async function getTorPortFromPool() {
+  const activePorts = await getActiveTorPorts();
+  if (activePorts.length === 0) {
+    return null;
+  }
+  const port = activePorts[torRotationIndex % activePorts.length];
+  torRotationIndex = (torRotationIndex + 1) % 1000000;
+  return port;
+}
+
 /**
  * Send a SIGNAL NEWNYM to Tor control port (default 9051) to rotate IP
  */

@@ -1,7 +1,8 @@
 import { exec } from 'child_process';
 import { dbGet } from '../db/database.js';
 import { 
-  isTorActive, 
+  getActiveTorPorts,
+  getTorPortFromPool,
   scrapeSingleMatch, 
   crawlH2HLinksBatch, 
   prioritizeDirectH2H 
@@ -38,11 +39,11 @@ export async function crawlMatchHistory(req, res) {
       });
     }
 
-    const torActive = await isTorActive();
-    if (!torActive) {
+    const activePorts = await getActiveTorPorts();
+    if (activePorts.length === 0) {
       return res.status(400).json({ 
         success: false, 
-        error: { message: "Le proxy Tor local n'est pas actif sur le port 9050. Veuillez lancer Tor et réessayer." } 
+        error: { message: "Aucun proxy Tor local n'est actif. Veuillez lancer Tor et réessayer." } 
       });
     }
 
@@ -100,8 +101,9 @@ export async function crawlMatchHistory(req, res) {
             }
           }
 
-          console.log(`[Predictix On-Demand Background] Crawling primary match page: ${targetLink}`);
-          const primaryDetails = await scrapeSingleMatch(scraperPath, targetLink, false, onSpawn, 9050, scraperSource, matchSport);
+          const primaryPort = await getTorPortFromPool() || activePorts[0];
+          console.log(`[Predictix On-Demand Background] Crawling primary match page: ${targetLink} using Tor Port ${primaryPort}`);
+          const primaryDetails = await scrapeSingleMatch(scraperPath, targetLink, false, onSpawn, primaryPort, scraperSource, matchSport);
 
           if (primaryDetails) {
             await enrichPrimaryMatch(matchId, primaryDetails, targetLink, match);
@@ -134,7 +136,7 @@ export async function crawlMatchHistory(req, res) {
           
           const linksToScrape = uncachedLinks.slice(0, 8);
           await crawlH2HLinksBatch(linksToScrape, scraperPath, {
-            concurrency: 4,
+            activePorts: activePorts,
             onSpawn: onSpawn,
             shouldStop: () => scraperState.stopScraperRequested || !scraperState.activeCrawlHistoryMatches.has(matchId),
             log: (msg) => console.log(`[Predictix On-Demand Background] ${msg}`),

@@ -1,5 +1,5 @@
 import { dbQuery, dbGet, insertNotification } from '../db/database.js';
-import { scrapeSingleMatch, isTorActive } from '../utils/scraperHelpers.js';
+import { scrapeSingleMatch, getTorPortFromPool } from '../utils/scraperHelpers.js';
 
 const scheduledTimeouts = new Map();
 const retryCounts = new Map();
@@ -78,9 +78,9 @@ export async function reScrapeMatch(matchId) {
       return;
     }
 
-    const torActive = await isTorActive();
-    if (!torActive) {
-      console.warn(`[Predictix Re-Scraper] Tor proxy is not active. Will retry in 10 minutes.`);
+    const activePort = await getTorPortFromPool();
+    if (!activePort) {
+      console.warn(`[Predictix Re-Scraper] No active Tor SOCKS port found in pool. Will retry in 10 minutes.`);
       reschedule(matchId, 10);
       return;
     }
@@ -94,8 +94,8 @@ export async function reScrapeMatch(matchId) {
       link = `/live-score/${link}`;
     }
 
-    console.log(`[Predictix Re-Scraper] Scraping details for match ${matchId} via ${scraper} (${sport})...`);
-    const details = await scrapeSingleMatch(scraperPath, link, true, null, 9050, scraper, sport);
+    console.log(`[Predictix Re-Scraper] Scraping details for match ${matchId} via ${scraper} (${sport}) using Tor Port ${activePort}...`);
+    const details = await scrapeSingleMatch(scraperPath, link, true, null, activePort, scraper, sport);
     if (!details) {
       console.warn(`[Predictix Re-Scraper] Scraping failed for match ${matchId}. Will retry in 15 minutes.`);
       reschedule(matchId, 15);
