@@ -143,18 +143,18 @@ export default function TrackerAnalyticsView({
   const drawCumulativeChart = () => {
     if (completedBets.length === 0) {
       return (
-        <div style={{ height: '220px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+        <div style={{ height: '250px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
           Aucun pari résolu pour cette sélection.
         </div>
       );
     }
 
-    const width = 600;
-    const height = 200;
-    const paddingLeft = 35;
-    const paddingRight = 45;
-    const paddingTop = 15;
-    const paddingBottom = 20;
+    const width = 1200;
+    const height = 250;
+    const paddingLeft = 20;
+    const paddingRight = 60;
+    const paddingTop = 20;
+    const paddingBottom = 25;
 
     const values = points.map(p => p.val);
     const minVal = Math.min(...values);
@@ -164,6 +164,12 @@ export default function TrackerAnalyticsView({
     const getX = (idx) => paddingLeft + (idx / (points.length - 1)) * (width - paddingLeft - paddingRight);
     const getY = (val) => height - paddingBottom - ((val - minVal) / valRange) * (height - paddingTop - paddingBottom);
 
+    let pathD = `M ${getX(0)} ${getY(values[0])}`;
+    for (let i = 1; i < points.length; i++) {
+      pathD += ` L ${getX(i)} ${getY(values[i])}`;
+    }
+    let areaD = `${pathD} L ${getX(points.length - 1)} ${height - paddingBottom} L ${getX(0)} ${height - paddingBottom} Z`;
+
     // Calculate vertical grid intervals
     const gridLines = [];
     const gridCount = 3;
@@ -172,7 +178,19 @@ export default function TrackerAnalyticsView({
     }
 
     return (
-      <svg viewBox={`0 0 ${width} ${height}`} width="100%" height="200" style={{ background: 'rgba(0,0,0,0.15)', borderRadius: '12px', border: '1px solid var(--border-color)', padding: '10px', overflow: 'visible' }}>
+      <svg 
+        viewBox={`0 0 ${width} ${height}`} 
+        width="100%" 
+        style={{ 
+          display: 'block',
+          background: 'rgba(0,0,0,0.15)', 
+          borderRadius: '12px', 
+          border: '1px solid var(--border-color)', 
+          padding: '12px', 
+          overflow: 'visible',
+          height: 'auto'
+        }}
+      >
         <defs>
           <linearGradient id="chartGradTracker" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#0082ff" stopOpacity="0.35" />
@@ -192,15 +210,15 @@ export default function TrackerAnalyticsView({
               y1={getY(val)} 
               x2={width - paddingRight} 
               y2={getY(val)} 
-              stroke="rgba(255, 255, 255, 0.04)" 
+              stroke="rgba(255, 255, 255, 0.05)" 
               strokeWidth="0.5"
               strokeDasharray="3 3"
             />
             <text 
               x={width - paddingRight + 6} 
               y={getY(val) + 3} 
-              fill="rgba(255, 255, 255, 0.3)" 
-              fontSize="7.5" 
+              fill="rgba(255, 255, 255, 0.35)" 
+              fontSize="9.5" 
               fontWeight="600"
               fontFamily="Outfit"
             >
@@ -363,7 +381,14 @@ export default function TrackerAnalyticsView({
           <h3 style={{ fontSize: '24px', fontFamily: 'Outfit', fontWeight: 800, marginTop: '8px' }}>
             {totalStaked.toFixed(1)} {currency}
           </h3>
-          <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Mise moy: {avgStake} {currency} • Cote moy: {avgOdds}</span>
+          <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Mise moyenne: {avgStake} {currency}</span>
+        </div>
+        <div className="glass-card" style={{ padding: '16px', textAlign: 'center' }}>
+          <span style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase' }}>Cote Moyenne</span>
+          <h3 style={{ fontSize: '24px', fontFamily: 'Outfit', fontWeight: 800, marginTop: '8px', color: '#bf5af2' }}>
+            {avgOdds}
+          </h3>
+          <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Sur la sélection</span>
         </div>
       </div>
 
