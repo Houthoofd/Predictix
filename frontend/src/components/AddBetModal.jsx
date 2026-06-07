@@ -1,5 +1,7 @@
 import React from 'react';
-import { X, Info } from 'lucide-react';
+import { X } from 'lucide-react';
+import BetModalSuccessOverlay from './BetModalSuccessOverlay';
+import BetModalValueEdgePanel from './BetModalValueEdgePanel';
 
 export default function AddBetModal({
   showAddBetModal,
@@ -46,43 +48,7 @@ export default function AddBetModal({
     <div className="modal-overlay">
       <div className="modal-content" style={{ position: 'relative', overflowY: betPlacedSuccess ? 'hidden' : 'visible', maxHeight: 'none', margin: 'auto' }}>
         
-        {betPlacedSuccess && (
-          <div style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            background: 'var(--bg-secondary)',
-            zIndex: 50,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '16px',
-            fontFamily: 'Outfit',
-            animation: 'fadeIn 0.2s ease-out'
-          }}>
-            <div style={{
-              width: '64px',
-              height: '64px',
-              borderRadius: '50%',
-              background: 'rgba(16, 185, 129, 0.1)',
-              border: '2px solid var(--color-success)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 0 20px rgba(16, 185, 129, 0.2)',
-              animation: 'scaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
-            }}>
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="var(--color-success)" strokeWidth="3" style={{ width: '32px', height: '32px' }}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-            <h4 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-primary)' }}>Pari enregistré avec succès !</h4>
-            <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Mise à jour de la bankroll en cours...</p>
-          </div>
-        )}
+        <BetModalSuccessOverlay betPlacedSuccess={betPlacedSuccess} />
 
         <div className="modal-header">
           <h3 className="modal-title" style={{ fontFamily: 'Outfit' }}>
@@ -256,79 +222,11 @@ export default function AddBetModal({
               </div>
             </div>
 
-            {/* Real-time Value Bet Calculator and Calibration Card */}
-            {hasValidCalc && (
-              <div style={{
-                background: valueEdge > 0 
-                  ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(16, 185, 129, 0.03) 100%)' 
-                  : 'linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(239, 68, 68, 0.015) 100%)',
-                border: valueEdge > 0 
-                  ? '1px solid rgba(16, 185, 129, 0.3)' 
-                  : '1px solid rgba(239, 68, 68, 0.2)',
-                padding: '14px 16px',
-                borderRadius: '8px',
-                boxShadow: valueEdge > 0 ? '0 0 15px rgba(16, 185, 129, 0.05)' : 'none',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px',
-                fontFamily: 'Outfit',
-                transition: 'all 0.2s ease'
-              }}>
-                <div style={{ 
-                  display: 'flex', 
-                  justifyContent: 'space-between', 
-                  alignItems: 'center' 
-                }}>
-                  <span style={{ 
-                    fontSize: '11px', 
-                    fontWeight: 800, 
-                    color: valueEdge > 0 ? 'var(--color-success)' : '#ef4444',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.06em',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}>
-                    <span style={{ 
-                      width: '6px', 
-                      height: '6px', 
-                      borderRadius: '50%', 
-                      background: valueEdge > 0 ? 'var(--color-success)' : '#ef4444', 
-                      display: 'inline-block',
-                      boxShadow: valueEdge > 0 ? '0 0 8px var(--color-success)' : 'none'
-                    }}></span>
-                    {valueEdge > 0 ? 'VALUE BET DÉTECTÉ' : 'EDGE NÉGATIF / PAS DE VALUE'}
-                  </span>
-                  <span style={{ 
-                    fontSize: '14px', 
-                    fontWeight: 800, 
-                    color: valueEdge > 0 ? 'var(--color-success)' : '#ef4444' 
-                  }}>
-                    {valueEdge > 0 ? `+${valueEdge.toFixed(1)}% Edge` : `${valueEdge.toFixed(1)}% Edge`}
-                  </span>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                  <span>Cote Juste Estimée :</span>
-                  <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{fairOdds}</span>
-                </div>
-
-                <div style={{ 
-                  fontSize: '11px', 
-                  color: 'var(--text-muted)', 
-                  borderTop: '1px solid rgba(255, 255, 255, 0.03)', 
-                  paddingTop: '6px',
-                  fontStyle: 'italic',
-                  lineHeight: 1.3,
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '6px'
-                }}>
-                  <Info size={14} style={{ color: 'var(--text-muted)', flexShrink: 0, marginTop: '1px' }} />
-                  <span>Saisir la cote réelle de votre bookmaker aide le modèle Predictix à mesurer les écarts du marché réel pour auto-calibrer et affiner ses cotes théoriques futures.</span>
-                </div>
-              </div>
-            )}
+            <BetModalValueEdgePanel
+              hasValidCalc={hasValidCalc}
+              valueEdge={valueEdge}
+              fairOdds={fairOdds}
+            />
 
             <div className="form-group">
               <label className="form-label">Notes additionnelles</label>
