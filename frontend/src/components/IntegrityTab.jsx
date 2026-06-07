@@ -35,6 +35,7 @@ export default function IntegrityTab({
     batcherSuccess,
     batcherErrors,
     batcherLogs,
+    batcherLoading,
     batcherQueue,
     injectedUrl,
     setInjectedUrl,
