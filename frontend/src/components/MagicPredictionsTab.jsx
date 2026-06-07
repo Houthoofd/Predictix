@@ -1,8 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { Sparkles, AlertCircle } from 'lucide-react';
+import { Sparkles, AlertCircle, RefreshCw } from 'lucide-react';
 import { getValueBetsForMatch } from '../utils/valueBetScanner';
 import { sportLabels, getMetricLabel, parseTournament } from '../utils/labels';
-import MagicPredictionsFilters from './MagicPredictionsFilters';
 import MagicPredictionsGroup from './MagicPredictionsGroup';
 import MagicMatchCard from './MagicMatchCard';
 
@@ -135,15 +134,6 @@ export default function MagicPredictionsTab({
         </button>
       </div>
 
-      <MagicPredictionsFilters
-        minCoverage={minCoverage}
-        setMinCoverage={setMinCoverage}
-        loading={loading}
-        fetchSignals={fetchSignals}
-      />
-
-
-
       {signals.length > 0 && (
         <div className="glass-card" style={{ padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px' }}>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -163,12 +153,34 @@ export default function MagicPredictionsTab({
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>Couverture :</span>
+              <select value={minCoverage} onChange={(e) => setMinCoverage(e.target.value)} style={{ background: 'rgba(0, 0, 0, 0.25)', border: '1px solid rgba(255, 255, 255, 0.08)', color: 'var(--text-primary)', borderRadius: '8px', padding: '6px 12px', fontSize: '12.5px', fontFamily: 'Outfit', fontWeight: 600, cursor: 'pointer', outline: 'none' }}>
+                <option value="0" style={{ background: '#1c1c1e', color: '#fff' }}>0%</option>
+                <option value="10" style={{ background: '#1c1c1e', color: '#fff' }}>10%</option>
+                <option value="30" style={{ background: '#1c1c1e', color: '#fff' }}>30%</option>
+                <option value="50" style={{ background: '#1c1c1e', color: '#fff' }}>50%</option>
+                <option value="70" style={{ background: '#1c1c1e', color: '#fff' }}>70%</option>
+                <option value="90" style={{ background: '#1c1c1e', color: '#fff' }}>90%</option>
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>Trier par :</span>
               <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={{ background: 'rgba(0, 0, 0, 0.25)', border: '1px solid rgba(255, 255, 255, 0.08)', color: 'var(--text-primary)', borderRadius: '8px', padding: '6px 12px', fontSize: '12.5px', fontFamily: 'Outfit', fontWeight: 600, cursor: 'pointer', outline: 'none' }}>
                 <option value="date" style={{ background: '#1c1c1e', color: '#fff' }}>Date & Heure</option>
                 <option value="confidence" style={{ background: '#1c1c1e', color: '#fff' }}>Confiance (Probabilité %)</option>
               </select>
             </div>
+
+            <button 
+              className="btn btn-secondary" 
+              onClick={fetchSignals} 
+              disabled={loading}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '32px', padding: '0 12px', fontSize: '12.5px', borderRadius: '8px', cursor: 'pointer' }}
+            >
+              <RefreshCw size={13} className={loading ? 'spin-animation' : ''} />
+              <span>Actualiser</span>
+            </button>
 
             {sortBy === 'date' && sortedLeagues.length > 0 && (
               <div style={{ display: 'flex', gap: '6px' }}>
