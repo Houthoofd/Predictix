@@ -44,7 +44,7 @@ export default function TrackerTab({
     setActiveKebabId(activeKebabId === betId ? null : betId);
   };
 
-  const bookmakers = Array.from(new Set(bets.map(b => b.bookmaker).filter(Boolean)));
+  const bookmakers = Array.from(new Set(bets.map(b => normalizeBookmakerName(b.bookmaker)).filter(Boolean)));
   const leagues = Array.from(new Set(bets.map(b => b.league).filter(Boolean)));
 
   const getFilteredBets = () => {
@@ -68,7 +68,7 @@ export default function TrackerTab({
       if (timeframe === '30days' && b.date < str30DaysAgo) return false;
       if (timeframe === 'currentMonth' && !b.date.startsWith(currentYearMonth)) return false;
       if (timeframe === 'lastMonth' && !b.date.startsWith(lastMonthStr)) return false;
-      if (filterBookmaker !== 'all' && b.bookmaker !== filterBookmaker) return false;
+      if (filterBookmaker !== 'all' && normalizeBookmakerName(b.bookmaker) !== filterBookmaker) return false;
       if (filterLeague !== 'all' && b.league !== filterLeague) return false;
       return true;
     });
@@ -119,12 +119,13 @@ export default function TrackerTab({
     leagueMap[bet.league].total++;
     if (bet.status === 'WON') leagueMap[bet.league].won++;
 
-    if (!bookmakerMap[bet.bookmaker]) {
-      bookmakerMap[bet.bookmaker] = { name: bet.bookmaker, profit: 0, total: 0, won: 0 };
+    const normBm = normalizeBookmakerName(bet.bookmaker);
+    if (!bookmakerMap[normBm]) {
+      bookmakerMap[normBm] = { name: normBm, profit: 0, total: 0, won: 0 };
     }
-    bookmakerMap[bet.bookmaker].profit += profit;
-    bookmakerMap[bet.bookmaker].total++;
-    if (bet.status === 'WON') bookmakerMap[bet.bookmaker].won++;
+    bookmakerMap[normBm].profit += profit;
+    bookmakerMap[normBm].total++;
+    if (bet.status === 'WON') bookmakerMap[normBm].won++;
 
     const rawTip = (bet.best_tip || '').toLowerCase();
     let cleanTip = 'Autre';
@@ -313,4 +314,23 @@ export default function TrackerTab({
 
     </div>
   );
+}
+
+export function normalizeBookmakerName(bookmaker) {
+  if (!bookmaker) return 'Unibet';
+  const clean = bookmaker.trim();
+  const lower = clean.toLowerCase();
+  const mapping = {
+    '1xbet': '1XBet',
+    'unibet': 'Unibet',
+    'betclic': 'Betclic',
+    'winamax': 'Winamax',
+    'pmu': 'PMU',
+    'zebet': 'ZEbet',
+    'bwin': 'Bwin',
+    'bet365': 'Bet365',
+    'parions sport': 'Parions Sport',
+    'parionssport': 'Parions Sport'
+  };
+  return mapping[lower] || (clean.charAt(0).toUpperCase() + clean.slice(1));
 }

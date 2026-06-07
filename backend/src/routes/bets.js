@@ -1,9 +1,10 @@
 import express from 'express';
 import { dbQuery, dbGet, dbRun } from '../db/database.js';
-import { syncBankroll } from '../services/betsService.js';
+import { syncBankroll, normalizeBookmaker } from '../services/betsService.js';
 import { resolveSingleBet, resolveAllPendingBets } from '../services/betsResolverService.js';
 
 const router = express.Router();
+const handleError = (res, err) => res.status(500).json({ success: false, error: { message: err.message } });
 
 /* ========================================================================
    BANKROLL ROUTES
@@ -47,9 +48,7 @@ router.post('/bankroll/reset', async (req, res) => {
 
     const updatedBankroll = await syncBankroll();
     res.json({ success: true, data: updatedBankroll });
-  } catch (error) {
-    res.status(500).json({ success: false, error: { message: error.message } });
-  }
+  } catch (error) { handleError(res, error); }
 });
 
 // Get advanced bankroll and betting statistics
@@ -58,9 +57,7 @@ router.get('/bankroll/stats', async (req, res) => {
     const { getBetsStats } = await import('../services/betsService.js');
     const statsData = await getBetsStats();
     res.json({ success: true, data: statsData });
-  } catch (error) {
-    res.status(500).json({ success: false, error: { message: error.message } });
-  }
+  } catch (error) { handleError(res, error); }
 });
 
 /* ========================================================================
@@ -72,9 +69,7 @@ router.get('/bets', async (req, res) => {
   try {
     const bets = await dbQuery('SELECT * FROM bets ORDER BY date DESC, time DESC, id DESC');
     res.json({ success: true, data: bets });
-  } catch (error) {
-    res.status(500).json({ success: false, error: { message: error.message } });
-  }
+  } catch (error) { handleError(res, error); }
 });
 
 // Add a new bet
@@ -115,7 +110,7 @@ router.post('/bets', async (req, res) => {
     const params = [
       match_id || null, date, time, league, home_team, away_team,
       best_tip, cleanCardLine, cleanOdds, cleanStake, cleanProb,
-      bookmaker || 'Unibet', cleanStatus, payout, notes || null, match_url || null, cleanSport
+      normalizeBookmaker(bookmaker || 'Unibet'), cleanStatus, payout, notes || null, match_url || null, cleanSport
     ];
 
     const result = await dbRun(sql, params);
@@ -123,9 +118,7 @@ router.post('/bets', async (req, res) => {
 
     const newBet = await dbGet('SELECT * FROM bets WHERE id = ?', [result.id]);
     res.status(201).json({ success: true, data: newBet });
-  } catch (error) {
-    res.status(500).json({ success: false, error: { message: error.message } });
-  }
+  } catch (error) { handleError(res, error); }
 });
 
 // Add multiple bets at once (batch mode)
@@ -175,7 +168,7 @@ router.post('/bets/batch', async (req, res) => {
       const params = [
         match_id || null, date, time, league, home_team, away_team,
         best_tip, cleanCardLine, cleanOdds, cleanStake, cleanProb,
-        bookmaker || 'Unibet', cleanStatus, payout, notes || null, match_url || null, cleanSport
+        normalizeBookmaker(bookmaker || 'Unibet'), cleanStatus, payout, notes || null, match_url || null, cleanSport
       ];
 
       const result = await dbRun(sql, params);
@@ -185,9 +178,7 @@ router.post('/bets/batch', async (req, res) => {
 
     await syncBankroll();
     res.status(201).json({ success: true, data: insertedBets, count: insertedBets.length });
-  } catch (error) {
-    res.status(500).json({ success: false, error: { message: error.message } });
-  }
+  } catch (error) { handleError(res, error); }
 });
 
 // Update an existing bet
@@ -230,7 +221,7 @@ router.put('/bets/:id', async (req, res) => {
     const params = [
       date || existing.date, time || existing.time, league || existing.league,
       home_team || existing.home_team, away_team || existing.away_team, best_tip || existing.best_tip,
-      cleanCardLine, cleanOdds, cleanStake, cleanProb, bookmaker || existing.bookmaker,
+      cleanCardLine, cleanOdds, cleanStake, cleanProb, normalizeBookmaker(bookmaker || existing.bookmaker),
       cleanStatus, payout, cleanNotes, cleanSport, id
     ];
 
@@ -239,9 +230,7 @@ router.put('/bets/:id', async (req, res) => {
 
     const updatedBet = await dbGet('SELECT * FROM bets WHERE id = ?', [id]);
     res.json({ success: true, data: updatedBet });
-  } catch (error) {
-    res.status(500).json({ success: false, error: { message: error.message } });
-  }
+  } catch (error) { handleError(res, error); }
 });
 
 // Delete multiple bets
@@ -274,9 +263,7 @@ router.delete('/bets/:id', async (req, res) => {
     await dbRun('DELETE FROM bets WHERE id = ?', [id]);
     await syncBankroll();
     res.json({ success: true, data: { id, message: 'Bet deleted successfully' } });
-  } catch (error) {
-    res.status(500).json({ success: false, error: { message: error.message } });
-  }
+  } catch (error) { handleError(res, error); }
 });
 
 // Refresh a single bet outcome by scraping its match page
@@ -289,7 +276,7 @@ router.post('/bets/:id/refresh', async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error('Error auto-resolving single bet:', error);
-    res.status(500).json({ success: false, error: { message: error.message } });
+    handleError(res, error);
   }
 });
 
@@ -302,7 +289,7 @@ router.post('/bets/refresh-all', async (req, res) => {
     res.json({ success: true, message: `${result.updatedCount} pari(s) résolu(s) automatiquement !`, ...result });
   } catch (error) {
     console.error('Error auto-resolving all pending bets:', error);
-    res.status(500).json({ success: false, error: { message: error.message } });
+    handleError(res, error);
   }
 });
 

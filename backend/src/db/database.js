@@ -24,33 +24,17 @@ const db = new sqlite3Verbose.Database(dbPath, (err) => {
   }
 });
 
-// Promisify DB methods
-export const dbQuery = (sql, params = []) => {
-  return new Promise((resolve, reject) => {
-    db.all(sql, params, (err, rows) => {
-      if (err) reject(err);
-      else resolve(rows);
-    });
-  });
-};
+export const dbQuery = (sql, params = []) => new Promise((resolve, reject) => {
+  db.all(sql, params, (err, rows) => err ? reject(err) : resolve(rows));
+});
 
-export const dbGet = (sql, params = []) => {
-  return new Promise((resolve, reject) => {
-    db.get(sql, params, (err, row) => {
-      if (err) reject(err);
-      else resolve(row);
-    });
-  });
-};
+export const dbGet = (sql, params = []) => new Promise((resolve, reject) => {
+  db.get(sql, params, (err, row) => err ? reject(err) : resolve(row));
+});
 
-export const dbRun = (sql, params = []) => {
-  return new Promise((resolve, reject) => {
-    db.run(sql, params, function (err) {
-      if (err) reject(err);
-      else resolve({ id: this.lastID, changes: this.changes });
-    });
-  });
-};
+export const dbRun = (sql, params = []) => new Promise((resolve, reject) => {
+  db.run(sql, params, function (err) { err ? reject(err) : resolve({ id: this.lastID, changes: this.changes }); });
+});
 
 function initDb() {
   db.serialize(() => {
@@ -143,79 +127,26 @@ function initDb() {
     `);
 
     // Safe schema migrations for existing databases
-    db.run(`
-      ALTER TABLE scraped_predictions ADD COLUMN first_half_corners_home INTEGER
-    `, (err) => {
-      // Ignore error if column already exists
+    const migrations = [
+      'ALTER TABLE scraped_predictions ADD COLUMN first_half_corners_home INTEGER',
+      'ALTER TABLE scraped_predictions ADD COLUMN first_half_corners_away INTEGER',
+      'ALTER TABLE scraped_predictions ADD COLUMN odds_corners TEXT',
+      'ALTER TABLE scraped_predictions ADD COLUMN home_logo TEXT',
+      'ALTER TABLE scraped_predictions ADD COLUMN away_logo TEXT',
+      'ALTER TABLE scraped_predictions ADD COLUMN historical_links TEXT',
+      'ALTER TABLE scraped_predictions ADD COLUMN is_historical INTEGER DEFAULT 0',
+      'ALTER TABLE bets ADD COLUMN match_url TEXT',
+      'ALTER TABLE scraped_predictions ADD COLUMN match_url TEXT',
+      'ALTER TABLE scraped_predictions ADD COLUMN statistics_json TEXT',
+      'ALTER TABLE scraped_predictions ADD COLUMN sport TEXT DEFAULT "football"',
+      'ALTER TABLE bets ADD COLUMN sport TEXT DEFAULT "football"'
+    ];
+
+    migrations.forEach(m => {
+      db.run(m, () => {});
     });
 
-    db.run(`
-      ALTER TABLE scraped_predictions ADD COLUMN first_half_corners_away INTEGER
-    `, (err) => {
-      // Ignore error if column already exists
-    });
-    
-    db.run(`
-      ALTER TABLE scraped_predictions ADD COLUMN odds_corners TEXT
-    `, (err) => {
-      // Ignore error if column already exists
-    });
-
-    db.run(`
-      ALTER TABLE scraped_predictions ADD COLUMN home_logo TEXT
-    `, (err) => {
-      // Ignore error if column already exists
-    });
-
-    db.run(`
-      ALTER TABLE scraped_predictions ADD COLUMN away_logo TEXT
-    `, (err) => {
-      // Ignore error if column already exists
-    });
-
-    db.run(`
-      ALTER TABLE scraped_predictions ADD COLUMN historical_links TEXT
-    `, (err) => {
-      // Ignore error if column already exists
-    });
-
-    db.run(`
-      ALTER TABLE scraped_predictions ADD COLUMN is_historical INTEGER DEFAULT 0
-    `, (err) => {
-      // Ignore error if column already exists
-      // In any case, migrate existing data to set is_historical = 1 for historical rows
-      db.run("UPDATE scraped_predictions SET is_historical = 1 WHERE match_id LIKE '%/%' OR match_id LIKE 'http%'");
-    });
-
-    db.run(`
-      ALTER TABLE bets ADD COLUMN match_url TEXT
-    `, (err) => {
-      // Ignore if exists
-    });
-
-    db.run(`
-      ALTER TABLE scraped_predictions ADD COLUMN match_url TEXT
-    `, (err) => {
-      // Ignore if exists
-    });
-
-    db.run(`
-      ALTER TABLE scraped_predictions ADD COLUMN statistics_json TEXT
-    `, (err) => {
-      // Ignore if exists
-    });
-
-    db.run(`
-      ALTER TABLE scraped_predictions ADD COLUMN sport TEXT DEFAULT 'football'
-    `, (err) => {
-      // Ignore if exists
-    });
-
-    db.run(`
-      ALTER TABLE bets ADD COLUMN sport TEXT DEFAULT 'football'
-    `, (err) => {
-      // Ignore if exists
-    });
+    db.run("UPDATE scraped_predictions SET is_historical = 1 WHERE match_id LIKE '%/%' OR match_id LIKE 'http%'");
     
     // Retroactive status repair for finished matches currently marked as Planned
     db.run(`
@@ -226,6 +157,32 @@ function initDb() {
         AND (LOWER(TRIM(time)) = 'ter' OR LOWER(TRIM(time)) = 'ter.' OR LOWER(time) LIKE '%terminé%')
     `, (err) => {
       if (err) console.error("Error running database retroactive repair query:", err.message);
+    });
+
+    // Retroactive bookmaker name casing normalization
+    db.all("SELECT DISTINCT bookmaker FROM bets", (err, rows) => {
+      if (err || !rows) return;
+      const mapping = {
+        '1xbet': '1XBet',
+        'unibet': 'Unibet',
+        'betclic': 'Betclic',
+        'winamax': 'Winamax',
+        'pmu': 'PMU',
+        'zebet': 'ZEbet',
+        'bwin': 'Bwin',
+        'bet365': 'Bet365',
+        'parions sport': 'Parions Sport',
+        'parionssport': 'Parions Sport'
+      };
+      rows.forEach(r => {
+        if (!r.bookmaker) return;
+        const clean = r.bookmaker.trim();
+        const lower = clean.toLowerCase();
+        const expected = mapping[lower] || (clean.charAt(0).toUpperCase() + clean.slice(1));
+        if (clean !== expected) {
+          db.run("UPDATE bets SET bookmaker = ? WHERE bookmaker = ?", [expected, r.bookmaker]);
+        }
+      });
     });
     
     // 5. Table custom_team_logos
@@ -307,12 +264,15 @@ function initDb() {
     });
     
     // 6. Performance Indexes
-    db.run("CREATE INDEX IF NOT EXISTS idx_predictions_historical_date ON scraped_predictions(is_historical, date)");
-    db.run("CREATE INDEX IF NOT EXISTS idx_predictions_finished_date ON scraped_predictions(is_finished, date DESC)");
-    db.run("CREATE INDEX IF NOT EXISTS idx_predictions_home_finished ON scraped_predictions(home_team, is_finished, date DESC)");
-    db.run("CREATE INDEX IF NOT EXISTS idx_predictions_away_finished ON scraped_predictions(away_team, is_finished, date DESC)");
-    db.run("CREATE INDEX IF NOT EXISTS idx_bets_match_pending ON bets(match_id, status)");
-    db.run("CREATE INDEX IF NOT EXISTS idx_bets_date ON bets(date, time)");
+    const indexes = [
+      "idx_predictions_historical_date ON scraped_predictions(is_historical, date)",
+      "idx_predictions_finished_date ON scraped_predictions(is_finished, date DESC)",
+      "idx_predictions_home_finished ON scraped_predictions(home_team, is_finished, date DESC)",
+      "idx_predictions_away_finished ON scraped_predictions(away_team, is_finished, date DESC)",
+      "idx_bets_match_pending ON bets(match_id, status)",
+      "idx_bets_date ON bets(date, time)"
+    ];
+    indexes.forEach(idx => db.run(`CREATE INDEX IF NOT EXISTS ${idx}`));
     
     console.log("Database tables and indexes initialized successfully");
   });
@@ -320,14 +280,9 @@ function initDb() {
 
 export const insertNotification = async (message, type = 'info') => {
   try {
-    await dbRun(
-      'INSERT INTO notifications (message, type) VALUES (?, ?)',
-      [message, type]
-    );
+    await dbRun('INSERT INTO notifications (message, type) VALUES (?, ?)', [message, type]);
     console.log(`[Predictix Notification] [${type.toUpperCase()}] ${message}`);
-  } catch (err) {
-    console.error('Failed to insert notification:', err);
-  }
+  } catch (err) { console.error('Failed to insert notification:', err); }
 };
 
 export default db;
