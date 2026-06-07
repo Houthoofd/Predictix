@@ -40,9 +40,20 @@ export default function App() {
     }
   });
 
+  const refreshAllData = async () => {
+    try {
+      await Promise.all([
+        bets.refreshAllDataSilent(),
+        predictions.fetchPredictions()
+      ]);
+    } catch (error) {
+      console.error("Error refreshing all data:", error);
+    }
+  };
+
   const scraper = useScraperManager({
     showToast: notify.showToast,
-    refreshAllDataSilent: bets.refreshAllDataSilent
+    refreshAllDataSilent: refreshAllData
   });
 
   const modals = useModalManager({

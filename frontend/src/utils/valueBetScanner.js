@@ -8,7 +8,11 @@ import {
 export function getValueBetsForMatch(matchDetails) {
   if (!matchDetails) return [];
   const list = [];
-  const popularMarkets = ['corners', 'fouls', 'yellow_cards', 'red_cards', 'shots_on_target', 'shots', 'offsides'];
+  const popularMarkets = [
+    'corners', 'fouls', 'yellow_cards', 'red_cards', 'shots_on_target', 'shots', 'offsides',
+    'goals', 'total_rebounds', 'assists', 'blocks', 'steals', 'field_goals', 'free_throws',
+    'aces', 'double_faults', 'first_serve', 'break_points', 'tries', 'penalties', 'conversions', 'saves'
+  ];
   
   const allMatches = [
     matchDetails,
