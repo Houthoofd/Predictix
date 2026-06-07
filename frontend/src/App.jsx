@@ -34,7 +34,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [trackerSubTab, setTrackerSubTab] = useState('journal');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [selectedMagicSport, setSelectedMagicSport] = useState('football');
+  const [selectedMagicSport, setSelectedMagicSport] = useState('all');
   
   // Data State
   const [bankroll, setBankroll] = useState({ balance: 1000, initial_balance: 1000, currency: '€' });

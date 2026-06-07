@@ -987,3 +987,12 @@ select.form-control {
     opacity: 1;
   }
 }
+
+/* Hide scrollbar for sports submenu */
+.sports-submenu {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none;  /* IE and Edge */
+}
+.sports-submenu::-webkit-scrollbar {
+  display: none; /* Chrome, Safari and Opera */
+}

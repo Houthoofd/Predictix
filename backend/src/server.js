@@ -19,6 +19,15 @@ app.use(cors());
 // Body parser
 app.use(express.json());
 
+// Disable caching for all API responses
+app.use((req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+  next();
+});
+
 // Routes
 import betsRoutes from './routes/bets.js';
 import scraperRoutes from './routes/scraper.js';

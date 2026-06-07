@@ -73,7 +73,7 @@ export async function importScrapedMatches(matches, scrapedAt) {
     await dbRun(sql, [
       matchId,
       match.time || '',
-      match.date || scrapedAt?.substring(0, 10) || new Date().toISOString().substring(0, 10),
+      parseFrenchDate(match.date) || match.date || scrapedAt?.substring(0, 10) || new Date().toISOString().substring(0, 10),
       match.tournament || match.league || 'Football',
       homeClean,
       awayClean,
@@ -94,7 +94,7 @@ export async function importScrapedMatches(matches, scrapedAt) {
       match.away_logo || null,
       match.historical_links ? JSON.stringify(match.historical_links) : null,
       match.match_url || null,
-      match.statistics ? JSON.stringify(match.statistics) : null,
+      match.statistics ? JSON.stringify(normalizeStatistics(match.statistics)) : null,
       match.sport || 'football'
     ]);
 
@@ -158,7 +158,8 @@ export async function importHistoricalMatch(link, histMatch) {
   const cardLine = histMatch.card_line || defaultLine;
   const bestTip = histMatch.best_tip || (stableProb >= 66 ? 'Plus de' : 'Moins de');
 
-  let histDate = histMatch.date || new Date().toISOString().substring(0, 10);
+  let parsedDate = parseFrenchDate(histMatch.date);
+  let histDate = parsedDate || histMatch.date || new Date().toISOString().substring(0, 10);
   let histTime = histMatch.time || 'Finished';
   if (histDate.includes(':')) {
     histTime = histDate;
@@ -182,7 +183,7 @@ export async function importHistoricalMatch(link, histMatch) {
     histMatch.away_logo || null,
     1, // is_historical = 1
     histMatch.match_url || link,
-    histMatch.statistics ? JSON.stringify(histMatch.statistics) : null,
+    histMatch.statistics ? JSON.stringify(normalizeStatistics(histMatch.statistics)) : null,
     histMatch.sport || 'football'
   ]);
 }
@@ -263,7 +264,7 @@ export async function enrichPrimaryMatch(matchId, primaryDetails, targetLink, ma
     pDate,
     pTime,
     primaryDetails.match_url || targetLink,
-    primaryDetails.statistics ? JSON.stringify(primaryDetails.statistics) : null,
+    primaryDetails.statistics ? JSON.stringify(normalizeStatistics(primaryDetails.statistics)) : null,
     primaryDetails.sport || match.sport || 'football',
     matchId
   ]);
@@ -275,4 +276,14 @@ export async function enrichPrimaryMatch(matchId, primaryDetails, targetLink, ma
   } catch (err) {
     console.error('[Predictix On-Demand Background] Failed to auto-settle bet:', err.message);
   }
+}
+
+function normalizeStatistics(stats) {
+  if (!stats) return null;
+  const normalized = { ...stats };
+  if (normalized.cartons_janues !== undefined) {
+    normalized.yellow_cards = normalized.cartons_janues;
+    delete normalized.cartons_janues;
+  }
+  return normalized;
 }
