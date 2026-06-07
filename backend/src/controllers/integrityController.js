@@ -1,7 +1,7 @@
 import { exec } from 'child_process';
 import { dbQuery, dbGet, dbRun } from '../db/database.js';
 import { isTorActive } from '../utils/scraperHelpers.js';
-import { getEnrichedPredictions } from '../utils/predictionEngine.js';
+import { getEnrichedPredictions } from '../utils/predictionFetcher.js';
 import { scraperState } from './scraperState.js';
 import { runIntegrityBatchLoop } from './integrityBatchRunner.js';
 import { crawlMatchHistory as crawlMatchHistoryFn } from './historyCrawler.js';

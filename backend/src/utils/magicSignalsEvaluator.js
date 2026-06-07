@@ -45,6 +45,27 @@ export async function evaluateMagicSignals(minCoverage = 50.0) {
   // Get all matches (including finished ones)
   const upcomingMatches = await dbQuery("SELECT * FROM scraped_predictions WHERE is_historical = 0 ORDER BY date ASC, time ASC");
   
+  // Fetch finished matches once to build in-memory H2H mapping
+  const allFinished = await dbQuery(`
+    SELECT home_team, away_team, score, date, time, tournament, statistics_json, sport
+    FROM scraped_predictions 
+    WHERE is_finished = 1
+    ORDER BY date DESC
+  `);
+
+  const h2hMatchesMap = new Map();
+  for (const m of allFinished) {
+    const teams = [m.home_team, m.away_team].sort();
+    const h2hKey = `${teams[0]} vs ${teams[1]}`;
+    if (!h2hMatchesMap.has(h2hKey)) {
+      h2hMatchesMap.set(h2hKey, []);
+    }
+    const h2hArr = h2hMatchesMap.get(h2hKey);
+    if (h2hArr.length < 15) {
+      h2hArr.push(m);
+    }
+  }
+
   const signals = [];
 
   // For each upcoming match, check H2H data
@@ -55,13 +76,9 @@ export async function evaluateMagicSignals(minCoverage = 50.0) {
       continue;
     }
 
-    // Find historical finished H2H matches (up to 15 to cover potential limits)
-    const h2hMatches = await dbQuery(`
-      SELECT * FROM scraped_predictions 
-      WHERE is_finished = 1 
-        AND ((home_team = ? AND away_team = ?) OR (home_team = ? AND away_team = ?))
-      ORDER BY date DESC LIMIT 15
-    `, [match.home_team, match.away_team, match.away_team, match.home_team]);
+    const teams = [match.home_team, match.away_team].sort();
+    const h2hKey = `${teams[0]} vs ${teams[1]}`;
+    const h2hMatches = h2hMatchesMap.get(h2hKey) || [];
 
     // Default strategy logic: evaluate "goals" (Buts / Points) for all matches
     const limit = 5;

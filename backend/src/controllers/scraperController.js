@@ -1,6 +1,6 @@
 import { exec } from 'child_process';
 import { dbQuery, dbGet } from '../db/database.js';
-import { getEnrichedPredictions } from '../utils/predictionEngine.js';
+import { getEnrichedPredictions } from '../utils/predictionFetcher.js';
 import { cleanupSpawnedTor } from '../utils/scraperHelpers.js';
 import { scraperState } from './scraperState.js';
 import { runScrapeJob } from './scraperJob.js';
