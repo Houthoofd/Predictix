@@ -154,7 +154,7 @@ export async function runScrapeJob(options, sendEvent) {
           match_id: m.match_id || m.href || '',
           time: m.time || 'Finished',
           date: details.date || m.date || '',
-          tournament: details.tournament || m.tournament || '',
+          tournament: (details.tournament && details.tournament !== 'Flashscore Match' && details.tournament !== 'Match en Direct') ? details.tournament : (m.tournament || ''),
           home_team: details.home_team || m.home_team,
           away_team: details.away_team || m.away_team,
           home_logo: details.home_logo || m.home_logo,

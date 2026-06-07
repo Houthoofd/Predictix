@@ -49,10 +49,33 @@ export function parseTournament(t) {
   if (!t) return { country: 'International', league: 'Divers' };
   let clean = t.replace(/^Match en Direct\s*/i, '').replace(/\(live score en direct\)/gi, '').trim();
   clean = clean.replace(/\s+/g, ' ');
+
+  const uppercaseCountries = [
+    'USA', 'FRANCE', 'SPAIN', 'TURKEY', 'ARGENTINA', 'AUSTRALIA', 'BRAZIL', 'CANADA', 'CHILE', 'COLOMBIA',
+    'CROATIA', 'CZECH REPUBLIC', 'DOMINICAN REPUBLIC', 'GERMANY', 'INDONESIA', 'ISRAEL', 'ITALY', 'LEBANON',
+    'LITHUANIA', 'MEXICO', 'NETHERLANDS', 'NEW ZEALAND', 'PHILIPPINES', 'PORTUGAL', 'PUERTO RICO', 'VENEZUELA',
+    'VIETNAM', 'WORLD'
+  ];
+  
+  const cleanWithNoColon = clean.endsWith(':') ? clean.slice(0, -1) : clean;
+  for (const c of uppercaseCountries) {
+    if (cleanWithNoColon.endsWith(c)) {
+      const league = cleanWithNoColon.slice(0, -c.length).trim();
+      const countryFormatted = c === 'USA' ? 'USA' : c.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+      return {
+        country: countryFormatted,
+        league: league || 'Divers'
+      };
+    }
+  }
+
   if (clean.includes(':')) {
     const parts = clean.split(':');
-    return { country: parts[0].trim(), league: parts[1].trim() };
+    if (parts[1] && parts[1].trim() !== '') {
+      return { country: parts[0].trim(), league: parts[1].trim() };
+    }
   }
+
   const countries = ['Afrique du Sud', 'Algérie', 'Allemagne', 'Angleterre', 'Arabie Saoudite', 'Argentine', 'Australie', 'Autriche', 'Belgique', 'Brésil', 'Canada', 'Chili', 'Chine', 'Colombie', 'Corée du Sud', 'Croatie', 'Danemark', 'Espagne', 'États-Unis', 'Finlande', 'France', 'Grèce', 'Italie', 'Japon', 'Maroc', 'Mexique', 'Pays-Bas', 'Pologne', 'Portugal', 'Suisse', 'Turquie', 'Uruguay', 'Europe', 'Asie', 'Afrique', 'Amérique'];
   for (const c of countries) {
     if (clean.toLowerCase().startsWith(c.toLowerCase())) {
