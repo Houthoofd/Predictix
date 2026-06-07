@@ -1,93 +1,26 @@
-import { poissonOver, poissonUnder, findPoissonMean } from './poisson.js';
-import { GradientBoostingRegressor, bivariatePoissonOver, bivariatePoissonUnder } from './gradientBoosting.js';
+import { poissonOver, poissonUnder } from './poisson.js';
+import { bivariatePoissonOver, bivariatePoissonUnder } from './gradientBoosting.js';
+import { 
+  model1MT, 
+  model2MT, 
+  modelFT, 
+  teamAverages, 
+  covariance1MT, 
+  covariance2MT, 
+  covarianceFT, 
+  leagueAveragesCache, 
+  trainGBDTModels 
+} from './gbdtTrainer.js';
+import { 
+  getLeagueKey, 
+  computeLeagueAverages, 
+  calculateRegressedAverages 
+} from './predictionAverages.js';
+import { enrichNonFootballMatch } from './nonFootballPredictor.js';
+import { projectFirstHalfOdds } from './oddsProjector.js';
 
-// Cache for trained GBDT models and covariances
-let model1MT = null;
-let model2MT = null;
-let modelFT = null;
-let teamAverages = null;
-let covariance1MT = 0.15; // default fallback
-let covariance2MT = 0.20; // default fallback
-let covarianceFT = 0.35; // default fallback
-let leagueAveragesCache = null;
-let lastTrainTime = 0;
-const TRAIN_COOLDOWN = 120000; // 2 minutes cooldown
-
-
-/**
- * Normalizes tournament strings into clean league keys
- */
-export function getLeagueKey(t) {
-  if (!t) return '';
-  return t.toLowerCase()
-          .replace(/match en direct/g, '')
-          .replace(/\(live score en direct\)/g, '')
-          .replace(/[^a-z0-9]/g, '');
-}
-
-/**
- * Dynamically learns league baselines from finished historical matches
- */
-export function computeLeagueAverages(allHistoricalMatches) {
-  const leagueGroups = {};
-  for (const m of allHistoricalMatches) {
-    let rawTour = m.tournament || '';
-    // Slice off team names if present using home_team to group matches by exact league
-    if (m.home_team && rawTour.includes(m.home_team)) {
-      const idx = rawTour.indexOf(m.home_team);
-      rawTour = rawTour.substring(0, idx);
-    }
-    const key = getLeagueKey(rawTour);
-    if (!key) continue;
-    if (!leagueGroups[key]) {
-      leagueGroups[key] = { homeSum: 0, homeCount: 0, awaySum: 0, awayCount: 0 };
-    }
-    if (m.first_half_corners_home !== null && m.first_half_corners_home !== undefined) {
-      leagueGroups[key].homeSum += m.first_half_corners_home;
-      leagueGroups[key].homeCount++;
-    }
-    if (m.first_half_corners_away !== null && m.first_half_corners_away !== undefined) {
-      leagueGroups[key].awaySum += m.first_half_corners_away;
-      leagueGroups[key].awayCount++;
-    }
-  }
-
-  const leagueAverages = {};
-  for (const key in leagueGroups) {
-    const g = leagueGroups[key];
-    // Require at least 5 matches to establish a robust specific league baseline
-    if (g.homeCount >= 5 && g.awayCount >= 5) {
-      leagueAverages[key] = {
-        home: parseFloat((g.homeSum / g.homeCount).toFixed(2)),
-        away: parseFloat((g.awaySum / g.awayCount).toFixed(2))
-      };
-    }
-  }
-  return leagueAverages;
-}
-
-/**
- * Performs statistical shrinkage estimation (Mean Reversion) to regress home/away averages against league baselines
- */
-export function calculateRegressedAverages(row, leagueAverages, homeAvg, awayAvg) {
-  let defaultHome = 2.2;
-  let defaultAway = 2.0;
-  
-  const primaryKey = getLeagueKey(row.tournament);
-  if (primaryKey) {
-    const matchedKey = Object.keys(leagueAverages).find(k => k.includes(primaryKey) || primaryKey.includes(k));
-    if (matchedKey) {
-      defaultHome = leagueAverages[matchedKey].home;
-      defaultAway = leagueAverages[matchedKey].away;
-    }
-  }
-  
-  const teamWeight = 0.6;
-  const homeRegressed = homeAvg !== null ? parseFloat((teamWeight * homeAvg + (1 - teamWeight) * defaultHome).toFixed(2)) : defaultHome;
-  const awayRegressed = awayAvg !== null ? parseFloat((teamWeight * awayAvg + (1 - teamWeight) * defaultAway).toFixed(2)) : defaultAway;
-  
-  return { homeRegressed, awayRegressed };
-}
+// Re-export smart scraping filter for consumers of predictionEngine
+export { evaluateSmartScrapingFilter } from './smartScraperFilter.js';
 
 /**
  * Enriches a single match predictions with regressed averages, Poisson calculations, and Value Bets edges
@@ -114,11 +47,9 @@ export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatc
   const enrichedAwayMatches = overlayLogos(awayMatches);
   const enrichedH2HMatches = overlayLogos(h2hMatches);
 
-  // Calculate Data Integrity Diagnostics
   const isHomeLogoMissing = !homeLogo || homeLogo.trim() === '' || homeLogo.toLowerCase().includes('placeholder') || homeLogo.toLowerCase().includes('logo_default') || homeLogo.toLowerCase().includes('logo-default');
   const isAwayLogoMissing = !awayLogo || awayLogo.trim() === '' || awayLogo.toLowerCase().includes('placeholder') || awayLogo.toLowerCase().includes('logo_default') || awayLogo.toLowerCase().includes('logo-default');
   
-  // Calculate integrity score (out of 100)
   let diagnosticScore = 100;
   if (homeMatches.length === 0) diagnosticScore -= 25;
   else if (homeMatches.length < 5) diagnosticScore -= 10;
@@ -146,7 +77,6 @@ export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatc
     is_complete: homeMatches.length >= 5 && awayMatches.length >= 5 && h2hMatches.length >= 1 && !isHomeLogoMissing && !isAwayLogoMissing
   };
 
-  // Calculate H2H corners average (Total match corners in H2H)
   let h2hSum = 0;
   let h2hCount = 0;
   for (const m of h2hMatches) {
@@ -157,7 +87,6 @@ export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatc
   }
   const h2hAvg = h2hCount > 0 ? parseFloat((h2hSum / h2hCount).toFixed(1)) : null;
   
-  // Calculate Team A recent corners average (Corners obtained by Team A)
   let homeSum = 0;
   let homeCount = 0;
   for (const m of homeMatches) {
@@ -169,7 +98,6 @@ export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatc
   }
   const homeAvg = homeCount > 0 ? parseFloat((homeSum / homeCount).toFixed(1)) : null;
   
-  // Calculate Team B recent corners average (Corners obtained by Team B)
   let awaySum = 0;
   let awayCount = 0;
   for (const m of awayMatches) {
@@ -183,152 +111,25 @@ export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatc
   
   const sport = (row.sport || 'football').toLowerCase().trim();
   
-  let dynamicBestTip = row.best_tip;
-  let dynamicCardLine = row.card_line;
-  let dynamicProbability = row.probability;
-  let dynamicWinRate = row.win_rate || "50%";
-
   if (sport !== 'football') {
-    // Non-football prediction logic (points/goals/sets)
-    // 1. Get default line depending on the sport
-    let defaultLine = 2.5;
-    if (sport === 'basketball') defaultLine = 165.5;
-    else if (sport === 'tennis') defaultLine = 2.5;
-    else if (sport.includes('rugby')) defaultLine = 42.5;
-    else if (sport === 'handball') defaultLine = 52.5;
-    else if (sport === 'volleyball') defaultLine = 3.5;
-    else if (sport === 'hockey' || sport === 'ice-hockey' || sport === 'futsal') defaultLine = 5.5;
-    else if (sport === 'baseball') defaultLine = 8.5;
-    else if (sport === 'american-football') defaultLine = 45.5;
-    else if (sport === 'table-tennis' || sport === 'badminton') defaultLine = 2.5;
-    else if (sport === 'snooker') defaultLine = 9.5;
-    else if (sport === 'cricket') defaultLine = 250.5;
-    
-    // 2. Parse scores from recent and H2H matches to calculate average
-    const totals = [];
-    const parseTotalScore = (m) => {
-      if (!m.score) return null;
-      const match = m.score.match(/(\d+)\s*-\s*(\d+)/);
-      if (match) {
-        return parseFloat(match[1]) + parseFloat(match[2]);
-      }
-      return null;
-    };
-    
-    // Add H2H matches
-    for (const m of h2hMatches) {
-      const tot = parseTotalScore(m);
-      if (tot !== null) totals.push(tot);
-    }
-    // Add home matches
-    for (const m of homeMatches) {
-      const tot = parseTotalScore(m);
-      if (tot !== null) totals.push(tot);
-    }
-    // Add away matches
-    for (const m of awayMatches) {
-      const tot = parseTotalScore(m);
-      if (tot !== null) totals.push(tot);
-    }
-    
-    let avgTotal = defaultLine;
-    if (totals.length > 0) {
-      const sum = totals.reduce((a, b) => a + b, 0);
-      avgTotal = sum / totals.length;
-    }
-    
-    // Line is average rounded to nearest .5
-    let calculatedLine = Math.floor(avgTotal) + 0.5;
-    
-    // For sets, it's typically 2.5 or 3.5. Let's force 2.5 for tennis/volleyball sets.
-    if (sport === 'tennis' || sport === 'volleyball' || sport === 'table-tennis' || sport === 'badminton') {
-      calculatedLine = 2.5;
-    }
-    
-    // Calculate percentage of matches over this line
-    let overCount = 0;
-    let validCount = 0;
-    for (const tot of totals) {
-      validCount++;
-      if (tot > calculatedLine) {
-        overCount++;
-      }
-    }
-    
-    let probVal = 50;
-    let bestTip = "Plus de";
-    if (validCount > 0) {
-      const pctOver = (overCount / validCount) * 100;
-      if (pctOver >= 50) {
-        probVal = Math.round(pctOver);
-        bestTip = "Plus de";
-      } else {
-        probVal = Math.round(100 - pctOver);
-        bestTip = "Moins de";
-      }
-    } else {
-      // Seed fallback probability dynamically based on team name sum
-      const hashSeed = cleanHomeTeamKey + cleanAwayTeamKey;
-      let charSum = 0;
-      for (let i = 0; i < hashSeed.length; i++) charSum += hashSeed.charCodeAt(i);
-      probVal = 52 + (charSum % 15);
-      bestTip = probVal % 2 === 0 ? "Plus de" : "Moins de";
-    }
-    
-    // Ensure probability is in a realistic range (e.g. 50% - 85%)
-    probVal = Math.max(50, Math.min(85, probVal));
-    
-    const labelMapping = {
-      basketball: 'Points',
-      tennis: 'Sets',
-      volleyball: 'Sets',
-      handball: 'Buts',
-      rugby: 'Points',
-      'rugby-union': 'Points',
-      'rugby-league': 'Points',
-      hockey: 'Buts',
-      'ice-hockey': 'Buts',
-      baseball: 'Runs',
-      'american-football': 'Points',
-      'table-tennis': 'Sets',
-      badminton: 'Sets',
-      cricket: 'Runs',
-      darts: 'Sets',
-      snooker: 'Frames',
-      futsal: 'Buts'
-    };
-    const unitLabel = labelMapping[sport] || 'Points';
-    
-    calculatedLine = `${calculatedLine} ${unitLabel}`;
-    
-    return {
-      ...row,
-      home_logo: homeLogo,
-      away_logo: awayLogo,
-      home_matches: enrichedHomeMatches,
-      away_matches: enrichedAwayMatches,
-      h2h_matches: enrichedH2HMatches,
-      diagnostic,
-      card_line: calculatedLine,
-      best_tip: bestTip,
-      probability: `${probVal}%`,
-      win_rate: `${probVal - 5}%`,
-      home_avg_first_half_corners: null,
-      away_avg_first_half_corners: null,
-      h2h_avg_first_half_corners: null,
-      odds_corners: [],
-      scraped_at: row.scraped_at
-    };
+    return enrichNonFootballMatch(
+      row, h2hMatches, homeMatches, awayMatches, homeLogo, awayLogo, diagnostic, 
+      enrichedHomeMatches, enrichedAwayMatches, enrichedH2HMatches
+    );
   }
 
   // Football Poisson corner prediction (standard flow)
-  // Calculate regressed averages (Mean Reversion)
   const { homeRegressed, awayRegressed } = calculateRegressedAverages(row, leagueAverages, homeAvg, awayAvg);
   const lambda1MT = homeRegressed + awayRegressed;
 
   const targetLine = 4.5;
   const overProb = poissonOver(lambda1MT, targetLine);
   const underProb = poissonUnder(lambda1MT, targetLine);
+
+  let dynamicBestTip = row.best_tip;
+  let dynamicCardLine = row.card_line;
+  let dynamicProbability = row.probability;
+  let dynamicWinRate = row.win_rate || "50%";
 
   if (overProb >= underProb) {
     dynamicBestTip = "Plus de";
@@ -340,7 +141,6 @@ export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatc
     dynamicProbability = `${Math.round(underProb * 100)}%`;
   }
 
-  // Calculate win rate in recent history for the dynamic line tip
   const targetLineVal = parseFloat(dynamicCardLine);
   const isOverTip = dynamicBestTip === "Plus de";
   
@@ -363,7 +163,6 @@ export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatc
     ? `${Math.round((successMatches / totalMatchesWithCorners) * 100)}%` 
     : (row.win_rate || "50%");
 
-  // Parse cached Oddschecker odds
   let oddsCorners = [];
   try {
     if (row.odds_corners) {
@@ -371,73 +170,12 @@ export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatc
     }
   } catch (e) {}
 
-  // Project Full-Time corners odds to First-Half corners odds if First-Half is missing
-  const has1stHalf = oddsCorners.some(o => o.market_type === '1st_half');
-  const hasFullTime = oddsCorners.some(o => o.market_type === 'full_time');
-
-  if (!has1stHalf && hasFullTime) {
-    const ftLine = oddsCorners.find(o => o.market_type === 'full_time' && o.over_decimal && o.under_decimal);
-    if (ftLine) {
-      const pOver = 1 / ftLine.over_decimal;
-      const pUnder = 1 / ftLine.under_decimal;
-      const totalP = pOver + pUnder;
-      
-      if (totalP > 0) {
-        const pUnderNorm = pUnder / totalP;
-        const k = Math.floor(ftLine.line);
-        const derivedLambdaFT = findPoissonMean(k, pUnderNorm);
-        
-        // Expected 1st half corners is 46% of Full Time corners
-        const derivedLambda1MT = 0.46 * derivedLambdaFT;
-        const originalPayout = 1 / totalP;
-        
-        // Generate projected 1st half odds for lines 3.5, 4.5, 5.5
-        const projectedLines = [3.5, 4.5, 5.5];
-        for (const line of projectedLines) {
-          const uProb = poissonUnder(derivedLambda1MT, line);
-          const oProb = 1 - uProb;
-          
-          if (uProb > 0.02 && oProb > 0.02) {
-            const overDec = parseFloat((originalPayout / oProb).toFixed(2));
-            const underDec = parseFloat((originalPayout / uProb).toFixed(2));
-            
-            oddsCorners.push({
-              line: line,
-              over_decimal: overDec,
-              under_decimal: underDec,
-              market_type: '1st_half',
-              is_estimated: true
-            });
-          }
-        }
-      }
-    }
-  } else if (!has1stHalf && !hasFullTime) {
-    const projectedLines = [3.5, 4.5, 5.5];
-    const payout = 0.93;
-    for (const line of projectedLines) {
-      const uProb = poissonUnder(lambda1MT, line);
-      const oProb = 1 - uProb;
-      
-      if (uProb > 0.02 && oProb > 0.02) {
-        const overDec = parseFloat((payout / oProb).toFixed(2));
-        const underDec = parseFloat((payout / uProb).toFixed(2));
-        
-        oddsCorners.push({
-          line: line,
-          over_decimal: overDec,
-          under_decimal: underDec,
-          market_type: '1st_half',
-          is_estimated: true
-        });
-      }
-    }
-  }
+  // Project first half odds if missing
+  oddsCorners = projectFirstHalfOdds(oddsCorners, lambda1MT);
   
-  // Calculate Value Bet indicators
   const enrichedOdds = oddsCorners.map(o => {
     const is1stHalf = o.market_type === '1st_half';
-    const lambda = is1stHalf ? lambda1MT : lambda1MT * 2.2; // FT corners is ~2.2x of 1st half
+    const lambda = is1stHalf ? lambda1MT : lambda1MT * 2.2;
     
     const overProb = poissonOver(lambda, o.line);
     const underProb = poissonUnder(lambda, o.line);
@@ -462,7 +200,6 @@ export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatc
     };
   });
   
-  // Override general card O/U odds with Poisson estimations if real ones are missing
   const activeLineNum = parseFloat(dynamicCardLine);
   const activeOddsRow = enrichedOdds.find(o => o.market_type === '1st_half' && parseFloat(o.line) === activeLineNum);
   
@@ -474,7 +211,6 @@ export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatc
     finalUnderOdds = String(activeOddsRow.under_decimal);
   }
   
-  // Default expected counts (lambda values)
   let gbdt1MTExpected = lambda1MT;
   let gbdt2MTExpected = lambda1MT * 1.15;
   let gbdtFTExpected = lambda1MT * 2.15;
@@ -515,7 +251,6 @@ export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatc
     }
   }
 
-  // Parameterize Bivariate Poisson models using GBDT lambdas
   const splitRatio = homeRegressed / (homeRegressed + awayRegressed || 1);
   const gbdt1MTExpectedHome = gbdt1MTExpected * splitRatio;
   const gbdt1MTExpectedAway = gbdt1MTExpected * (1 - splitRatio);
@@ -526,7 +261,6 @@ export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatc
   const gbdt2MTExpectedHome = gbdt2MTExpected * splitRatio;
   const gbdt2MTExpectedAway = gbdt2MTExpected * (1 - splitRatio);
 
-  // Compute over/under probabilities using Bivariate Poisson
   const bp1MTOver4_5 = Math.round(bivariatePoissonOver(gbdt1MTExpectedHome, gbdt1MTExpectedAway, covariance1MT, 4.5) * 100);
   const bp2MTOver4_5 = Math.round(bivariatePoissonOver(gbdt2MTExpectedHome, gbdt2MTExpectedAway, covariance2MT, 4.5) * 100);
   const bpFTOver9_5 = Math.round(bivariatePoissonOver(gbdtFTExpectedHome, gbdtFTExpectedAway, covarianceFT, 9.5) * 100);
@@ -574,228 +308,6 @@ export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatc
       }
     }
   };
-}
-
-/**
- * Smart-Scraping filter evaluation to avoid crawling matchups that don't match conditions
- */
-export function evaluateSmartScrapingFilter(match, h2hExisting, targetStrategy) {
-  if (!targetStrategy) return true;
-  if (!h2hExisting || h2hExisting.length < 2) return true;
-  
-  try {
-    const conds = JSON.parse(targetStrategy.conditions_json);
-    const threshold = parseFloat(conds.threshold);
-    const metric = targetStrategy.metric;
-    const operator = conds.operator || '>=';
-    
-    const values = [];
-    for (const h of h2hExisting) {
-      if (h.statistics_json) {
-        const stats = JSON.parse(h.statistics_json);
-        if (metric === 'possession') {
-          if (stats.possession && stats.possession.home !== undefined) {
-            const val = (h.home_team === match.home_team) 
-              ? parseFloat(stats.possession.home) 
-              : parseFloat(stats.possession.away);
-            values.push(val);
-          }
-        } else if (stats[metric]) {
-          values.push(parseFloat(stats[metric].home) + parseFloat(stats[metric].away));
-        }
-      }
-    }
-
-    if (values.length >= 2) {
-      const avg = values.reduce((a, b) => a + b, 0) / values.length;
-      const margin = metric === 'possession' ? 5.0 : 2.5; // Tolerance buffer
-      
-      if (operator === '>=' && avg < (threshold - margin)) {
-        return false;
-      } else if (operator === '<=' && avg > (threshold + margin)) {
-        return false;
-      }
-    }
-  } catch (e) {
-    console.error("Smart-Scraping filter evaluation failed:", e);
-  }
-  return true;
-}
-
-export async function trainGBDTModels(dbQueryFn) {
-  const now = Date.now();
-  if (model1MT && now - lastTrainTime < TRAIN_COOLDOWN) {
-    return;
-  }
-  lastTrainTime = now;
-
-  try {
-    // 1. Get all matches with 1st half corners
-    const matches = await dbQueryFn(`
-      SELECT home_team, away_team, tournament, first_half_corners_home, first_half_corners_away, statistics_json
-      FROM scraped_predictions
-      WHERE first_half_corners_home IS NOT NULL AND first_half_corners_away IS NOT NULL
-    `);
-
-    if (matches.length < 10) {
-      console.log("[GBDT Train] Not enough data to train models");
-      return;
-    }
-
-    // 2. Pre-calculate global team averages
-    teamAverages = {};
-    for (const m of matches) {
-      const home = m.home_team;
-      const away = m.away_team;
-      
-      if (!teamAverages[home]) teamAverages[home] = { sum1MT: 0, count1MT: 0, sumFT: 0, countFT: 0 };
-      if (!teamAverages[away]) teamAverages[away] = { sum1MT: 0, count1MT: 0, sumFT: 0, countFT: 0 };
-
-      teamAverages[home].sum1MT += m.first_half_corners_home;
-      teamAverages[home].count1MT++;
-      teamAverages[away].sum1MT += m.first_half_corners_away;
-      teamAverages[away].count1MT++;
-
-      try {
-        if (m.statistics_json) {
-          const stats = JSON.parse(m.statistics_json);
-          if (stats && stats.corners) {
-            teamAverages[home].sumFT += parseFloat(stats.corners.home || 0);
-            teamAverages[home].countFT++;
-            teamAverages[away].sumFT += parseFloat(stats.corners.away || 0);
-            teamAverages[away].countFT++;
-          }
-        }
-      } catch (e) {}
-    }
-
-    // 3. Compute league averages
-    leagueAveragesCache = computeLeagueAverages(matches);
-
-    // 4. Compute covariance for Bivariate Poisson
-    let covSum1MT = 0;
-    let covSumFT = 0;
-    let covSum2MT = 0;
-    let count1MT = 0;
-    let countFT = 0;
-
-    const homeVals1MT = [];
-    const awayVals1MT = [];
-    const homeValsFT = [];
-    const awayValsFT = [];
-    const homeVals2MT = [];
-    const awayVals2MT = [];
-
-    const X1MT = [];
-    const y1MT = [];
-    const X2MT = [];
-    const y2MT = [];
-    const XFT = [];
-    const yFT = [];
-
-    for (const m of matches) {
-      const home = m.home_team;
-      const away = m.away_team;
-      
-      const homeAvg1MT = teamAverages[home]?.count1MT > 0 ? (teamAverages[home].sum1MT / teamAverages[home].count1MT) : 2.2;
-      const awayAvg1MT = teamAverages[away]?.count1MT > 0 ? (teamAverages[away].sum1MT / teamAverages[away].count1MT) : 2.0;
-
-      const homeAvgFT = teamAverages[home]?.countFT > 0 ? (teamAverages[home].sumFT / teamAverages[home].countFT) : 4.8;
-      const awayAvgFT = teamAverages[away]?.countFT > 0 ? (teamAverages[away].sumFT / teamAverages[away].countFT) : 4.4;
-
-      const leagueKey = getLeagueKey(m.tournament);
-      const league1MTHome = leagueAveragesCache[leagueKey]?.home || 2.2;
-      const league1MTAway = leagueAveragesCache[leagueKey]?.away || 2.0;
-
-      const features1MT = {
-        home_avg: homeAvg1MT,
-        away_avg: awayAvg1MT,
-        league_home: league1MTHome,
-        league_away: league1MTAway,
-        sum_avg: homeAvg1MT + awayAvg1MT
-      };
-
-      X1MT.push(features1MT);
-      const sum1MT = m.first_half_corners_home + m.first_half_corners_away;
-      y1MT.push(sum1MT);
-
-      homeVals1MT.push(m.first_half_corners_home);
-      awayVals1MT.push(m.first_half_corners_away);
-      count1MT++;
-
-      // If FT corners are available
-      try {
-        if (m.statistics_json) {
-          const stats = JSON.parse(m.statistics_json);
-          if (stats && stats.corners) {
-            const ftHome = parseFloat(stats.corners.home || 0);
-            const ftAway = parseFloat(stats.corners.away || 0);
-            const ftTotal = ftHome + ftAway;
-            const shHome = Math.max(0, ftHome - m.first_half_corners_home);
-            const shAway = Math.max(0, ftAway - m.first_half_corners_away);
-            const shTotal = shHome + shAway;
-
-            const featuresFT = {
-              home_avg_1mt: homeAvg1MT,
-              away_avg_1mt: awayAvg1MT,
-              home_avg_ft: homeAvgFT,
-              away_avg_ft: awayAvgFT,
-              league_home: league1MTHome,
-              league_away: league1MTAway,
-              sum_avg: homeAvgFT + awayAvgFT
-            };
-
-            XFT.push(featuresFT);
-            yFT.push(ftTotal);
-            homeValsFT.push(ftHome);
-            awayValsFT.push(ftAway);
-
-            X2MT.push(featuresFT);
-            y2MT.push(shTotal);
-            homeVals2MT.push(shHome);
-            awayVals2MT.push(shAway);
-
-            countFT++;
-          }
-        }
-      } catch (e) {}
-    }
-
-    // GBDT Training
-    model1MT = new GradientBoostingRegressor({ nEstimators: 15, maxDepth: 3, learningRate: 0.1 });
-    model1MT.fit(X1MT, y1MT);
-
-    if (XFT.length > 10) {
-      modelFT = new GradientBoostingRegressor({ nEstimators: 15, maxDepth: 3, learningRate: 0.1 });
-      modelFT.fit(XFT, yFT);
-
-      model2MT = new GradientBoostingRegressor({ nEstimators: 15, maxDepth: 3, learningRate: 0.1 });
-      model2MT.fit(X2MT, y2MT);
-    }
-
-    // Calculate Covariances
-    const calcCov = (homeArr, awayArr) => {
-      const n = homeArr.length;
-      if (n === 0) return 0.15;
-      const mHome = homeArr.reduce((a, b) => a + b, 0) / n;
-      const mAway = awayArr.reduce((a, b) => a + b, 0) / n;
-      let prodSum = 0;
-      for (let i = 0; i < n; i++) {
-        prodSum += homeArr[i] * awayArr[i];
-      }
-      return Math.max(0.01, (prodSum / n) - (mHome * mAway));
-    };
-
-    covariance1MT = calcCov(homeVals1MT, awayVals1MT);
-    if (countFT > 0) {
-      covarianceFT = calcCov(homeValsFT, awayValsFT);
-      covariance2MT = calcCov(homeVals2MT, awayVals2MT);
-    }
-
-    console.log(`[GBDT & Bivariate Poisson] Models trained successfully. 1MT cov: ${covariance1MT.toFixed(3)}, FT cov: ${covarianceFT.toFixed(3)}`);
-  } catch (error) {
-    console.error("[GBDT Train] Error training GBDT models:", error);
-  }
 }
 
 /**
@@ -862,7 +374,6 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
   const leagueAverages = computeLeagueAverages(allHistoricalMatches);
   const enrichedRows = [];
 
-  // Load custom logo overrides
   let customLogosMap = {};
   try {
     const customLogosRows = await dbQueryFn("SELECT * FROM custom_team_logos");
@@ -922,5 +433,3 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
 
   return enrichedRows;
 }
-
-
