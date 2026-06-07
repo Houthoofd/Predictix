@@ -87,3 +87,34 @@ export function parseTournament(t) {
   }
   return { country: 'International', league: clean };
 }
+
+export const formatTipLabel = (tip, line, sport) => {
+  const cleanTip = (tip || '').toLowerCase();
+  const cleanSport = (sport || 'football').toLowerCase();
+  
+  if (cleanTip === 'over' || cleanTip === 'plus de') {
+    return cleanSport === 'football' ? `Plus de ${line} Corners (1MT)` : `Over ${line}`;
+  } else if (cleanTip === 'under' || cleanTip === 'moins de') {
+    return cleanSport === 'football' ? `Moins de ${line} Corners (1MT)` : `Under ${line}`;
+  }
+  
+  const lineNum = parseFloat(line);
+  if (cleanTip === '1' || cleanTip === 'home' || cleanTip === 'domicile') {
+    if (!isNaN(lineNum) && lineNum !== 0) {
+      return `1 (Handicap ${lineNum > 0 ? '+' : ''}${lineNum})`;
+    }
+    return '1 (Victoire Domicile)';
+  }
+  if (cleanTip === '2' || cleanTip === 'away' || cleanTip === 'extérieur' || cleanTip === 'exterieur') {
+    if (!isNaN(lineNum) && lineNum !== 0) {
+      return `2 (Handicap ${lineNum > 0 ? '+' : ''}${lineNum})`;
+    }
+    return '2 (Victoire Extérieur)';
+  }
+  if (cleanTip === 'x' || cleanTip === 'n' || cleanTip === 'nul' || cleanTip === 'match nul') {
+    return 'N (Match Nul)';
+  }
+  
+  return `${tip} ${line}`;
+};
+

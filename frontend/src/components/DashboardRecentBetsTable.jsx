@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatTipLabel } from '../utils/labels';
 
 export default function DashboardRecentBetsTable({ bets, currency, setActiveTab }) {
   const resolvedBets = bets.filter(b => b.status !== 'PENDING');
@@ -32,7 +33,9 @@ export default function DashboardRecentBetsTable({ bets, currency, setActiveTab 
                 <td style={{ fontSize: '13px' }}>{bet.date}</td>
                 <td style={{ fontWeight: 600 }}>{bet.home_team} vs {bet.away_team}</td>
                 <td style={{ fontSize: '13px' }}>{bet.league}</td>
-                <td style={{ fontFamily: 'Outfit', fontWeight: 600 }}>{bet.best_tip} {bet.card_line}</td>
+                <td style={{ fontFamily: 'Outfit', fontWeight: 600 }}>
+                  {formatTipLabel(bet.best_tip, bet.card_line, bet.sport)}
+                </td>
                 <td>{bet.stake} {currency}</td>
                 <td>{bet.odds}</td>
                 <td style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{bet.bookmaker}</td>

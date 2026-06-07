@@ -158,21 +158,38 @@ export default function AddBetModal({
                 <select 
                   className="form-control"
                   value={newBetForm.best_tip}
-                  onChange={(e) => setNewBetForm({ ...newBetForm, best_tip: e.target.value })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const updated = { ...newBetForm, best_tip: val };
+                    if (val === 'N') {
+                      updated.card_line = 0;
+                    }
+                    setNewBetForm(updated);
+                  }}
                 >
                   <option value="Over">Over</option>
                   <option value="Under">Under</option>
+                  <option value="1">1 (Victoire Domicile)</option>
+                  <option value="2">2 (Victoire Extérieur)</option>
+                  <option value="N">N (Match Nul)</option>
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label" style={{ minHeight: '16px', display: 'flex', alignItems: 'center' }}>Ligne du Pari</label>
+                <label className="form-label" style={{ minHeight: '16px', display: 'flex', alignItems: 'center' }}>
+                  {newBetForm.best_tip === '1' || newBetForm.best_tip === '2' 
+                    ? 'Handicap (0 si aucun)' 
+                    : newBetForm.best_tip === 'N' 
+                    ? 'Ligne (non applicable)' 
+                    : 'Ligne du Pari'}
+                </label>
                 <input 
                   type="number" 
                   step="0.5"
                   className="form-control" 
                   required
+                  disabled={newBetForm.best_tip === 'N'}
                   value={newBetForm.card_line}
-                  onChange={(e) => setNewBetForm({ ...newBetForm, card_line: parseFloat(e.target.value) })}
+                  onChange={(e) => setNewBetForm({ ...newBetForm, card_line: parseFloat(e.target.value) || 0 })}
                 />
               </div>
               <div className="form-group">

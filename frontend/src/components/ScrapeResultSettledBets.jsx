@@ -1,18 +1,9 @@
 import React from 'react';
 import { TrendingUp, TrendingDown, Info, Trophy } from 'lucide-react';
+import { formatTipLabel } from '../utils/labels';
 
 const formatCurrency = (val) => {
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(val);
-};
-
-const formatTip = (tip, line) => {
-  const cleanTip = (tip || '').toLowerCase();
-  if (cleanTip === 'over' || cleanTip === 'plus de') {
-    return `Plus de ${line} Corners (1MT)`;
-  } else if (cleanTip === 'under' || cleanTip === 'moins de') {
-    return `Moins de ${line} Corners (1MT)`;
-  }
-  return `${tip} ${line}`;
 };
 
 export default function ScrapeResultSettledBets({
@@ -121,13 +112,17 @@ export default function ScrapeResultSettledBets({
                   <div>
                     <span style={{ color: 'var(--text-muted)' }}>Pronostic :</span>{' '}
                     <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                      {formatTip(bet.best_tip, bet.card_line)}
+                      {formatTipLabel(bet.best_tip, bet.card_line, bet.sport)}
                     </span>
                   </div>
                   <div>
-                    <span style={{ color: 'var(--text-muted)' }}>Corners 1MT :</span>{' '}
+                    <span style={{ color: 'var(--text-muted)' }}>
+                      {bet.sport && bet.sport !== 'football' ? 'Score Final :' : 'Corners 1MT :'}
+                    </span>{' '}
                     <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
-                      {bet.total_corners} ({bet.home_corners}-{bet.away_corners})
+                      {bet.sport && bet.sport !== 'football' 
+                        ? (bet.score || '-') 
+                        : `${bet.total_corners || 0} (${bet.home_corners || 0}-${bet.away_corners || 0})`}
                     </span>
                   </div>
                 </div>

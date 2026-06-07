@@ -127,7 +127,19 @@ export default function TrackerTab({
     if (bet.status === 'WON') bookmakerMap[bet.bookmaker].won++;
 
     const rawTip = (bet.best_tip || '').toLowerCase();
-    const cleanTip = rawTip.includes('plus') || rawTip.includes('over') ? 'Over / Plus de' : 'Under / Moins de';
+    let cleanTip = 'Autre';
+    if (rawTip.includes('plus') || rawTip.includes('over')) {
+      cleanTip = 'Over / Plus de';
+    } else if (rawTip.includes('moins') || rawTip.includes('under')) {
+      cleanTip = 'Under / Moins de';
+    } else if (rawTip === '1' || rawTip === 'home' || rawTip === 'domicile') {
+      cleanTip = '1 (Victoire Domicile)';
+    } else if (rawTip === '2' || rawTip === 'away' || rawTip === 'extérieur' || rawTip === 'exterieur') {
+      cleanTip = '2 (Victoire Extérieur)';
+    } else if (rawTip === 'x' || rawTip === 'n' || rawTip === 'nul' || rawTip === 'match nul') {
+      cleanTip = 'N (Match Nul)';
+    }
+    
     if (!tipTypeMap[cleanTip]) {
       tipTypeMap[cleanTip] = { name: cleanTip, profit: 0, total: 0, won: 0 };
     }

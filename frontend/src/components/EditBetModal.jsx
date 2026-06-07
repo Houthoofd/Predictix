@@ -135,21 +135,38 @@ export default function EditBetModal({
                 <select 
                   className="form-control"
                   value={editBetForm.best_tip}
-                  onChange={(e) => setEditBetForm({ ...editBetForm, best_tip: e.target.value })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const updated = { ...editBetForm, best_tip: val };
+                    if (val === 'N') {
+                      updated.card_line = 0;
+                    }
+                    setEditBetForm(updated);
+                  }}
                 >
                   <option value="Over">Over</option>
                   <option value="Under">Under</option>
+                  <option value="1">1 (Victoire Domicile)</option>
+                  <option value="2">2 (Victoire Extérieur)</option>
+                  <option value="N">N (Match Nul)</option>
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label" style={{ minHeight: '16px', display: 'flex', alignItems: 'center' }}>Ligne du Pari</label>
+                <label className="form-label" style={{ minHeight: '16px', display: 'flex', alignItems: 'center' }}>
+                  {editBetForm.best_tip === '1' || editBetForm.best_tip === '2' 
+                    ? 'Handicap (0 si aucun)' 
+                    : editBetForm.best_tip === 'N' 
+                    ? 'Ligne (non applicable)' 
+                    : 'Ligne du Pari'}
+                </label>
                 <input 
                   type="number" 
                   step="0.5"
                   className="form-control" 
                   required
+                  disabled={editBetForm.best_tip === 'N'}
                   value={editBetForm.card_line}
-                  onChange={(e) => setEditBetForm({ ...editBetForm, card_line: parseFloat(e.target.value) })}
+                  onChange={(e) => setEditBetForm({ ...editBetForm, card_line: parseFloat(e.target.value) || 0 })}
                 />
               </div>
               <div className="form-group">

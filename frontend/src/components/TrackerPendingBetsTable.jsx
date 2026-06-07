@@ -1,5 +1,6 @@
 import React from 'react';
 import { Check, X, RefreshCw, MoreVertical, Edit, Trash2 } from 'lucide-react';
+import { formatTipLabel } from '../utils/labels';
 
 export default function TrackerPendingBetsTable({
   pendingBets,
@@ -118,7 +119,9 @@ export default function TrackerPendingBetsTable({
                     )}
                     <span>{bet.league}</span>
                   </td>
-                  <td style={{ fontFamily: 'Outfit', fontWeight: 600 }}>{bet.best_tip} {bet.card_line}</td>
+                  <td style={{ fontFamily: 'Outfit', fontWeight: 600 }}>
+                    {formatTipLabel(bet.best_tip, bet.card_line, bet.sport)}
+                  </td>
                   <td style={{ fontWeight: 700 }}>{bet.stake} {currency}</td>
                   <td>{bet.odds}</td>
                   <td style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{bet.bookmaker}</td>

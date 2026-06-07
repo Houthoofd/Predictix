@@ -1,5 +1,6 @@
 import React from 'react';
 import { Trash2 } from 'lucide-react';
+import { formatTipLabel } from '../utils/labels';
 
 export default function BasketTable({
   basketBets,
@@ -37,7 +38,9 @@ export default function BasketTable({
                     <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{bet.date} • {bet.time}</div>
                   </td>
                   <td style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{bet.league}</td>
-                  <td style={{ fontFamily: 'Outfit', fontWeight: 600 }}>{bet.best_tip} {bet.card_line}</td>
+                  <td style={{ fontFamily: 'Outfit', fontWeight: 600 }}>
+                    {formatTipLabel(bet.best_tip, bet.card_line, bet.sport)}
+                  </td>
                   <td>
                     <input 
                       type="number" 

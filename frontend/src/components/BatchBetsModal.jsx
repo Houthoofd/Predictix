@@ -1,5 +1,6 @@
 import React from 'react';
 import { X, RefreshCcw, Plus } from 'lucide-react';
+import { formatTipLabel } from '../utils/labels';
 
 export default function BatchBetsModal({
   selectedPredIds,
@@ -182,7 +183,7 @@ export default function BatchBetsModal({
                               <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', textTransform: 'uppercase' }}>{bet.league}</span>
                               <span style={{ fontWeight: 600, color: 'var(--text-primary)', display: 'block', marginTop: '2px' }}>{bet.home_team} vs {bet.away_team}</span>
                               <span style={{ fontSize: '12px', color: 'var(--color-accent-solid)', fontWeight: 700, display: 'inline-block', marginTop: '4px', background: 'rgba(0, 98, 255, 0.08)', padding: '2px 6px', borderRadius: '4px' }}>
-                                {bet.best_tip} {bet.card_line}
+                                {formatTipLabel(bet.best_tip, bet.card_line, bet.sport)}
                               </span>
                             </td>
                             
