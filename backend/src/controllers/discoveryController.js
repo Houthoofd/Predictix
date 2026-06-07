@@ -1,6 +1,6 @@
 import path from 'path';
 import fs from 'fs';
-import { isTorActive, runDiscoveryProcess } from '../utils/scraperHelpers.js';
+import { isTorActive, runDiscoveryProcess, ensureScraperCompiled } from '../utils/scraperHelpers.js';
 import { scraperState } from './scraperState.js';
 
 class DiscoveryController {
@@ -45,9 +45,10 @@ class DiscoveryController {
       return res.status(404).json({ success: false, error: { message: `Dossier du scraper introuvable : ${scraperPath}` } });
     }
 
-    let scriptName = 'scrape-matchendirect.bat';
-    if (fs.existsSync(path.join(scraperPath, 'scrape-matchendirect.sh'))) {
-      scriptName = 'scrape-matchendirect.sh';
+    try {
+      await ensureScraperCompiled(scraperPath);
+    } catch (compileErr) {
+      return res.status(500).json({ success: false, error: { message: `Erreur de compilation du scraper Go : ${compileErr.message}` } });
     }
 
     const sportsToScrape = (sport === 'all' && scraper === 'flashscore')
@@ -58,7 +59,7 @@ class DiscoveryController {
       let discoveredMatches = [];
       for (const sp of sportsToScrape) {
         console.log(`[Predictix Discovery] Discovering matches for: ${sp}`);
-        const matches = await runDiscoveryProcess(scraperPath, scriptName, outputDirs, formattedDate, (child) => {
+        const matches = await runDiscoveryProcess(scraperPath, null, outputDirs, formattedDate, (child) => {
           scraperState.activeScraperProcess = child;
         }, scraper, sp);
         

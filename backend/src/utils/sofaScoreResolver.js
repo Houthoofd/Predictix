@@ -8,7 +8,7 @@ import { fuzzyMatch } from './textMatcher.js';
 export function fetchSofaEventsForDate(dateStr) {
   return new Promise((resolve) => {
     const cmd = `curl.exe -s -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" "https://api.sofascore.com/api/v1/sport/football/scheduled-events/${dateStr}"`;
-    exec(cmd, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
+    exec(cmd, { maxBuffer: 1024 * 1024 * 10, timeout: 15000 }, (error, stdout, stderr) => {
       if (error) {
         console.error("[SofaScore API] curl.exe failed to get scheduled events:", error.message);
         return resolve(null);
@@ -51,7 +51,7 @@ export function findSofaEventId(events, homeTeam, awayTeam) {
 export function fetchSofaStats(eventId) {
   return new Promise((resolve) => {
     const cmd = `curl.exe -s -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" "https://api.sofascore.com/api/v1/event/${eventId}/statistics"`;
-    exec(cmd, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
+    exec(cmd, { maxBuffer: 1024 * 1024 * 10, timeout: 15000 }, (error, stdout, stderr) => {
       if (error) {
         console.error(`[SofaScore API] Failed to fetch stats for event ${eventId}:`, error.message);
         return resolve(null);

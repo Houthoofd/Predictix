@@ -120,23 +120,20 @@ export async function scrapeSingleMatch(scraperPath, link, skipOdds = false, onS
 
     const result = await new Promise((resolve) => {
       let resolved = false;
-      const tmpOutFile = path.join(scraperPath, 'data', `tmp_${Date.now()}_${Math.random().toString(36).substring(7)}.json`);
+      const dataDir = path.join(scraperPath, 'data');
+      if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+      }
+      const tmpOutFile = path.join(dataDir, `tmp_${Date.now()}_${Math.random().toString(36).substring(7)}.json`);
       
-      let exeName = 'scrapper-matchendirect.exe';
-      let args = [];
-      
+      let args = ['-source', scraper, '-action', 'scrape', '-url', link, '-socks-port', String(socksPort), '-output', tmpOutFile];
       if (scraper === 'flashscore') {
-        exeName = 'scrapper-flashscore.exe';
-        args = ['-tor', '-socks-port', String(socksPort), '-sport', sport, '-url', link, '-output', tmpOutFile];
-      } else {
-        exeName = 'scrapper-matchendirect.exe';
-        args = ['-tor', '-socks-port', String(socksPort), '-url', link, '-output', tmpOutFile];
-        if (skipOdds) {
-          args.push('-skip-odds');
-        }
+        args.push('-sport', sport);
+      } else if (skipOdds) {
+        args.push('-skip-odds');
       }
       
-      const exePath = path.join(scraperPath, 'cmd', 'scrapper-lite', 'examples', exeName);
+      const exePath = path.join(scraperPath, 'cmd', 'predictix-crawler', 'predictix-crawler.exe');
       const child = spawn(exePath, args);
       
       if (onSpawn && typeof onSpawn === 'function') {
@@ -221,22 +218,20 @@ export function runDiscoveryProcess(scraperPath, scriptName, outputDirs, targetD
   return new Promise((resolve, reject) => {
     console.log(`[Predictix Discovery] Starting discovery in ${scraperPath} using ${scraper} for sport: ${sport}, date: ${targetDate || 'today'}...`);
     
-    let args = [];
-    if (scraper === 'flashscore') {
-      let batScript = 'scrape-flashscore.bat';
-      if (process.platform !== 'win32') {
-        batScript = 'scrape-flashscore.sh';
-      }
-      args = ['/c', batScript, sport, '0', targetDate || '', 'discover'];
-    } else {
-      args = ['/c', scriptName, 'verbose', '0', 'discover'];
-      if (targetDate) {
-        args.push(targetDate);
-      }
+    const dataDir = path.join(scraperPath, 'data');
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
     }
     
-    const child = spawn('cmd.exe', args, {
-      cwd: scraperPath,
+    const tmpOutFile = path.join(dataDir, `tmp_disc_${Date.now()}_${Math.random().toString(36).substring(7)}.json`);
+    
+    const args = ['-source', scraper, '-action', 'discover', '-sport', sport, '-output', tmpOutFile];
+    if (targetDate) {
+      args.push('-date', targetDate);
+    }
+    
+    const exePath = path.join(scraperPath, 'cmd', 'predictix-crawler', 'predictix-crawler.exe');
+    const child = spawn(exePath, args, {
       env: { ...process.env, FORCE_COLOR: '1' }
     });
 
@@ -254,6 +249,9 @@ export function runDiscoveryProcess(scraperPath, scriptName, outputDirs, targetD
       } else {
         child.kill();
       }
+      if (fs.existsSync(tmpOutFile)) {
+        try { fs.unlinkSync(tmpOutFile); } catch (e) {}
+      }
       reject(new Error("La découverte a expiré (timeout de 80 secondes)."));
     }, 80000);
 
@@ -263,6 +261,9 @@ export function runDiscoveryProcess(scraperPath, scriptName, outputDirs, targetD
 
     child.on('error', (err) => {
       clearTimeout(timeoutGuard);
+      if (fs.existsSync(tmpOutFile)) {
+        try { fs.unlinkSync(tmpOutFile); } catch (e) {}
+      }
       reject(err);
     });
 
@@ -271,26 +272,31 @@ export function runDiscoveryProcess(scraperPath, scriptName, outputDirs, targetD
       console.log(`[Predictix Discovery] Process closed with code: ${code}`);
 
       if (code !== 0) {
+        if (fs.existsSync(tmpOutFile)) {
+          try { fs.unlinkSync(tmpOutFile); } catch (e) {}
+        }
         return reject(new Error(`Le scraper a échoué (Code : ${code}). Logs: ${logOutput}`));
       }
 
       try {
-        const newestFile = getNewestScrapedFile(outputDirs);
-        if (!newestFile) {
+        if (!fs.existsSync(tmpOutFile)) {
           return reject(new Error("Aucun fichier de résultats de découverte trouvé."));
         }
 
-        console.log(`[Predictix Discovery] Parsing newest file: ${newestFile}`);
-        const rawData = fs.readFileSync(newestFile, 'utf-8');
+        console.log(`[Predictix Discovery] Parsing file: ${tmpOutFile}`);
+        const rawData = fs.readFileSync(tmpOutFile, 'utf-8');
         const parsed = JSON.parse(rawData);
         const matches = parsed.all_matches || parsed.matches || [];
 
         try {
-          if (fs.existsSync(newestFile)) fs.unlinkSync(newestFile);
+          if (fs.existsSync(tmpOutFile)) fs.unlinkSync(tmpOutFile);
         } catch (e) {}
 
         resolve(matches);
       } catch (err) {
+        if (fs.existsSync(tmpOutFile)) {
+          try { fs.unlinkSync(tmpOutFile); } catch (e) {}
+        }
         reject(err);
       }
     });
@@ -353,4 +359,29 @@ export async function crawlH2HLinksBatch(linksToScrape, scraperPath, options = {
   };
 
   await Promise.all(activePorts.map(port => worker(port)));
+}
+
+/**
+ * Automatically compile predictix-crawler.exe if missing
+ */
+export function ensureScraperCompiled(scraperPath) {
+  return new Promise((resolve, reject) => {
+    const exePath = path.join(scraperPath, 'cmd', 'predictix-crawler', 'predictix-crawler.exe');
+    if (fs.existsSync(exePath)) {
+      return resolve();
+    }
+    
+    console.log(`[Predictix Crawler] Executable not found. Compiling at: ${scraperPath}`);
+    const buildCmd = `go build -o predictix-crawler.exe`;
+    const buildCwd = path.join(scraperPath, 'cmd', 'predictix-crawler');
+    
+    exec(buildCmd, { cwd: buildCwd }, (error, stdout, stderr) => {
+      if (error) {
+        console.error(`[Predictix Crawler] Compilation failed:`, stderr || error.message);
+        return reject(new Error(`Failed to compile predictix-crawler: ${stderr || error.message}`));
+      }
+      console.log(`[Predictix Crawler] ✓ Consolidated crawler compiled successfully!`);
+      resolve();
+    });
+  });
 }

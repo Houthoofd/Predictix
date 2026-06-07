@@ -10,7 +10,8 @@ import {
   prioritizeDirectH2H, 
   bootstrapTorInstances, 
   cleanupSpawnedTor, 
-  tryResolveSofaStatsFallback 
+  tryResolveSofaStatsFallback,
+  ensureScraperCompiled
 } from '../utils/scraperHelpers.js';
 import { evaluateSmartScrapingFilter } from '../utils/predictionEngine.js';
 import { importScrapedMatches, importHistoricalMatch, importSkippedMatch } from '../db/importer.js';
@@ -27,6 +28,13 @@ export async function runScrapeJob(options, sendEvent) {
   
   if (!fs.existsSync(scraperPath)) {
     sendEvent('error', { message: `Dossier du scraper introuvable à l'emplacement configuré : ${scraperPath}` });
+    return;
+  }
+
+  try {
+    await ensureScraperCompiled(scraperPath);
+  } catch (compileErr) {
+    sendEvent('error', { message: `Erreur de compilation du scraper Go : ${compileErr.message}` });
     return;
   }
 

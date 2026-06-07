@@ -1,72 +1,16 @@
 import { useState } from 'react';
 
 export default function useScraperManager({ showToast, refreshAllDataSilent }) {
-  const [scraping, setScraping] = useState(false);
-  const [scraperLogs, setScraperLogs] = useState([]);
-  const [scrapeProgress, setScrapeProgress] = useState(0); 
-  const [scrapeTimeRemaining, setScrapeTimeRemaining] = useState(''); 
-  const [scrapePhase, setScrapePhase] = useState('idle'); 
-  const [scrapeLimit, setScrapeLimit] = useState(30); 
-  const [matchesRemaining, setMatchesRemaining] = useState(0); 
-  const [currentPrimary, setCurrentPrimary] = useState(0);
-  const [totalPrimary, setTotalPrimary] = useState(0);
-  const [currentDeep, setCurrentDeep] = useState(0);
-  const [totalDeep, setTotalDeep] = useState(0);
-  const [scraperTargetDate, setScraperTargetDate] = useState('');
-  const [selectedScraperSource, setSelectedScraperSource] = useState('matchendirect');
-  const [selectedScraperSport, setSelectedScraperSport] = useState('football');
-  const [liveScrapedMatches, setLiveScrapedMatches] = useState([]);
-  const [selectedScraperStrategyId, setSelectedScraperStrategyId] = useState('');
-  const [scrapeResultStats, setScrapeResultStats] = useState(null);
+  const [scraping, setScraping] = useState(false), [scraperLogs, setScraperLogs] = useState([]);
+  const [scrapeProgress, setScrapeProgress] = useState(0), [scrapeTimeRemaining, setScrapeTimeRemaining] = useState('');
+  const [scrapePhase, setScrapePhase] = useState('idle'), [scrapeLimit, setScrapeLimit] = useState(30);
+  const [matchesRemaining, setMatchesRemaining] = useState(0);
+  const [currentPrimary, setCurrentPrimary] = useState(0), [totalPrimary, setTotalPrimary] = useState(0);
+  const [currentDeep, setCurrentDeep] = useState(0), [totalDeep, setTotalDeep] = useState(0);
+  const [scraperTargetDate, setScraperTargetDate] = useState(''), [selectedScraperSource, setSelectedScraperSource] = useState('matchendirect');
+  const [selectedScraperSport, setSelectedScraperSport] = useState('football'), [liveScrapedMatches, setLiveScrapedMatches] = useState([]);
+  const [selectedScraperStrategyId, setSelectedScraperStrategyId] = useState(''), [scrapeResultStats, setScrapeResultStats] = useState(null);
   const [showScrapeResultModal, setShowScrapeResultModal] = useState(false);
-
-  const handleOneClickScraping = async () => {
-    if (scraping) return;
-    setScraping(true);
-    setScrapeProgress(5);
-    setScrapePhase('discovering');
-    setScrapeTimeRemaining('Découverte en cours...');
-    setMatchesRemaining(0);
-    setCurrentPrimary(0);
-    setTotalPrimary(0);
-    setCurrentDeep(0);
-    setTotalDeep(0);
-    setLiveScrapedMatches([]);
-    const dateLogSuffix = scraperTargetDate ? ` pour la date ${scraperTargetDate}` : " du jour";
-    setScraperLogs([{ message: `[Predictix] [1-Clic] Lancement de la découverte des matchs${dateLogSuffix}...`, type: 'system' }]);
-    showToast("Découverte en 1-Clic lancée...", "info");
-    
-    try {
-      const queryParams = scraperTargetDate ? `?date=${scraperTargetDate}` : '';
-      const response = await fetch(`/api/predictions/scrape/discover${queryParams}`, { 
-        method: 'POST'
-      });
-      const json = await response.json();
-      
-      if (json.success) {
-        setTotalPrimary(json.count);
-        setMatchesRemaining(json.count);
-        setScrapeProgress(25);
-        setScraperLogs(prev => [
-          ...prev, 
-          { message: `[Predictix] ✓ Découverte réussie : ${json.count} matchs trouvés${dateLogSuffix}.`, type: 'success' },
-          { message: `[Predictix] [1-Clic] Enchaînement automatique : Lancement de l'analyse détaillée pour les ${Math.min(scrapeLimit, json.count)} premiers matchs...`, type: 'system' }
-        ]);
-        showToast(`Découverte réussie : ${json.count} matchs trouvés !`, "success");
-        
-        await handleStartDetailedScraping(Math.min(scrapeLimit, json.count));
-      } else {
-        showToast("Erreur lors de la découverte : " + (json.error?.message || "Erreur inconnue"), "error");
-        setScraping(false);
-        setScrapePhase('idle');
-      }
-    } catch (error) {
-      setScraperLogs(prev => [...prev, { message: `[ERREUR CONTEXTE] ${error.message}`, type: 'error' }]);
-      showToast("Erreur lors de la communication avec le serveur de scraping : " + error.message, "error");
-      setScraping(false);
-      setScrapePhase('idle');
-    }
-  };
 
   const handleTriggerScraping = async () => {
     if (scraping) return;
@@ -95,17 +39,19 @@ export default function useScraperManager({ showToast, refreshAllDataSilent }) {
       const json = await response.json();
       
       if (json.success) {
-        setScrapePhase('discovered_waiting');
         setTotalPrimary(json.count);
         setMatchesRemaining(json.count);
-        setScrapeLimit(Math.min(30, json.count)); 
+        setScrapeLimit(json.count); 
         setScrapeProgress(25);
         setScraperLogs(prev => [
           ...prev, 
           { message: `[Predictix] ✓ Découverte réussie : ${json.count} matchs trouvés${dateLogSuffix}.`, type: 'success' },
-          { message: "[Predictix] En attente de votre configuration pour démarrer l'analyse détaillée...", type: 'warn' }
+          { message: "[Predictix] Enchaînement automatique : Lancement de l'analyse détaillée...", type: 'system' }
         ]);
-        showToast("Découverte réussie !", "success");
+        showToast(`Découverte réussie : ${json.count} matchs trouvés !`, "success");
+
+        // Chain the detailed scraping immediately without requiring a second click
+        await handleStartDetailedScraping(json.count);
       } else {
         showToast("Erreur lors de la découverte : " + (json.error?.message || "Erreur inconnue"), "error");
         setScraping(false);
@@ -303,19 +249,15 @@ export default function useScraperManager({ showToast, refreshAllDataSilent }) {
 
   const handleStopScraping = async () => {
     try {
-      setScraperLogs(prev => [...prev, { message: "[Predictix] Demande d'arrêt envoyée...", type: 'system' }]);
-      const response = await fetch('/api/predictions/scrape/stop', { method: 'POST' });
-      const data = await response.json();
-      
-      if (data.success) {
-        setScrapePhase('stopped');
-        setScrapeProgress(0);
-        setScrapeTimeRemaining("Arrêté");
-        setScraperLogs(prev => [...prev, { message: "[Predictix] Le scraper a été arrêté.", type: 'warn' }]);
+      setScraperLogs(p => [...p, { message: "[Predictix] Demande d'arrêt envoyée...", type: 'system' }]);
+      const res = await (await fetch('/api/predictions/scrape/stop', { method: 'POST' })).json();
+      if (res.success) {
+        setScrapePhase('stopped'); setScrapeProgress(0); setScrapeTimeRemaining("Arrêté");
+        setScraperLogs(p => [...p, { message: "[Predictix] Le scraper a été arrêté.", type: 'warn' }]);
         showToast("Le scraper a été arrêté.", "warning");
         refreshAllDataSilent();
       } else {
-        showToast("Impossible d'arrêter: " + data.error, "error");
+        showToast("Impossible d'arrêter: " + res.error, "error");
       }
     } catch (err) {
       showToast("Erreur d'arrêt : " + err.message, "error");
@@ -348,7 +290,6 @@ export default function useScraperManager({ showToast, refreshAllDataSilent }) {
     setScrapeResultStats,
     showScrapeResultModal,
     setShowScrapeResultModal,
-    handleOneClickScraping,
     handleTriggerScraping,
     handleStartDetailedScraping,
     handleStopScraping

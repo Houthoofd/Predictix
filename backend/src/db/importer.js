@@ -1,5 +1,6 @@
 import { dbRun } from './database.js';
 import { parseFrenchDate } from '../utils/scraperHelpers.js';
+import { autoSettleBetsForMatch } from '../services/betsService.js';
 
 /**
  * Maps and imports all freshly scraped matches into the SQLite scraped_predictions table,
@@ -104,7 +105,6 @@ export async function importScrapedMatches(matches, scrapedAt) {
     if (match.first_half_corners_home !== null && match.first_half_corners_home !== undefined &&
         match.first_half_corners_away !== null && match.first_half_corners_away !== undefined) {
       try {
-        const { autoSettleBetsForMatch } = await import('../routes/bets.js');
         const resolved = await autoSettleBetsForMatch(matchId, match.first_half_corners_home, match.first_half_corners_away);
         if (resolved && resolved.length > 0) {
           settledBetsList.push(...resolved);
@@ -271,7 +271,6 @@ export async function enrichPrimaryMatch(matchId, primaryDetails, targetLink, ma
 
   // Auto-settle any pending bets for this primary match in real time
   try {
-    const { autoSettleBetsForMatch } = await import('../routes/bets.js');
     await autoSettleBetsForMatch(matchId, primaryDetails.first_half_corners_home, primaryDetails.first_half_corners_away);
   } catch (err) {
     console.error('[Predictix On-Demand Background] Failed to auto-settle bet:', err.message);
