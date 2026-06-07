@@ -186,11 +186,12 @@ export async function getBetsStats() {
       if (bet.status === 'WON') leagueStats[bet.league].won++;
       if (bet.status === 'LOST') leagueStats[bet.league].lost++;
 
-      if (!bookmakerStats[bet.bookmaker]) bookmakerStats[bet.bookmaker] = { name: bet.bookmaker, profit: 0, won: 0, lost: 0, total: 0 };
-      bookmakerStats[bet.bookmaker].profit += betProfit;
-      bookmakerStats[bet.bookmaker].total++;
-      if (bet.status === 'WON') bookmakerStats[bet.bookmaker].won++;
-      if (bet.status === 'LOST') bookmakerStats[bet.bookmaker].lost++;
+      const normBookmaker = normalizeBookmaker(bet.bookmaker);
+      if (!bookmakerStats[normBookmaker]) bookmakerStats[normBookmaker] = { name: normBookmaker, profit: 0, won: 0, lost: 0, total: 0 };
+      bookmakerStats[normBookmaker].profit += betProfit;
+      bookmakerStats[normBookmaker].total++;
+      if (bet.status === 'WON') bookmakerStats[normBookmaker].won++;
+      if (bet.status === 'LOST') bookmakerStats[normBookmaker].lost++;
 
       const month = bet.date.substring(0, 7);
       if (!monthlyStats[month]) monthlyStats[month] = { month, profit: 0, total: 0 };
@@ -223,3 +224,23 @@ export async function getBetsStats() {
     charts: { history, leagues: leaguesList, bookmakers: bookmakersList, monthly: monthlyList }
   };
 }
+
+export function normalizeBookmaker(bookmaker) {
+  if (!bookmaker) return 'Unibet';
+  const clean = bookmaker.trim();
+  const lower = clean.toLowerCase();
+  const mapping = {
+    '1xbet': '1XBet',
+    'unibet': 'Unibet',
+    'betclic': 'Betclic',
+    'winamax': 'Winamax',
+    'pmu': 'PMU',
+    'zebet': 'ZEbet',
+    'bwin': 'Bwin',
+    'bet365': 'Bet365',
+    'parions sport': 'Parions Sport',
+    'parionssport': 'Parions Sport'
+  };
+  return mapping[lower] || (clean.charAt(0).toUpperCase() + clean.slice(1));
+}
+
