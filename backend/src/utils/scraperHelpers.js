@@ -11,7 +11,10 @@ export {
   cleanupSpawnedTor, 
   cleanupSpawnedTorSync,
   getActiveTorPorts,
-  getTorPortFromPool
+  getTorPortFromPool,
+  isTorRouting,
+  healTorPort,
+  healTorPool
 } from './torSessionManager.js';
 
 export { parseFrenchDate } from './dateParser.js';

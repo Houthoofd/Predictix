@@ -1,5 +1,5 @@
 import { dbQuery, dbGet, dbRun, insertNotification } from '../db/database.js';
-import { scrapeSingleMatch, getTorPortFromPool } from '../utils/scraperHelpers.js';
+import { scrapeSingleMatch, getTorPortFromPool, isTorRouting, healTorPort } from '../utils/scraperHelpers.js';
 import { updateKeepAwakeStatus, reevaluateKeepAwake } from '../utils/keepAwake.js';
 
 const scheduledTimeouts = new Map();
@@ -12,15 +12,12 @@ let cronMaxRetries = 5;
 export async function loadCronSettings() {
   try {
     const rows = await dbQuery('SELECT * FROM settings WHERE key IN ("cron_retry_interval_live", "cron_retry_interval_fail", "cron_max_retries")');
-    rows.forEach(r => {
+    for (const r of rows) {
       if (r.key === 'cron_retry_interval_live') cronRetryIntervalLive = parseInt(r.value) || 10;
       if (r.key === 'cron_retry_interval_fail') cronRetryIntervalFail = parseInt(r.value) || 15;
       if (r.key === 'cron_max_retries') cronMaxRetries = parseInt(r.value) || 5;
-    });
-    logCron(`Settings updated: Live retry = ${cronRetryIntervalLive}m, Fail retry = ${cronRetryIntervalFail}m, Max retries = ${cronMaxRetries}`);
-  } catch (err) {
-    console.error('[Predictix Cron] Failed to load settings:', err);
-  }
+    }
+  } catch (e) { console.error('[Predictix Cron] Failed to load settings:', e); }
 }
 
 const cronLogs = [];
@@ -71,40 +68,42 @@ export async function reScrapeMatch(matchId) {
   await updateKeepAwakeStatus(true);
   try {
     const match = await dbGet('SELECT * FROM scraped_predictions WHERE match_id = ?', [matchId]);
-    if (!match) {
-      logCron(`Match ${matchId} not found.`, 'warn');
-      return await updateKeepAwakeStatus(false);
-    }
+    if (!match) return logCron(`Match ${matchId} not found.`, 'warn');
     if (match.is_finished) {
       logCron(`Match ${matchId} already finished.`);
       scheduledTimeouts.delete(matchId);
       retryCounts.delete(matchId);
-      return await updateKeepAwakeStatus(false);
+      return;
     }
     const activePort = await getTorPortFromPool();
     if (!activePort) {
       logCron(`No active Tor port in pool. Will retry in 10m.`, 'warn');
-      reschedule(matchId, 10);
-      return await updateKeepAwakeStatus(false);
+      return reschedule(matchId, 10);
+    }
+    logCron(`Verifying Tor SOCKS5 traffic routing on port ${activePort}...`);
+    if (!(await isTorRouting(activePort))) {
+      logCron(`Tor port ${activePort} is not routing traffic. Launching self-healing...`, 'warn');
+      const healed = await healTorPort(activePort);
+      if (!healed) {
+        logCron(`Failed to heal Tor SOCKS5 proxy on port ${activePort}. Postponing re-scrape by 10 minutes.`, 'error');
+        await insertNotification(`Défaut de connexion sur le proxy Tor (Port ${activePort}). Le re-scraping du match ${match.home_team} vs ${match.away_team} est reporté.`, 'error');
+        return reschedule(matchId, 10);
+      }
     }
     const scraperPath = process.env.SCRAPER_PATH || 'E:\\Developpement\\scrapper-v3';
     const sport = match.sport || 'football';
     const scraper = sport === 'football' ? 'matchendirect' : 'flashscore';
     let link = match.match_url || match.match_id;
-    if (sport === 'football' && !link.startsWith('/live-score/') && !link.startsWith('http')) {
-      link = `/live-score/${link}`;
-    }
+    if (sport === 'football' && !link.startsWith('/live-score/') && !link.startsWith('http')) link = `/live-score/${link}`;
     logCron(`Scraping match ${matchId} via ${scraper} using Tor Port ${activePort}...`);
     const details = await scrapeSingleMatch(scraperPath, link, true, null, activePort, scraper, sport);
     if (!details) {
       logCron(`Scraping failed for ${matchId}. Retry in ${cronRetryIntervalFail}m.`, 'warn');
-      reschedule(matchId, cronRetryIntervalFail);
-      return await updateKeepAwakeStatus(false);
+      return reschedule(matchId, cronRetryIntervalFail);
     }
     const isFinished = details.is_finished === true || 
       (details.score && details.score.trim() !== '-' && details.score.trim() !== '' && details.score.includes('-')) ||
       (details.time && (details.time.toLowerCase().includes('fin') || details.time.toLowerCase().includes('terminé') || details.time.toLowerCase().startsWith('ter')));
-
     logCron(`Scrape outcome for ${matchId} - isFinished: ${isFinished}, score: ${details.score || 'N/A'}`);
     const enriched = {
       match_id: matchId,
@@ -127,7 +126,6 @@ export async function reScrapeMatch(matchId) {
     };
     const { importScrapedMatches } = await import('../db/importer.js');
     await importScrapedMatches([enriched], new Date().toISOString());
-
     if (!isFinished) {
       logCron(`Match ${matchId} not finished. Rescheduling in ${cronRetryIntervalLive}m.`);
       reschedule(matchId, cronRetryIntervalLive);
@@ -186,9 +184,7 @@ export async function getScheduledCrons() {
         retries,
         status: retries > 0 ? `Retrying (Attempt ${retries}/${cronMaxRetries})` : 'Scheduled'
       });
-    } catch (e) {
-      logCron(`Error fetching cron info for ${matchId}: ${e.message}`, 'error');
-    }
+    } catch (e) { logCron(`Error fetching cron info for ${matchId}: ${e.message}`, 'error'); }
   }
   return list.sort((a, b) => (a.expected_end_time || '').localeCompare(b.expected_end_time || ''));
 }
@@ -199,24 +195,20 @@ export async function initReScraper() {
     await loadCronSettings();
     await reevaluateKeepAwake();
     scheduleNightlyTasks();
-
     const unfinishedMatches = await dbQuery('SELECT match_id, date, time, sport FROM scraped_predictions WHERE is_finished = 0 AND is_historical = 0');
     logCron(`Found ${unfinishedMatches.length} unfinished matches.`);
-    
     let immediateCount = 0;
     for (const match of unfinishedMatches) {
       const endTime = getExpectedEndTime(match.date, match.time, match.sport);
       if (!endTime) continue;
       const delay = endTime.getTime() - Date.now();
-      if (delay > 0) {
-        scheduleMatchReScraping(match.match_id, match.date, match.time, match.sport);
-      } else {
+      if (delay > 0) scheduleMatchReScraping(match.match_id, match.date, match.time, match.sport);
+      else {
         immediateCount++;
         scheduledTimeouts.set(match.match_id, setTimeout(() => reScrapeMatch(match.match_id), immediateCount * 10000));
       }
     }
     if (immediateCount > 0) logCron(`Scheduled ${immediateCount} past-due matches for staggered execution.`);
-
     setInterval(async () => {
       logCron('Fallback checker running...');
       try {
@@ -228,13 +220,9 @@ export async function initReScraper() {
             reScrapeMatch(m.match_id);
           }
         }
-      } catch (err) {
-        logCron(`Error in interval check: ${err.message}`, 'error');
-      }
+      } catch (err) { logCron(`Error in interval check: ${err.message}`, 'error'); }
     }, 15 * 60 * 1000);
-  } catch (err) {
-    logCron(`Initialization Error: ${err.message}`, 'error');
-  }
+  } catch (err) { logCron(`Initialization Error: ${err.message}`, 'error'); }
 }
 
 async function runNightlyRepair() {
@@ -243,12 +231,8 @@ async function runNightlyRepair() {
     if (row?.value === 'false') return logCron('Nightly auto-repair disabled.');
     logCron('Starting nightly auto-repair batch...');
     const { default: integrityController } = await import('../controllers/integrityController.js');
-    await integrityController.startIntegrityBatch({}, {
-      status: () => ({ json: (d) => logCron(`Repair response: ${d.message || JSON.stringify(d)}`) })
-    });
-  } catch (err) {
-    logCron(`Error in nightly repair: ${err.message}`, 'error');
-  }
+    await integrityController.startIntegrityBatch({}, { status: () => ({ json: (d) => logCron(`Repair response: ${d.message || JSON.stringify(d)}`) }) });
+  } catch (err) { logCron(`Error in nightly repair: ${err.message}`, 'error'); }
 }
 
 async function runNightlyCleanup() {
@@ -260,9 +244,7 @@ async function runNightlyCleanup() {
     logCron('Cleaned old notifications.');
     await dbRun('VACUUM');
     logCron('Database VACUUM completed.');
-  } catch (err) {
-    logCron(`Error in nightly cleanup: ${err.message}`, 'error');
-  }
+  } catch (err) { logCron(`Error in nightly cleanup: ${err.message}`, 'error'); }
 }
 
 function scheduleNightlyTasks() {
@@ -272,18 +254,9 @@ function scheduleNightlyTasks() {
     if (target.getTime() <= Date.now()) target.setDate(target.getDate() + 1);
     return target.getTime() - Date.now();
   };
-
   const delayRepair = getNextTime(3);
-  setTimeout(() => {
-    runNightlyRepair();
-    setInterval(runNightlyRepair, 24 * 3600000);
-  }, delayRepair);
-
+  setTimeout(() => { runNightlyRepair(); setInterval(runNightlyRepair, 24 * 3600000); }, delayRepair);
   const delayCleanup = getNextTime(4);
-  setTimeout(() => {
-    runNightlyCleanup();
-    setInterval(runNightlyCleanup, 24 * 3600000);
-  }, delayCleanup);
-
+  setTimeout(() => { runNightlyCleanup(); setInterval(runNightlyCleanup, 24 * 3600000); }, delayCleanup);
   logCron(`Nightly tasks scheduled: Repair at 3:00 AM (in ${Math.round(delayRepair/60000)}m), Cleanup at 4:00 AM (in ${Math.round(delayCleanup/60000)}m)`);
 }
