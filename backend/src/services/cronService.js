@@ -269,8 +269,11 @@ async function runNightlyRepair() {
 async function runNightlyCleanup() {
   try {
     if ((await dbGet("SELECT value FROM settings WHERE key = 'cron_db_cleanup'"))?.value === 'false') return logCron('Nightly cleanup disabled.');
-    logCron('Starting nightly DB cleanup & VACUUM...');
+    logCron('Starting nightly DB cleanup, archiving & VACUUM...');
     await dbRun('DELETE FROM notifications WHERE timestamp < date("now", "-7 days")');
+    await dbRun("UPDATE scraped_predictions SET statistics_json = NULL, historical_links = NULL WHERE is_historical = 1 AND (statistics_json IS NOT NULL OR historical_links IS NOT NULL)");
+    await dbRun("UPDATE scraped_predictions SET statistics_json = NULL, historical_links = NULL WHERE is_finished = 1 AND date < date('now', '-30 days') AND (statistics_json IS NOT NULL OR historical_links IS NOT NULL)");
+    logCron('Pruned old statistics and historical links payloads.');
     await dbRun('VACUUM');
     logCron('Database VACUUM completed.');
   } catch (err) { logCron(`Error in nightly cleanup: ${err.message}`, 'error'); }

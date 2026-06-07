@@ -308,6 +308,7 @@ function initDb() {
     
     // 6. Performance Indexes
     db.run("CREATE INDEX IF NOT EXISTS idx_predictions_historical_date ON scraped_predictions(is_historical, date)");
+    db.run("CREATE INDEX IF NOT EXISTS idx_predictions_finished_date ON scraped_predictions(is_finished, date DESC)");
     db.run("CREATE INDEX IF NOT EXISTS idx_predictions_home_finished ON scraped_predictions(home_team, is_finished, date DESC)");
     db.run("CREATE INDEX IF NOT EXISTS idx_predictions_away_finished ON scraped_predictions(away_team, is_finished, date DESC)");
     db.run("CREATE INDEX IF NOT EXISTS idx_bets_match_pending ON bets(match_id, status)");

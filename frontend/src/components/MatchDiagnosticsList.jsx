@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Database, MoreVertical, Sparkles } from 'lucide-react';
 
 export default function MatchDiagnosticsList({
@@ -9,16 +9,78 @@ export default function MatchDiagnosticsList({
   setActiveKebabMatchId,
   handleInjectAndPrioritize
 }) {
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showOnlyIncomplete, setShowOnlyIncomplete] = useState(true);
+
+  // Filter matches based on search term and completeness
+  const filteredMatches = useMemo(() => {
+    if (!predictions) return [];
+    return predictions.filter(m => {
+      const diag = m.diagnostic || { score: 100, is_complete: true };
+      const matchesSearch = !searchTerm || 
+        m.home_team.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        m.away_team.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (m.tournament && m.tournament.toLowerCase().includes(searchTerm.toLowerCase()));
+      const matchesIncomplete = !showOnlyIncomplete || !diag.is_complete;
+      return matchesSearch && matchesIncomplete;
+    });
+  }, [predictions, searchTerm, showOnlyIncomplete]);
+
+  // Paginated matches
+  const totalPages = Math.ceil(filteredMatches.length / itemsPerPage);
+  const paginatedMatches = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredMatches.slice(start, start + itemsPerPage);
+  }, [filteredMatches, currentPage, itemsPerPage]);
+
+  // Reset page when search or filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, showOnlyIncomplete]);
+
   return (
     <div className="glass-card" style={{ padding: '20px' }}>
       <h3 style={{ fontSize: '16px', fontFamily: 'Outfit', fontWeight: 800, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
         <Database size={18} style={{ color: '#bf5af2' }} />
         Diagnostic de la Base des Matchs
       </h3>
+
+      {/* Search and Filters */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <input
+          type="text"
+          placeholder="Rechercher..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          style={{
+            flex: 1,
+            minWidth: '150px',
+            padding: '6px 12px',
+            borderRadius: '6px',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            background: 'rgba(255, 255, 255, 0.03)',
+            color: '#fff',
+            fontSize: '12.5px',
+            fontFamily: 'Outfit',
+            outline: 'none',
+          }}
+        />
+        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '12px', color: 'var(--text-secondary)' }}>
+          <input 
+            type="checkbox" 
+            checked={showOnlyIncomplete} 
+            onChange={(e) => setShowOnlyIncomplete(e.target.checked)}
+            style={{ accentColor: '#bf5af2', cursor: 'pointer' }}
+          />
+          <span>Incomplets uniquement</span>
+        </label>
+      </div>
       
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        {predictions && predictions.length > 0 ? (
-          predictions.map((match) => {
+        {paginatedMatches.length > 0 ? (
+          paginatedMatches.map((match) => {
             const diag = match.diagnostic || { score: 100, is_complete: true };
             const isSelected = selectedMatchId === match.match_id;
 
@@ -172,10 +234,85 @@ export default function MatchDiagnosticsList({
           })
         ) : (
           <div style={{ padding: '40px 0', textTransform: 'center', color: 'var(--text-muted)', fontSize: '14px', textAlign: 'center' }}>
-            Aucune prédiction disponible. Lancez le scraper pour découvrir des matchs.
+            Aucun match correspondant dans la base.
           </div>
         )}
       </div>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginTop: '16px',
+          paddingTop: '12px',
+          borderTop: '1px solid rgba(255, 255, 255, 0.05)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Afficher</span>
+            <select
+              value={itemsPerPage}
+              onChange={(e) => {
+                setItemsPerPage(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              style={{
+                background: 'rgba(255, 255, 255, 0.04)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '6px',
+                color: '#fff',
+                padding: '4px 8px',
+                fontSize: '11px',
+                outline: 'none',
+                cursor: 'pointer',
+                fontFamily: 'Outfit'
+              }}
+            >
+              <option value={5} style={{ background: '#0f172a' }}>5</option>
+              <option value={10} style={{ background: '#0f172a' }}>10</option>
+              <option value={20} style={{ background: '#0f172a' }}>20</option>
+              <option value={50} style={{ background: '#0f172a' }}>50</option>
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="btn btn-secondary"
+              style={{
+                padding: '2px 8px',
+                fontSize: '11px',
+                borderRadius: '4px',
+                cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+                opacity: currentPage === 1 ? 0.4 : 1,
+              }}
+            >
+              Précédent
+            </button>
+            
+            <span style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)', fontFamily: 'Outfit' }}>
+              Page {currentPage} sur {totalPages}
+            </span>
+
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages}
+              className="btn btn-secondary"
+              style={{
+                padding: '2px 8px',
+                fontSize: '11px',
+                borderRadius: '4px',
+                cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+                opacity: currentPage === totalPages ? 0.4 : 1,
+              }}
+            >
+              Suivant
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
