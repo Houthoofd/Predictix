@@ -1,3 +1,6 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { dbQuery, dbGet, dbRun, insertNotification } from '../db/database.js';
 import { scrapeSingleMatch, getTorPortFromPool, isTorRouting, healTorPort } from '../utils/scraperHelpers.js';
 import { updateKeepAwakeStatus, reevaluateKeepAwake } from '../utils/keepAwake.js';
@@ -225,6 +228,37 @@ export async function initReScraper() {
   } catch (err) { logCron(`Initialization Error: ${err.message}`, 'error'); }
 }
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+export async function runNightlyBackup() {
+  try {
+    const rowEnabled = await dbGet("SELECT value FROM settings WHERE key = 'cron_db_backup'");
+    if (rowEnabled?.value === 'false') return logCron('Nightly database backup disabled.');
+    const rowKeepDays = await dbGet("SELECT value FROM settings WHERE key = 'cron_db_backup_keep_days'");
+    const keepDays = parseInt(rowKeepDays?.value) || 7;
+    logCron('Starting nightly database backup...');
+    const backupsDir = path.resolve(__dirname, '../../../backups');
+    if (!fs.existsSync(backupsDir)) fs.mkdirSync(backupsDir, { recursive: true });
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const backupFile = path.join(backupsDir, `predictix_backup_${timestamp}.db`);
+    const dbFile = path.resolve(__dirname, '../../predictix.db');
+    if (fs.existsSync(dbFile)) {
+      fs.copyFileSync(dbFile, backupFile);
+      logCron(`Database backed up to ${backupFile}`);
+      const files = fs.readdirSync(backupsDir).filter(f => f.startsWith('predictix_backup_') && f.endsWith('.db'));
+      const now = Date.now();
+      for (const file of files) {
+        const filePath = path.join(backupsDir, file);
+        if (now - fs.statSync(filePath).mtimeMs > keepDays * 86400000) {
+          fs.unlinkSync(filePath);
+          logCron(`Removed old backup: ${file}`);
+        }
+      }
+    } else logCron('Database file predictix.db not found!', 'error');
+  } catch (err) { logCron(`Error in backup: ${err.message}`, 'error'); }
+}
+
 async function runNightlyRepair() {
   try {
     const row = await dbGet("SELECT value FROM settings WHERE key = 'cron_integrity_repair'");
@@ -248,15 +282,17 @@ async function runNightlyCleanup() {
 }
 
 function scheduleNightlyTasks() {
-  const getNextTime = (hours) => {
+  const getNextTime = (hours, minutes = 0) => {
     const target = new Date();
-    target.setHours(hours, 0, 0, 0);
+    target.setHours(hours, minutes, 0, 0);
     if (target.getTime() <= Date.now()) target.setDate(target.getDate() + 1);
     return target.getTime() - Date.now();
   };
   const delayRepair = getNextTime(3);
   setTimeout(() => { runNightlyRepair(); setInterval(runNightlyRepair, 24 * 3600000); }, delayRepair);
+  const delayBackup = getNextTime(3, 55);
+  setTimeout(() => { runNightlyBackup(); setInterval(runNightlyBackup, 24 * 3600000); }, delayBackup);
   const delayCleanup = getNextTime(4);
   setTimeout(() => { runNightlyCleanup(); setInterval(runNightlyCleanup, 24 * 3600000); }, delayCleanup);
-  logCron(`Nightly tasks scheduled: Repair at 3:00 AM (in ${Math.round(delayRepair/60000)}m), Cleanup at 4:00 AM (in ${Math.round(delayCleanup/60000)}m)`);
+  logCron(`Nightly tasks scheduled: Repair at 3:00 AM (in ${Math.round(delayRepair/60000)}m), Backup at 3:55 AM (in ${Math.round(delayBackup/60000)}m), Cleanup at 4:00 AM (in ${Math.round(delayCleanup/60000)}m)`);
 }

@@ -282,7 +282,9 @@ function initDb() {
         ['realtime_notifications', 'true'],
         ['cron_retry_interval_live', '10'],
         ['cron_retry_interval_fail', '15'],
-        ['cron_max_retries', '5']
+        ['cron_max_retries', '5'],
+        ['cron_db_backup', 'true'],
+        ['cron_db_backup_keep_days', '7']
       ];
       for (const [key, val] of defaults) {
         db.run('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)', [key, val]);

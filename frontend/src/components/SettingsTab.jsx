@@ -13,7 +13,9 @@ export default function SettingsTab({ showToast, setShowResetBankrollModal, onSe
     realtime_notifications: 'true',
     cron_retry_interval_live: '10',
     cron_retry_interval_fail: '15',
-    cron_max_retries: '5'
+    cron_max_retries: '5',
+    cron_db_backup: 'true',
+    cron_db_backup_keep_days: '7'
   });
 
   const [keepAwakeActive, setKeepAwakeActive] = useState(false);
@@ -106,7 +108,9 @@ export default function SettingsTab({ showToast, setShowResetBankrollModal, onSe
     realtime_notifications: "Si désactivé, Predictix n'interrogera plus l'API de notifications toutes les 15 secondes en arrière-plan (réduit la charge CPU et réseau).",
     cron_retry_interval_live: "Temps d'attente (en minutes) entre chaque scraping d'un match en cours de jeu (live) pour détecter la fin et le score final.",
     cron_retry_interval_fail: "Temps d'attente (en minutes) avant de retenter de scraper un match dont la requête a échoué (limite Tor, proxy temporairement bloqué, etc.).",
-    cron_max_retries: "Le nombre maximum de tentatives infructueuses de re-scraping effectuées pour un match donné avant d'abandonner."
+    cron_max_retries: "Le nombre maximum de tentatives infructueuses de re-scraping effectuées pour un match donné avant d'abandonner.",
+    cron_db_backup: "Chaque nuit à 3h55 (juste avant le nettoyage de 4h00), Predictix effectue une copie de sauvegarde de votre base de données dans le dossier 'backups/' à la racine du projet.",
+    cron_db_backup_keep_days: "Le nombre de jours de rétention pour les sauvegardes de la base de données. Les fichiers plus anciens seront automatiquement supprimés."
   };
 
   if (loading) {
@@ -210,11 +214,11 @@ export default function SettingsTab({ showToast, setShowResetBankrollModal, onSe
           </div>
         </div>
 
-        {/* Section 2: Maintenance & Tâches de Nuit */}
+        {/* Section 2: Maintenance et soin */}
         <div className="glass-card" style={{ padding: '24px' }}>
           <h3 style={{ fontSize: '16px', fontFamily: 'Outfit', fontWeight: 700, margin: '0 0 18px 0', borderBottom: '1px solid var(--border-color)', paddingBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Database size={18} style={{ color: '#ff9500' }} />
-            Maintenance & Soin des Données Nocturnes
+            Maintenance et soin
           </h3>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -255,7 +259,7 @@ export default function SettingsTab({ showToast, setShowResetBankrollModal, onSe
             </div>
 
             {/* DB Cleanup and Vacuum */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '20px', borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '14px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <strong style={{ fontSize: '13.5px', color: 'var(--text-primary)' }}>Nettoyage & Optimisation SQLite VACUUM (4h00)</strong>
@@ -289,6 +293,72 @@ export default function SettingsTab({ showToast, setShowResetBankrollModal, onSe
                 </span>
               </label>
             </div>
+
+            {/* DB Backup */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '20px', borderBottom: settings.cron_db_backup === 'true' ? '1px solid rgba(255,255,255,0.03)' : 'none', paddingBottom: '14px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <strong style={{ fontSize: '13.5px', color: 'var(--text-primary)' }}>Sauvegarde de Base de Données Nocturne (3h55)</strong>
+                  <button type="button" onClick={() => toggleTooltip('cron_db_backup')} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', color: 'var(--text-muted)' }}>
+                    <Info size={13} />
+                  </button>
+                </div>
+                {activeTooltip === 'cron_db_backup' && (
+                  <div style={{ background: 'rgba(15, 23, 42, 0.95)', border: '1px solid var(--border-color)', padding: '8px 12px', borderRadius: '6px', fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '4px', maxWidth: '550px' }}>
+                    {tooltips.cron_db_backup}
+                  </div>
+                )}
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Crée une sauvegarde automatique de sécurité de la base de données dans le dossier 'backups/'.</span>
+              </div>
+              <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '40px', height: '20px' }}>
+                <input 
+                  type="checkbox" 
+                  checked={settings.cron_db_backup === 'true'} 
+                  onChange={(e) => setSettings({ ...settings, cron_db_backup: e.target.checked ? 'true' : 'false' })}
+                  style={{ opacity: 0, width: 0, height: 0 }}
+                />
+                <span style={{ 
+                  position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, 
+                  background: settings.cron_db_backup === 'true' ? 'var(--color-accent-solid)' : '#2c2c2e', 
+                  borderRadius: '20px', transition: '0.3s' 
+                }}>
+                  <span style={{ 
+                    position: 'absolute', content: '""', height: '14px', width: '14px', left: settings.cron_db_backup === 'true' ? '22px' : '3px', bottom: '3px', 
+                    background: '#white', borderRadius: '50%', transition: '0.3s', backgroundColor: '#fff' 
+                  }}></span>
+                </span>
+              </label>
+            </div>
+
+            {/* DB Backup Keep Days */}
+            {settings.cron_db_backup === 'true' && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '20px', paddingBottom: '4px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <strong style={{ fontSize: '13.5px', color: 'var(--text-primary)' }}>Rétention des Sauvegardes (jours)</strong>
+                    <button type="button" onClick={() => toggleTooltip('cron_db_backup_keep_days')} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', color: 'var(--text-muted)' }}>
+                      <Info size={13} />
+                    </button>
+                  </div>
+                  {activeTooltip === 'cron_db_backup_keep_days' && (
+                    <div style={{ background: 'rgba(15, 23, 42, 0.95)', border: '1px solid var(--border-color)', padding: '8px 12px', borderRadius: '6px', fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '4px', maxWidth: '550px' }}>
+                      {tooltips.cron_db_backup_keep_days}
+                    </div>
+                  )}
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Nombre de jours de conservation des fichiers avant suppression automatique.</span>
+                </div>
+                <input 
+                  type="number" 
+                  className="form-control" 
+                  min="1"
+                  max="90"
+                  required
+                  style={{ width: '80px', textAlign: 'center', background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '6px' }}
+                  value={settings.cron_db_backup_keep_days} 
+                  onChange={(e) => setSettings({ ...settings, cron_db_backup_keep_days: e.target.value })}
+                />
+              </div>
+            )}
           </div>
         </div>
 
