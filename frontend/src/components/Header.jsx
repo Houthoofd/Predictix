@@ -15,7 +15,8 @@ export default function Header({
   setTheme, 
   bankroll,
   notifications = [],
-  setNotifications
+  setNotifications,
+  handleClearNotifications
 }) {
   const [showDropdown, setShowDropdown] = React.useState(false);
   const dropdownRef = React.useRef(null);
@@ -49,7 +50,11 @@ export default function Header({
 
   const handleClearAll = (e) => {
     e.stopPropagation();
-    setNotifications([]);
+    if (handleClearNotifications) {
+      handleClearNotifications();
+    } else {
+      setNotifications([]);
+    }
   };
 
 

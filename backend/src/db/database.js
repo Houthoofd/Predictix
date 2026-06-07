@@ -237,6 +237,17 @@ function initDb() {
       )
     `);
     
+    // 7. Table notifications (persistent alert log)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        message TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'info',
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        read INTEGER DEFAULT 0
+      )
+    `);
+    
     // 6. Performance Indexes
     db.run("CREATE INDEX IF NOT EXISTS idx_predictions_historical_date ON scraped_predictions(is_historical, date)");
     db.run("CREATE INDEX IF NOT EXISTS idx_predictions_home_finished ON scraped_predictions(home_team, is_finished, date DESC)");
@@ -247,4 +258,17 @@ function initDb() {
     console.log("Database tables and indexes initialized successfully");
   });
 }
+
+export const insertNotification = async (message, type = 'info') => {
+  try {
+    await dbRun(
+      'INSERT INTO notifications (message, type) VALUES (?, ?)',
+      [message, type]
+    );
+    console.log(`[Predictix Notification] [${type.toUpperCase()}] ${message}`);
+  } catch (err) {
+    console.error('Failed to insert notification:', err);
+  }
+};
+
 export default db;

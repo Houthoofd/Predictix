@@ -1,10 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export default function useNotificationManager() {
   const [toasts, setToasts] = useState([]);
-  const [notifications, setNotifications] = useState([
-    { id: 'init', message: 'Bienvenue sur votre tableau de bord Predictix !', type: 'info', timestamp: 'À l\'instant', read: false }
-  ]);
+  const [notifications, setNotifications] = useState([]);
   const [notification, setNotification] = useState({
     show: false,
     title: '',
@@ -22,6 +20,57 @@ export default function useNotificationManager() {
     onConfirm: null,
     onCancel: null
   });
+
+  const fetchNotifications = async (isInitial = false) => {
+    try {
+      const res = await fetch('http://localhost:5000/api/notifications');
+      const json = await res.json();
+      if (json.success) {
+        const backendNotifs = json.data || [];
+        
+        if (!isInitial) {
+          setNotifications(prev => {
+            backendNotifs.forEach(bNotif => {
+              const exists = prev.some(p => p.id === bNotif.id);
+              if (!exists) {
+                // Trigger toast notification
+                const toastId = Date.now() + Math.random().toString(36).substr(2, 9);
+                setToasts(t => [...t, { id: toastId, message: bNotif.message, type: bNotif.type }]);
+                setTimeout(() => {
+                  setToasts(t => t.filter(x => x.id !== toastId));
+                }, 4000);
+              }
+            });
+            return backendNotifs;
+          });
+        } else {
+          setNotifications(backendNotifs);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to sync notifications:', err);
+    }
+  };
+
+  const handleClearNotifications = async () => {
+    try {
+      await fetch('http://localhost:5000/api/notifications', { method: 'DELETE' });
+      setNotifications([]);
+    } catch (err) {
+      console.error('Failed to clear notifications:', err);
+    }
+  };
+
+  // Synchronize notifications list on mount and start polling
+  useEffect(() => {
+    fetchNotifications(true);
+    
+    const interval = setInterval(() => {
+      fetchNotifications(false);
+    }, 15000);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   const showNotification = (title, message, type = 'success') => {
     setNotification({
@@ -77,6 +126,7 @@ export default function useNotificationManager() {
     setConfirmDialog,
     showNotification,
     showToast,
-    showConfirm
+    showConfirm,
+    handleClearNotifications
   };
 }

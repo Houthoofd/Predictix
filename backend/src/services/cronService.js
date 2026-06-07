@@ -1,4 +1,4 @@
-import { dbQuery, dbGet } from '../db/database.js';
+import { dbQuery, dbGet, insertNotification } from '../db/database.js';
 import { scrapeSingleMatch, isTorActive } from '../utils/scraperHelpers.js';
 
 const scheduledTimeouts = new Map();
@@ -42,6 +42,13 @@ function reschedule(matchId, minutes) {
   const retries = retryCounts.get(matchId) || 0;
   if (retries >= MAX_RETRIES) {
     console.warn(`[Predictix Re-Scraper] Max retries (${MAX_RETRIES}) reached for match ${matchId}. Stopping re-scraping attempts.`);
+    dbGet('SELECT home_team, away_team FROM scraped_predictions WHERE match_id = ?', [matchId])
+      .then(match => {
+        if (match) {
+          insertNotification(`Échec du re-scraping automatique de ${match.home_team} vs ${match.away_team} (Max retries atteint).`, 'warning');
+        }
+      })
+      .catch(e => console.error(e));
     retryCounts.delete(matchId);
     scheduledTimeouts.delete(matchId);
     return;
@@ -129,6 +136,7 @@ export async function reScrapeMatch(matchId) {
       reschedule(matchId, 10);
     } else {
       console.log(`[Predictix Re-Scraper] Match ${matchId} successfully settled and marked as finished!`);
+      insertNotification(`Match terminé : ${details.home_team} vs ${details.away_team} (Score: ${details.score || 'N/A'})`, 'info');
       scheduledTimeouts.delete(matchId);
       retryCounts.delete(matchId);
     }

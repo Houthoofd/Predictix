@@ -1,4 +1,4 @@
-import { dbQuery, dbGet, dbRun } from '../db/database.js';
+import { dbQuery, dbGet, dbRun, insertNotification } from '../db/database.js';
 
 // Helper to synchronize bankroll balance based on initial balance and all bet outcomes
 export async function syncBankroll() {
@@ -104,6 +104,16 @@ export async function autoSettleBetsForMatch(matchId) {
         );
         
         console.log(`[Predictix Auto-Settle] ✓ Bet ID ${bet.id} resolved successfully: ${newStatus} (Payout: ${payout})`);
+        
+        const statusLabel = newStatus === 'WON' ? 'GAGNÉ' : (newStatus === 'LOST' ? 'PERDU' : 'ANNULÉ');
+        const profit = newStatus === 'WON' ? (bet.stake * (bet.odds - 1)).toFixed(2) : (newStatus === 'LOST' ? (-bet.stake).toFixed(2) : '0.00');
+        const profitSign = newStatus === 'WON' ? '+' : '';
+        const currency = '€'; // default currency symbol
+        
+        const notificationMsg = `Pari ${statusLabel} (${profitSign}${profit} ${currency}) : ${bet.home_team} vs ${bet.away_team} (${bet.best_tip} ${bet.card_line})`;
+        const notificationType = newStatus === 'WON' ? 'success' : (newStatus === 'LOST' ? 'error' : 'info');
+        
+        await insertNotification(notificationMsg, notificationType);
         
         const resItem = {
           id: bet.id,

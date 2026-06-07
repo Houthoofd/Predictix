@@ -137,6 +137,7 @@ export default function App() {
           bankroll={bets.bankroll}
           notifications={notify.notifications}
           setNotifications={notify.setNotifications}
+          handleClearNotifications={notify.handleClearNotifications}
         />
 
         <div className="page-body">
