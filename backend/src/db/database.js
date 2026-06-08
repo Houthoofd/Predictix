@@ -2,6 +2,7 @@ import sqlite3 from 'sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import { EventEmitter } from 'events';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -278,10 +279,20 @@ function initDb() {
   });
 }
 
+export const notificationEvents = new EventEmitter();
+
 export const insertNotification = async (message, type = 'info') => {
   try {
-    await dbRun('INSERT INTO notifications (message, type) VALUES (?, ?)', [message, type]);
+    const result = await dbRun('INSERT INTO notifications (message, type) VALUES (?, ?)', [message, type]);
     console.log(`[Predictix Notification] [${type.toUpperCase()}] ${message}`);
+    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    notificationEvents.emit('notification', {
+      id: result.id,
+      message,
+      type,
+      timestamp: timeStr,
+      read: 0
+    });
   } catch (err) { console.error('Failed to insert notification:', err); }
 };
 

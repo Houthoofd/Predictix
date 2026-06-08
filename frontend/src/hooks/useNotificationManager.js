@@ -21,31 +21,12 @@ export default function useNotificationManager(globalSettings) {
     onCancel: null
   });
 
-  const fetchNotifications = async (isInitial = false) => {
+  const fetchNotifications = async () => {
     try {
       const res = await fetch('/api/notifications');
       const json = await res.json();
       if (json.success) {
-        const backendNotifs = json.data || [];
-        
-        if (!isInitial) {
-          setNotifications(prev => {
-            backendNotifs.forEach(bNotif => {
-              const exists = prev.some(p => p.id === bNotif.id);
-              if (!exists) {
-                // Trigger toast notification
-                const toastId = Date.now() + Math.random().toString(36).substr(2, 9);
-                setToasts(t => [...t, { id: toastId, message: bNotif.message, type: bNotif.type }]);
-                setTimeout(() => {
-                  setToasts(t => t.filter(x => x.id !== toastId));
-                }, 4000);
-              }
-            });
-            return backendNotifs;
-          });
-        } else {
-          setNotifications(backendNotifs);
-        }
+        setNotifications(json.data || []);
       }
     } catch (err) {
       console.error('Failed to sync notifications:', err);
@@ -61,20 +42,45 @@ export default function useNotificationManager(globalSettings) {
     }
   };
 
-  // Synchronize notifications list on mount and start polling depending on settings
+  // Synchronize notifications list on mount and listen to SSE stream if enabled
   useEffect(() => {
-    fetchNotifications(true);
+    fetchNotifications();
     
     const isRealtime = !globalSettings || globalSettings.realtime_notifications !== 'false';
     if (!isRealtime) {
       return;
     }
     
-    const interval = setInterval(() => {
-      fetchNotifications(false);
-    }, 15000);
+    const eventSource = new EventSource('/api/notifications/stream');
     
-    return () => clearInterval(interval);
+    eventSource.onmessage = (event) => {
+      try {
+        const newNotif = JSON.parse(event.data);
+        setNotifications(prev => {
+          const exists = prev.some(p => p.id === newNotif.id);
+          if (!exists) {
+            // Trigger toast notification
+            const toastId = Date.now() + Math.random().toString(36).substr(2, 9);
+            setToasts(t => [...t, { id: toastId, message: newNotif.message, type: newNotif.type }]);
+            setTimeout(() => {
+              setToasts(t => t.filter(x => x.id !== toastId));
+            }, 4000);
+            return [newNotif, ...prev];
+          }
+          return prev;
+        });
+      } catch (err) {
+        console.error('Failed to parse SSE notification:', err);
+      }
+    };
+
+    eventSource.onerror = (err) => {
+      console.error('EventSource connection error, attempting automatic reconnection...', err);
+    };
+
+    return () => {
+      eventSource.close();
+    };
   }, [globalSettings]);
 
   const showNotification = (title, message, type = 'success') => {

@@ -4,7 +4,7 @@ import discoveryController from '../controllers/discoveryController.js';
 import integrityController from '../controllers/integrityController.js';
 import customDataController from '../controllers/customDataController.js';
 import { getScheduledCrons, reScrapeMatch, cancelScheduledReScrape, getCronLogs } from '../services/cronService.js';
-import { dbQuery, dbRun } from '../db/database.js';
+import { dbQuery, dbRun, notificationEvents } from '../db/database.js';
 
 const router = express.Router();
 
@@ -63,6 +63,36 @@ router.get('/scraper/crons/history', async (req, res) => {
 });
 
 // Notifications endpoints
+router.get('/notifications/stream', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+
+  res.flushHeaders();
+
+  // Send initial ping to establish connection
+  res.write(':\n\n');
+
+  const onNotification = (notification) => {
+    res.write(`data: ${JSON.stringify(notification)}\n\n`);
+  };
+
+  notificationEvents.on('notification', onNotification);
+
+  // Send a heartbeat ping every 30 seconds to prevent connection timeouts
+  const pingInterval = setInterval(() => {
+    res.write(':\n\n');
+  }, 30000);
+
+  req.on('close', () => {
+    clearInterval(pingInterval);
+    notificationEvents.off('notification', onNotification);
+  });
+});
+
 router.get('/notifications', async (req, res) => {
   try {
     const notifications = await dbQuery('SELECT * FROM notifications ORDER BY timestamp DESC LIMIT 100');
