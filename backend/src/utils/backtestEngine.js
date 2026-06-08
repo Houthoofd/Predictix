@@ -80,6 +80,11 @@ export async function runBacktest(strategyId, defaultOddsInput = 1.80, minCovera
     const mainMatchDateStr = parseFrenchDate(match.date);
     if (!mainMatchDateStr) continue;
 
+    if (!match.home_team || !match.away_team) {
+      skippedMissingStats++;
+      continue;
+    }
+
     // Find finished matches for home/away teams to use as prior H2H (optimized in-memory search)
     const sortedTeams = [match.home_team.trim(), match.away_team.trim()].sort();
     const key = `${sortedTeams[0]} vs ${sortedTeams[1]}`;
@@ -150,7 +155,7 @@ export async function runBacktest(strategyId, defaultOddsInput = 1.80, minCovera
 
     // Evaluate operator condition for triggers
     let triggered = false;
-    if (operator === '>=' || operator === '>=') {
+    if (operator === '>=') {
       triggered = avg >= threshold;
     } else if (operator === '<=') {
       triggered = avg <= threshold;
@@ -203,7 +208,7 @@ export async function runBacktest(strategyId, defaultOddsInput = 1.80, minCovera
 
       // Evaluate actual outcome
       let won = false;
-      if (operator === '>=' || operator === '>=') {
+      if (operator === '>=') {
         won = actualVal >= threshold;
       } else if (operator === '<=') {
         won = actualVal <= threshold;
