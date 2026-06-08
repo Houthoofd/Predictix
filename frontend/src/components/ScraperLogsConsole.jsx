@@ -1,5 +1,6 @@
 import React from 'react';
 import { Terminal } from 'lucide-react';
+import styles from './ScraperLogsConsole.module.css';
 
 export default function ScraperLogsConsole({ scraperLogs, consoleEndRef }) {
   return (
@@ -8,9 +9,9 @@ export default function ScraperLogsConsole({ scraperLogs, consoleEndRef }) {
         <Terminal size={14} />
         <span>LOGS DU SERVEUR SCRAPPER-LITE</span>
       </div>
-      <div className="scraper-console">
+      <div className={styles.scraperConsole}>
         {scraperLogs.map((log, idx) => (
-          <div key={idx} className={`console-line ${log.type}`}>
+          <div key={idx} className={`${styles.consoleLine} ${styles[log.type] || ''}`}>
             {log.message}
           </div>
         ))}

@@ -1,0 +1,107 @@
+.appHeader {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 32px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  margin-left: -32px;
+  margin-right: -32px;
+  margin-bottom: 24px;
+  box-sizing: border-box;
+  transition: background-color var(--transition-normal), border-color var(--transition-normal);
+}
+
+.sidebarToggleBtn {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.sidebarToggleBtn:hover {
+  color: var(--text-primary);
+  border-color: var(--border-glow);
+  background: var(--bg-tertiary);
+}
+
+.breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-brand);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.crumbBrand {
+  letter-spacing: 0.05em;
+}
+
+.crumbSeparator {
+  color: var(--text-muted);
+}
+
+.crumbActive {
+  color: var(--text-secondary);
+}
+
+.headerThemeDots {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 20px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.headerThemeDots .themeDot {
+  transition: transform var(--transition-fast);
+}
+
+.headerThemeDots .themeDot:hover {
+  transform: scale(1.15);
+}
+
+.headerWalletPill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  font-family: var(--font-brand);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.headerProfileAvatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--grad-accent);
+  color: #050a15;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-brand);
+  font-weight: 800;
+  font-size: 13px;
+  box-shadow: 0 2px 8px rgba(0, 98, 255, 0.15);
+  border: 1.5px solid var(--bg-primary);
+}
+
+[data-theme='light'] .headerProfileAvatar {
+  color: #ffffff;
+}

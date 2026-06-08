@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { sportLabels, ALL_SPORTS } from '../utils/labels';
 import { sportIcons } from './SidebarIcons';
+import styles from './Sidebar.module.css';
 
 export default function Sidebar({ 
   sidebarCollapsed, 
@@ -41,16 +42,16 @@ export default function Sidebar({
   }, [selectedMagicSport]);
 
   return (
-    <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
+    <aside className={`${styles.sidebar} ${sidebarCollapsed ? styles.collapsed : ''}`}>
       <div>
-        <div className="sidebar-logo">
-          <div className="logo-icon">P</div>
-          {!sidebarCollapsed && <div className="logo-text">PREDICTIX</div>}
+        <div className={styles.sidebarLogo}>
+          <div className={styles.logoIcon}>P</div>
+          {!sidebarCollapsed && <div className={styles.logoText}>PREDICTIX</div>}
         </div>
         
-        <nav className="sidebar-nav">
+        <nav className={styles.sidebarNav}>
           <button 
-            className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`}
+            className={`${styles.navItem} ${activeTab === 'dashboard' ? styles.active : ''}`}
             onClick={() => setActiveTab('dashboard')}
             title={sidebarCollapsed ? "Tableau de Bord" : ""}
           >
@@ -59,7 +60,7 @@ export default function Sidebar({
           </button>
           <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
             <button 
-              className={`nav-item ${activeTab === 'magic-predictions' ? 'active' : ''}`}
+              className={`${styles.navItem} ${activeTab === 'magic-predictions' ? styles.active : ''}`}
               onClick={() => {
                 if (sidebarCollapsed) {
                   setShowMagicPopover(prev => !prev);
@@ -207,7 +208,7 @@ export default function Sidebar({
             )}
             
             <div 
-              className="sports-submenu"
+              className={styles.sportsSubmenu}
               style={{ 
                 display: 'flex', 
                 flexDirection: 'column', 
@@ -295,7 +296,7 @@ export default function Sidebar({
             </div>
           </div>
           <button 
-            className={`nav-item ${activeTab === 'basket' ? 'active' : ''}`}
+            className={`${styles.navItem} ${activeTab === 'basket' ? styles.active : ''}`}
             onClick={() => setActiveTab('basket')}
             title={sidebarCollapsed ? `Panier de Paris (${basketCount})` : ""}
             style={{
@@ -326,7 +327,7 @@ export default function Sidebar({
             )}
           </button>
           <button 
-            className={`nav-item ${activeTab === 'scraper' ? 'active' : ''}`}
+            className={`${styles.navItem} ${activeTab === 'scraper' ? styles.active : ''}`}
             onClick={() => setActiveTab('scraper')}
             title={sidebarCollapsed ? "Collecteur de Données" : ""}
           >
@@ -334,7 +335,7 @@ export default function Sidebar({
             {!sidebarCollapsed && <span>Collecteur de Données</span>}
           </button>
           <button 
-            className={`nav-item ${activeTab === 'crons' ? 'active' : ''}`}
+            className={`${styles.navItem} ${activeTab === 'crons' ? styles.active : ''}`}
             onClick={() => setActiveTab('crons')}
             title={sidebarCollapsed ? "Planifications" : ""}
             style={{
@@ -347,7 +348,7 @@ export default function Sidebar({
             {!sidebarCollapsed && <span>Planifications</span>}
           </button>
           <button 
-            className={`nav-item ${activeTab === 'tracker' ? 'active' : ''}`}
+            className={`${styles.navItem} ${activeTab === 'tracker' ? styles.active : ''}`}
             onClick={() => setActiveTab('tracker')}
             title={sidebarCollapsed ? "Suivi des Paris" : ""}
           >
@@ -355,7 +356,7 @@ export default function Sidebar({
             {!sidebarCollapsed && <span>Suivi des Paris</span>}
           </button>
           <button 
-            className={`nav-item ${activeTab === 'strategies' ? 'active' : ''}`}
+            className={`${styles.navItem} ${activeTab === 'strategies' ? styles.active : ''}`}
             onClick={() => setActiveTab('strategies')}
             title={sidebarCollapsed ? "Stratégies" : ""}
           >
@@ -363,7 +364,7 @@ export default function Sidebar({
             {!sidebarCollapsed && <span>Stratégies</span>}
           </button>
           <button 
-            className={`nav-item ${activeTab === 'integrity' ? 'active' : ''}`}
+            className={`${styles.navItem} ${activeTab === 'integrity' ? styles.active : ''}`}
             onClick={() => setActiveTab('integrity')}
             title={sidebarCollapsed ? "Qualité des Données" : ""}
             style={{
@@ -376,7 +377,7 @@ export default function Sidebar({
             {!sidebarCollapsed && <span>Qualité des Données</span>}
           </button>
           <button 
-            className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`}
+            className={`${styles.navItem} ${activeTab === 'settings' ? styles.active : ''}`}
             onClick={() => setActiveTab('settings')}
             title={sidebarCollapsed ? "Paramètres" : ""}
             style={{
@@ -391,7 +392,7 @@ export default function Sidebar({
         </nav>
       </div>
 
-      <div className="sidebar-footer">
+      <div className={styles.sidebarFooter}>
         {!sidebarCollapsed ? (
           <button 
             className="btn btn-secondary" 

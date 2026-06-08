@@ -1,0 +1,180 @@
+.sidebar {
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
+  height: 100vh;
+  width: var(--sidebar-width);
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: width var(--transition-normal);
+  padding: 0 0 24px 0;
+}
+
+.sidebar.collapsed {
+  width: 72px;
+}
+
+.sidebarLogo {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 20px;
+  box-sizing: border-box;
+  transition: justify-content var(--transition-normal), padding var(--transition-normal);
+}
+
+.sidebar.collapsed .sidebarLogo {
+  padding: 0;
+  justify-content: center;
+}
+
+.logoIcon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  background: var(--grad-accent);
+  color: #ffffff;
+  font-family: var(--font-brand);
+  font-weight: 800;
+  font-size: 17px;
+  box-shadow: 0 2px 8px rgba(0, 98, 255, 0.15);
+  transition: background var(--transition-normal);
+}
+
+[data-theme='light'] .logoIcon {
+  color: #ffffff;
+}
+
+.logoText {
+  font-family: var(--font-brand);
+  font-weight: 700;
+  font-size: 20px;
+  letter-spacing: 0.03em;
+  color: var(--text-primary);
+}
+
+.sidebarNav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-grow: 1;
+  padding: 0 14px;
+}
+
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-secondary);
+  font-family: var(--font-brand);
+  font-weight: 600;
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  outline: none;
+  text-decoration: none;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  width: 100%;
+  text-align: left;
+}
+
+.sidebar.collapsed .navItem {
+  width: 38px !important;
+  height: 38px !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 0 auto 10px auto !important;
+  border-radius: 10px !important;
+  position: relative !important;
+  border-left: none !important;
+  transform: none;
+}
+
+.navItem:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  transform: translateX(4px);
+}
+
+.navItem:active {
+  transform: scale(0.97);
+}
+
+.navItem.active {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-left: 3px solid var(--item-accent, var(--color-accent-solid));
+  border-radius: 0px var(--radius-sm) var(--radius-sm) 0px !important;
+}
+
+.navItem.active svg {
+  color: var(--item-accent, var(--color-accent-solid));
+}
+
+.sidebar.collapsed .navItem.active {
+  border-left: none !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: var(--item-accent, var(--color-accent-solid)) !important;
+  box-shadow: inset 0 0 0 1.5px var(--item-accent, var(--color-accent-solid)) !important;
+  border-radius: 10px !important;
+  transform: none !important;
+}
+
+.sidebar.collapsed .navItem:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: var(--text-primary) !important;
+  border-radius: 10px !important;
+  transform: scale(1.08) !important;
+  box-shadow: none !important;
+}
+
+.sidebar.collapsed .navItem:active {
+  transform: scale(0.92) !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+  transition: all 0.08s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.sidebarFooter {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border-top: 1px solid var(--border-color);
+  padding: 16px 14px 0 14px;
+}
+
+.themeToggleContainer {
+  padding: 4px 8px;
+}
+
+.themeToggleLabel {
+  font-size: 11px;
+  font-family: var(--font-brand);
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Hide scrollbar for sports submenu */
+.sportsSubmenu {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none;  /* IE and Edge */
+}
+.sportsSubmenu::-webkit-scrollbar {
+  display: none; /* Chrome, Safari and Opera */
+}

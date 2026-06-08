@@ -6,6 +6,7 @@ import {
   Bell
 } from 'lucide-react';
 import HeaderNotifications from './HeaderNotifications';
+import styles from './Header.module.css';
 
 export default function Header({ 
   sidebarCollapsed, 
@@ -59,20 +60,20 @@ export default function Header({
 
 
   return (
-    <header className="app-header" style={{ position: 'relative', overflow: 'visible' }}>
+    <header className={styles.appHeader} style={{ position: 'relative', overflow: 'visible' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
         <button 
-          className="sidebar-toggle-btn"
+          className={styles.sidebarToggleBtn}
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
           title={sidebarCollapsed ? "Agrandir le menu" : "Réduire le menu"}
         >
           {sidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
         </button>
         
-        <div className="breadcrumbs">
-          <span className="crumb-brand text-gradient-accent">PREDICTIX</span>
-          <ChevronRight size={12} className="crumb-separator" />
-          <span className="crumb-active">
+        <div className={styles.breadcrumbs}>
+          <span className={`${styles.crumbBrand} text-gradient-accent`}>PREDICTIX</span>
+          <ChevronRight size={12} className={styles.crumbSeparator} />
+          <span className={styles.crumbActive}>
             {activeTab === 'dashboard' && 'Tableau de Bord'}
             {activeTab === 'scraper' && 'Collecteur de Données'}
             {activeTab === 'tracker' && 'Tracker de Paris'}
@@ -85,9 +86,9 @@ export default function Header({
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px', position: 'relative' }}>
         {/* Theme switcher */}
-        <div className="header-theme-dots">
+        <div className={styles.headerThemeDots}>
           <button 
-            className={`theme-dot ${theme === 'modern' ? 'active' : ''}`}
+            className={`${styles.themeDot} ${theme === 'modern' ? styles.active : ''}`}
             style={{ 
               width: '18px', height: '18px', borderRadius: '50%', border: '1.5px solid transparent', 
               background: 'linear-gradient(135deg, #0062ff, #00f5a0)', cursor: 'pointer',
@@ -98,7 +99,7 @@ export default function Header({
             title="Sombre Moderne (Vert)"
           />
           <button 
-            className={`theme-dot ${theme === 'tech' ? 'active' : ''}`}
+            className={`${styles.themeDot} ${theme === 'tech' ? styles.active : ''}`}
             style={{ 
               width: '18px', height: '18px', borderRadius: '50%', border: '1.5px solid transparent', 
               background: 'linear-gradient(135deg, #7f00ff, #00f5d4)', cursor: 'pointer',
@@ -109,7 +110,7 @@ export default function Header({
             title="Sombre Technologique (Violet)"
           />
           <button 
-            className={`theme-dot ${theme === 'light' ? 'active' : ''}`}
+            className={`${styles.themeDot} ${theme === 'light' ? styles.active : ''}`}
             style={{ 
               width: '18px', height: '18px', borderRadius: '50%', 
               background: '#cbd5e1', border: '1px solid #94a3b8', cursor: 'pointer',
@@ -167,12 +168,12 @@ export default function Header({
           )}
         </div>
 
-        <div className="header-wallet-pill">
+        <div className={styles.headerWalletPill}>
           <Wallet size={13} className="wallet-pill-icon text-gradient-accent" />
           <span>{bankroll.balance?.toFixed(2)} {bankroll.currency}</span>
         </div>
 
-        <div className="header-profile-avatar" title="Benoit (Propriétaire)">
+        <div className={styles.headerProfileAvatar} title="Benoit (Propriétaire)">
           B
         </div>
       </div>
