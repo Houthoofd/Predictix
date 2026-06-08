@@ -29,7 +29,7 @@ export default function StrategiesTab() {
   const fetchStrategies = async () => {
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:5000/api/strategies/magic');
+      const res = await fetch('/api/strategies/magic');
       const json = await res.json();
       if (json.success) {
         setStrategies(json.data || []);
@@ -66,7 +66,7 @@ export default function StrategiesTab() {
     }, 900);
 
     try {
-      const res = await fetch('http://localhost:5000/api/strategies/magic', {
+      const res = await fetch('/api/strategies/magic', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: prompt.trim() })
@@ -94,7 +94,7 @@ export default function StrategiesTab() {
 
   const handleToggleStatus = async (id) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/strategies/magic/${id}/toggle`, {
+      const res = await fetch(`/api/strategies/magic/${id}/toggle`, {
         method: 'POST'
       });
       const json = await res.json();
@@ -111,7 +111,7 @@ export default function StrategiesTab() {
       return;
     }
     try {
-      const res = await fetch(`http://localhost:5000/api/strategies/magic/${id}`, {
+      const res = await fetch(`/api/strategies/magic/${id}`, {
         method: 'DELETE'
       });
       const json = await res.json();
@@ -127,7 +127,7 @@ export default function StrategiesTab() {
     setBacktestingId(id);
     setBacktestResults(null);
     try {
-      const res = await fetch(`http://localhost:5000/api/strategies/backtest/${id}`, {
+      const res = await fetch(`/api/strategies/backtest/${id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 

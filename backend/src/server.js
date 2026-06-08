@@ -61,6 +61,16 @@ const server = app.listen(PORT, () => {
       initReScraper();
     })
     .catch(err => console.error('[Predictix Server] Failed to initialize re-scraper service:', err));
+
+  // Auto-train GBDT models on startup
+  import('./utils/gbdtTrainer.js')
+    .then(({ trainGBDTModels }) => {
+      import('./db/database.js').then(({ dbQuery }) => {
+        console.log('[Predictix Server] Initial GBDT model training triggered...');
+        trainGBDTModels(dbQuery).catch(err => console.error('[Predictix Server] GBDT training failed on startup:', err));
+      });
+    })
+    .catch(err => console.error('[Predictix Server] Failed to import GBDT trainer:', err));
 });
 
 // Completely disable all server-level request, connection, and header timeouts for long scraper operations

@@ -31,7 +31,7 @@ export default function CronsTab({ showNotification }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('http://localhost:5000/api/scraper/crons');
+      const res = await fetch('/api/scraper/crons');
       const json = await res.json();
       if (json.success) {
         setCrons(json.data || []);
@@ -50,7 +50,7 @@ export default function CronsTab({ showNotification }) {
     setHistoryLoading(true);
     setHistoryError(null);
     try {
-      const res = await fetch('http://localhost:5000/api/scraper/crons/history');
+      const res = await fetch('/api/scraper/crons/history');
       const json = await res.json();
       if (json.success) {
         setHistory(json.data || []);
@@ -67,7 +67,7 @@ export default function CronsTab({ showNotification }) {
 
   const fetchLogs = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/scraper/crons/logs');
+      const res = await fetch('/api/scraper/crons/logs');
       const json = await res.json();
       if (json.success) {
         setLogs(json.data || []);
@@ -117,7 +117,7 @@ export default function CronsTab({ showNotification }) {
     if (actionLoading) return;
     setActionLoading({ matchId, action: 'run' });
     try {
-      const res = await fetch(`http://localhost:5000/api/scraper/crons/${encodeURIComponent(matchId)}/run`, {
+      const res = await fetch(`/api/scraper/crons/${encodeURIComponent(matchId)}/run`, {
         method: 'POST'
       });
       const json = await res.json();
@@ -150,7 +150,7 @@ export default function CronsTab({ showNotification }) {
     if (actionLoading) return;
     setActionLoading({ matchId, action: 'cancel' });
     try {
-      const res = await fetch(`http://localhost:5000/api/scraper/crons/${encodeURIComponent(matchId)}`, {
+      const res = await fetch(`/api/scraper/crons/${encodeURIComponent(matchId)}`, {
         method: 'DELETE'
       });
       const json = await res.json();

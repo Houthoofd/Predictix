@@ -57,9 +57,10 @@ export async function bootstrapTorInstances(neededWorkers, scraperPath, log = co
   const possiblePorts = [9050, 9052, 9054, 9056, 9058, 9060, 9062, 9064, 9066, 9068, 9070, 9072];
   const portsToActivate = possiblePorts.slice(0, neededWorkers);
   log(`[Tor Bootstrap] Allocation demandée : ${neededWorkers} instances. Analyse des ports : ${portsToActivate.join(', ')}...`);
-  const torExe = path.join(scraperPath, 'tor', 'tor', 'tor.exe');
+  const torBinName = process.platform === 'win32' ? 'tor.exe' : 'tor';
+  const torExe = path.join(scraperPath, 'tor', 'tor', torBinName);
   if (!fs.existsSync(torExe)) {
-    log(`[Tor Bootstrap] [Erreur] tor.exe introuvable à l'adresse : ${torExe}. Démarrage manuel requis.`);
+    log(`[Tor Bootstrap] [Erreur] ${torBinName} introuvable à l'adresse : ${torExe}. Démarrage manuel requis.`);
     return;
   }
   for (const port of portsToActivate) {

@@ -1,4 +1,3 @@
-import { trainGBDTModels } from './gbdtTrainer.js';
 import { computeLeagueAverages } from './predictionAverages.js';
 import { enrichMatchPredictions } from './predictionEngine.js';
 
@@ -6,11 +5,6 @@ import { enrichMatchPredictions } from './predictionEngine.js';
  * Fetch and enrich predictions using optimized in-memory historical match maps.
  */
 export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistoryMatches = new Set()) {
-  try {
-    await trainGBDTModels(dbQueryFn);
-  } catch (err) {
-    console.error("[Prediction Engine] Failed to auto-train GBDT models:", err);
-  }
 
   let sql = 'SELECT * FROM scraped_predictions WHERE is_historical = 0';
   const params = [];

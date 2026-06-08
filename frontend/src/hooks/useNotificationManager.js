@@ -23,7 +23,7 @@ export default function useNotificationManager(globalSettings) {
 
   const fetchNotifications = async (isInitial = false) => {
     try {
-      const res = await fetch('http://localhost:5000/api/notifications');
+      const res = await fetch('/api/notifications');
       const json = await res.json();
       if (json.success) {
         const backendNotifs = json.data || [];
@@ -54,7 +54,7 @@ export default function useNotificationManager(globalSettings) {
 
   const handleClearNotifications = async () => {
     try {
-      await fetch('http://localhost:5000/api/notifications', { method: 'DELETE' });
+      await fetch('/api/notifications', { method: 'DELETE' });
       setNotifications([]);
     } catch (err) {
       console.error('Failed to clear notifications:', err);

@@ -48,7 +48,7 @@ export default function BasketTab({
     
     setBasketLoading(true);
     try {
-      const res = await fetch('http://localhost:5000/api/bets/batch', {
+      const res = await fetch('/api/bets/batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bets: basketBets })

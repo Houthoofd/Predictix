@@ -1,27 +1,49 @@
-import { exec } from 'child_process';
+import https from 'https';
 import { parseFrenchDate } from './dateParser.js';
 import { fuzzyMatch } from './textMatcher.js';
 
 /**
- * Call SofaScore API using Windows curl.exe to retrieve daily events
+ * Helper function to fetch JSON from SofaScore API via native HTTPS
  */
-export function fetchSofaEventsForDate(dateStr) {
+function fetchSofaJSON(url) {
   return new Promise((resolve) => {
-    const cmd = `curl.exe -s -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" "https://api.sofascore.com/api/v1/sport/football/scheduled-events/${dateStr}"`;
-    exec(cmd, { maxBuffer: 1024 * 1024 * 10, timeout: 15000 }, (error, stdout, stderr) => {
-      if (error) {
-        console.error("[SofaScore API] curl.exe failed to get scheduled events:", error.message);
+    const options = {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json'
+      },
+      timeout: 10000
+    };
+    
+    https.get(url, options, (res) => {
+      if (res.statusCode !== 200) {
+        res.resume();
         return resolve(null);
       }
-      try {
-        const json = JSON.parse(stdout);
-        resolve(json.events || null);
-      } catch (err) {
-        console.error("[SofaScore API] Failed to parse events JSON output:", err.message);
-        resolve(null);
-      }
+      let rawData = '';
+      res.on('data', (chunk) => { rawData += chunk; });
+      res.on('end', () => {
+        try {
+          resolve(JSON.parse(rawData));
+        } catch (e) {
+          console.error(`[SofaScore API] JSON parse error for URL ${url}:`, e.message);
+          resolve(null);
+        }
+      });
+    }).on('error', (e) => {
+      console.error(`[SofaScore API] HTTP request failed for URL ${url}:`, e.message);
+      resolve(null);
     });
   });
+}
+
+/**
+ * Call SofaScore API using native HTTPS to retrieve daily events
+ */
+export async function fetchSofaEventsForDate(dateStr) {
+  const url = `https://api.sofascore.com/api/v1/sport/football/scheduled-events/${dateStr}`;
+  const data = await fetchSofaJSON(url);
+  return data ? data.events || null : null;
 }
 
 /**
@@ -46,25 +68,12 @@ export function findSofaEventId(events, homeTeam, awayTeam) {
 }
 
 /**
- * Call SofaScore API using Windows curl.exe to retrieve detailed statistics for a specific event
+ * Call SofaScore API using native HTTPS to retrieve detailed statistics for a specific event
  */
-export function fetchSofaStats(eventId) {
-  return new Promise((resolve) => {
-    const cmd = `curl.exe -s -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" "https://api.sofascore.com/api/v1/event/${eventId}/statistics"`;
-    exec(cmd, { maxBuffer: 1024 * 1024 * 10, timeout: 15000 }, (error, stdout, stderr) => {
-      if (error) {
-        console.error(`[SofaScore API] Failed to fetch stats for event ${eventId}:`, error.message);
-        return resolve(null);
-      }
-      try {
-        const json = JSON.parse(stdout);
-        resolve(json.statistics || null);
-      } catch (err) {
-        console.error(`[SofaScore API] Failed to parse stats JSON for event ${eventId}:`, err.message);
-        resolve(null);
-      }
-    });
-  });
+export async function fetchSofaStats(eventId) {
+  const url = `https://api.sofascore.com/api/v1/event/${eventId}/statistics`;
+  const data = await fetchSofaJSON(url);
+  return data ? data.statistics || null : null;
 }
 
 /**

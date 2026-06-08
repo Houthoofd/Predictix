@@ -37,7 +37,7 @@ export default function ScraperTab({
   useEffect(() => {
     const fetchActiveStrategies = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/strategies/magic');
+        const res = await fetch('/api/strategies/magic');
         const json = await res.json();
         if (json.success) {
           setStrategies(json.data.filter(s => s.status === 'ACTIVE') || []);

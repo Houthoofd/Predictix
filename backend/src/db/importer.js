@@ -1,4 +1,4 @@
-import { dbRun } from './database.js';
+import { dbRun, dbQuery } from './database.js';
 import { parseFrenchDate } from '../utils/scraperHelpers.js';
 import { autoSettleBetsForMatch } from '../services/betsService.js';
 
@@ -10,7 +10,10 @@ export async function importScrapedMatches(matches, scrapedAt) {
   let importedCount = 0;
   const settledBetsList = [];
 
-  for (const match of matches) {
+  try {
+    await dbRun('BEGIN TRANSACTION');
+
+    for (const match of matches) {
     if (!match.home_team || !match.away_team) {
       continue;
     }
@@ -119,6 +122,25 @@ export async function importScrapedMatches(matches, scrapedAt) {
         })
         .catch(err => console.error('[Predictix Import] Failed to schedule re-scrape:', err));
     }
+    }
+
+    await dbRun('COMMIT');
+  } catch (err) {
+    console.error('[Predictix Import] Error during match import, rolling back:', err.message);
+    try {
+      await dbRun('ROLLBACK');
+    } catch (rbErr) {
+      console.error('[Predictix Import] Rollback failed:', rbErr.message);
+    }
+    throw err;
+  }
+
+  if (importedCount > 0) {
+    import('../utils/gbdtTrainer.js')
+      .then(({ trainGBDTModels }) => {
+        trainGBDTModels(dbQuery).catch(err => console.error('[Predictix Import] GBDT retraining failed:', err));
+      })
+      .catch(err => console.error('[Predictix Import] Failed to import GBDT trainer:', err));
   }
 
   return { importedCount, settledBetsList };

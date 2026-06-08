@@ -8,8 +8,7 @@ import {
   covariance1MT, 
   covariance2MT, 
   covarianceFT, 
-  leagueAveragesCache, 
-  trainGBDTModels 
+  leagueAveragesCache
 } from './gbdtTrainer.js';
 import { 
   getLeagueKey, 
@@ -315,11 +314,6 @@ export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatc
  * Fetch and enrich predictions based on date query parameters
  */
 export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistoryMatches = new Set()) {
-  try {
-    await trainGBDTModels(dbQueryFn);
-  } catch (err) {
-    console.error("[Prediction Engine] Failed to auto-train GBDT models:", err);
-  }
 
   let sql = 'SELECT * FROM scraped_predictions WHERE is_historical = 0';
   const params = [];
