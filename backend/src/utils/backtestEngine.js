@@ -40,6 +40,23 @@ export async function runBacktest(strategyId, defaultOddsInput = 1.80, minCovera
     ORDER BY date ASC, time ASC
   `);
 
+  // Pre-fetch all finished matches to index H2H matches in memory
+  const allFinished = await dbQuery(`
+    SELECT * FROM scraped_predictions 
+    WHERE is_finished = 1
+  `);
+
+  const h2hMap = new Map();
+  for (const m of allFinished) {
+    if (!m.home_team || !m.away_team) continue;
+    const sortedTeams = [m.home_team.trim(), m.away_team.trim()].sort();
+    const key = `${sortedTeams[0]} vs ${sortedTeams[1]}`;
+    if (!h2hMap.has(key)) {
+      h2hMap.set(key, []);
+    }
+    h2hMap.get(key).push(m);
+  }
+
   const betLogs = [];
   let totalBets = 0;
   let wins = 0;
@@ -63,12 +80,10 @@ export async function runBacktest(strategyId, defaultOddsInput = 1.80, minCovera
     const mainMatchDateStr = parseFrenchDate(match.date);
     if (!mainMatchDateStr) continue;
 
-    // Find finished matches for home/away teams to use as prior H2H
-    const allH2H = await dbQuery(`
-      SELECT * FROM scraped_predictions 
-      WHERE is_finished = 1 
-        AND ((home_team = ? AND away_team = ?) OR (home_team = ? AND away_team = ?))
-    `, [match.home_team, match.away_team, match.away_team, match.home_team]);
+    // Find finished matches for home/away teams to use as prior H2H (optimized in-memory search)
+    const sortedTeams = [match.home_team.trim(), match.away_team.trim()].sort();
+    const key = `${sortedTeams[0]} vs ${sortedTeams[1]}`;
+    const allH2H = h2hMap.get(key) || [];
 
     // Filter H2H matches that occurred strictly before the main match date
     const priorH2H = allH2H.filter(h => {

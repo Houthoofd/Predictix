@@ -8,8 +8,9 @@ echo          DEMARRAGE DE PREDICTIX - Sports Betting Intelligence
 echo ========================================================================
 echo.
 
-REM Tuer les anciens processus s'ils existent
-taskkill /IM node.exe /F >nul 2>&1
+REM Liberer uniquement les ports 3000 (Vite) et 5000 (Express) s'ils sont occupes
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr :3000 ^| findstr LISTENING') do taskkill /f /pid %%a >nul 2>&1
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr :5000 ^| findstr LISTENING') do taskkill /f /pid %%a >nul 2>&1
 
 echo [1/3] Demarrage du Proxy Tor local (Port 9050)...
 powershell -ExecutionPolicy Bypass -File E:\Developpement\scrapper-v3\scripts\start-tor.ps1

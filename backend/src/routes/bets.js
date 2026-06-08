@@ -2,6 +2,7 @@ import express from 'express';
 import { dbQuery, dbGet, dbRun } from '../db/database.js';
 import { syncBankroll, normalizeBookmaker } from '../services/betsService.js';
 import { resolveSingleBet, resolveAllPendingBets } from '../services/betsResolverService.js';
+import { validateBet, validateBetsBatch } from '../utils/validation.js';
 
 const router = express.Router();
 const handleError = (res, err) => res.status(500).json({ success: false, error: { message: err.message } });
@@ -74,28 +75,22 @@ router.get('/bets', async (req, res) => {
 
 // Add a new bet
 router.post('/bets', async (req, res) => {
+  const result = validateBet(req.body);
+  if (!result.isValid) {
+    return res.status(400).json({ success: false, error: { message: result.errors.join(' | ') } });
+  }
+
   const {
     match_id, date, time, league, home_team, away_team,
     best_tip, card_line, odds, stake, probability,
     bookmaker, status, notes, match_url, sport
-  } = req.body;
+  } = result.normalizedData;
 
-  if (!date || !time || !league || !home_team || !away_team || !best_tip || card_line === undefined || odds === undefined || stake === undefined) {
-    return res.status(400).json({ success: false, error: { message: 'Missing required bet fields' } });
-  }
-
-  const cleanCardLine = parseFloat(card_line);
-  const cleanOdds = parseFloat(odds);
-  const cleanStake = parseFloat(stake);
-  const cleanProb = probability ? parseInt(probability) : null;
-  const cleanStatus = status || 'PENDING';
-  const cleanSport = sport || 'football';
-  
   let payout = 0;
-  if (cleanStatus === 'WON') {
-    payout = cleanStake * cleanOdds;
-  } else if (cleanStatus === 'REFUNDED') {
-    payout = cleanStake;
+  if (status === 'WON') {
+    payout = stake * odds;
+  } else if (status === 'REFUNDED') {
+    payout = stake;
   }
 
   try {
@@ -108,15 +103,15 @@ router.post('/bets', async (req, res) => {
     `;
 
     const params = [
-      match_id || null, date, time, league, home_team, away_team,
-      best_tip, cleanCardLine, cleanOdds, cleanStake, cleanProb,
-      normalizeBookmaker(bookmaker || 'Unibet'), cleanStatus, payout, notes || null, match_url || null, cleanSport
+      match_id, date, time, league, home_team, away_team,
+      best_tip, card_line, odds, stake, probability,
+      normalizeBookmaker(bookmaker), status, payout, notes, match_url, sport
     ];
 
-    const result = await dbRun(sql, params);
+    const insertResult = await dbRun(sql, params);
     await syncBankroll();
 
-    const newBet = await dbGet('SELECT * FROM bets WHERE id = ?', [result.id]);
+    const newBet = await dbGet('SELECT * FROM bets WHERE id = ?', [insertResult.id]);
     res.status(201).json({ success: true, data: newBet });
   } catch (error) { handleError(res, error); }
 });
@@ -129,51 +124,54 @@ router.post('/bets/batch', async (req, res) => {
     return res.status(400).json({ success: false, error: { message: 'Missing or invalid bets array' } });
   }
 
+  const result = validateBetsBatch(bets);
+  if (!result.isValid) {
+    return res.status(400).json({ success: false, error: { message: result.errors.join(' | ') } });
+  }
+
   try {
     const insertedBets = [];
     
-    for (const bet of bets) {
-      const {
-        match_id, date, time, league, home_team, away_team,
-        best_tip, card_line, odds, stake, probability,
-        bookmaker, status, notes, match_url, sport
-      } = bet;
-
-      if (!date || !time || !league || !home_team || !away_team || !best_tip || card_line === undefined || odds === undefined || stake === undefined) {
-        continue;
-      }
-
-      const cleanCardLine = parseFloat(card_line);
-      const cleanOdds = parseFloat(odds);
-      const cleanStake = parseFloat(stake);
-      const cleanProb = probability ? parseInt(probability) : null;
-      const cleanStatus = status || 'PENDING';
-      const cleanSport = sport || 'football';
-      
-      let payout = 0;
-      if (cleanStatus === 'WON') {
-        payout = cleanStake * cleanOdds;
-      } else if (cleanStatus === 'REFUNDED') {
-        payout = cleanStake;
-      }
-
-      const sql = `
-        INSERT INTO bets (
+    // Group batch inserts in a transaction for safety and performance
+    await dbRun('BEGIN TRANSACTION');
+    
+    try {
+      for (const bet of result.normalizedBets) {
+        const {
           match_id, date, time, league, home_team, away_team,
           best_tip, card_line, odds, stake, probability,
-          bookmaker, status, payout, notes, match_url, sport
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `;
+          bookmaker, status, notes, match_url, sport
+        } = bet;
 
-      const params = [
-        match_id || null, date, time, league, home_team, away_team,
-        best_tip, cleanCardLine, cleanOdds, cleanStake, cleanProb,
-        normalizeBookmaker(bookmaker || 'Unibet'), cleanStatus, payout, notes || null, match_url || null, cleanSport
-      ];
+        let payout = 0;
+        if (status === 'WON') {
+          payout = stake * odds;
+        } else if (status === 'REFUNDED') {
+          payout = stake;
+        }
 
-      const result = await dbRun(sql, params);
-      const newBet = await dbGet('SELECT * FROM bets WHERE id = ?', [result.id]);
-      insertedBets.push(newBet);
+        const sql = `
+          INSERT INTO bets (
+            match_id, date, time, league, home_team, away_team,
+            best_tip, card_line, odds, stake, probability,
+            bookmaker, status, payout, notes, match_url, sport
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+
+        const params = [
+          match_id, date, time, league, home_team, away_team,
+          best_tip, card_line, odds, stake, probability,
+          normalizeBookmaker(bookmaker), status, payout, notes, match_url, sport
+        ];
+
+        const insertResult = await dbRun(sql, params);
+        const newBet = await dbGet('SELECT * FROM bets WHERE id = ?', [insertResult.id]);
+        insertedBets.push(newBet);
+      }
+      await dbRun('COMMIT');
+    } catch (err) {
+      await dbRun('ROLLBACK');
+      throw err;
     }
 
     await syncBankroll();
@@ -184,10 +182,6 @@ router.post('/bets/batch', async (req, res) => {
 // Update an existing bet
 router.put('/bets/:id', async (req, res) => {
   const { id } = req.params;
-  const {
-    date, time, league, home_team, away_team, best_tip,
-    card_line, odds, stake, probability, bookmaker, status, notes, sport
-  } = req.body;
 
   try {
     const existing = await dbGet('SELECT * FROM bets WHERE id = ?', [id]);
@@ -195,19 +189,41 @@ router.put('/bets/:id', async (req, res) => {
       return res.status(404).json({ success: false, error: { message: 'Bet not found' } });
     }
 
-    const cleanCardLine = card_line !== undefined ? parseFloat(card_line) : existing.card_line;
-    const cleanOdds = odds !== undefined ? parseFloat(odds) : existing.odds;
-    const cleanStake = stake !== undefined ? parseFloat(stake) : existing.stake;
-    const cleanProb = probability !== undefined ? (probability ? parseInt(probability) : null) : existing.probability;
-    const cleanStatus = status !== undefined ? status : existing.status;
-    const cleanNotes = notes !== undefined ? notes : existing.notes;
-    const cleanSport = sport !== undefined ? sport : existing.sport;
-    
+    // Merge incoming changes with existing data to pass full object to validation
+    const mergedData = {
+      date: req.body.date !== undefined ? req.body.date : existing.date,
+      time: req.body.time !== undefined ? req.body.time : existing.time,
+      league: req.body.league !== undefined ? req.body.league : existing.league,
+      home_team: req.body.home_team !== undefined ? req.body.home_team : existing.home_team,
+      away_team: req.body.away_team !== undefined ? req.body.away_team : existing.away_team,
+      best_tip: req.body.best_tip !== undefined ? req.body.best_tip : existing.best_tip,
+      card_line: req.body.card_line !== undefined ? req.body.card_line : existing.card_line,
+      odds: req.body.odds !== undefined ? req.body.odds : existing.odds,
+      stake: req.body.stake !== undefined ? req.body.stake : existing.stake,
+      probability: req.body.probability !== undefined ? req.body.probability : existing.probability,
+      bookmaker: req.body.bookmaker !== undefined ? req.body.bookmaker : existing.bookmaker,
+      status: req.body.status !== undefined ? req.body.status : existing.status,
+      notes: req.body.notes !== undefined ? req.body.notes : existing.notes,
+      sport: req.body.sport !== undefined ? req.body.sport : existing.sport,
+      match_id: existing.match_id,
+      match_url: existing.match_url
+    };
+
+    const result = validateBet(mergedData);
+    if (!result.isValid) {
+      return res.status(400).json({ success: false, error: { message: result.errors.join(' | ') } });
+    }
+
+    const {
+      date, time, league, home_team, away_team, best_tip,
+      card_line, odds, stake, probability, bookmaker, status, notes, sport
+    } = result.normalizedData;
+
     let payout = 0;
-    if (cleanStatus === 'WON') {
-      payout = cleanStake * cleanOdds;
-    } else if (cleanStatus === 'REFUNDED') {
-      payout = cleanStake;
+    if (status === 'WON') {
+      payout = stake * odds;
+    } else if (status === 'REFUNDED') {
+      payout = stake;
     }
 
     const sql = `
@@ -219,10 +235,9 @@ router.put('/bets/:id', async (req, res) => {
     `;
 
     const params = [
-      date || existing.date, time || existing.time, league || existing.league,
-      home_team || existing.home_team, away_team || existing.away_team, best_tip || existing.best_tip,
-      cleanCardLine, cleanOdds, cleanStake, cleanProb, normalizeBookmaker(bookmaker || existing.bookmaker),
-      cleanStatus, payout, cleanNotes, cleanSport, id
+      date, time, league, home_team, away_team, best_tip,
+      card_line, odds, stake, probability, normalizeBookmaker(bookmaker),
+      status, payout, notes, sport, id
     ];
 
     await dbRun(sql, params);
