@@ -308,6 +308,7 @@ export async function enrichPrimaryMatch(matchId, primaryDetails, targetLink, ma
 function normalizeStatistics(stats) {
   if (!stats) return null;
   const normalized = { ...stats };
+  // Conservé pour compatibilité ascendante avec les anciennes données JSON scrapées (contenant la coquille 'cartons_janues')
   if (normalized.cartons_janues !== undefined) {
     normalized.yellow_cards = normalized.cartons_janues;
     delete normalized.cartons_janues;
