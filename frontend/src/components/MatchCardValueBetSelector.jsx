@@ -1,18 +1,6 @@
 import React from 'react';
 import { Sparkles } from 'lucide-react';
-
-const getMetricLabel = (metric) => {
-  const labels = {
-    fouls: 'Fautes',
-    yellow_cards: 'Cartons Jaunes',
-    possession: 'Possession',
-    shots_on_target: 'Tirs Cadrés',
-    shots: 'Tirs',
-    offsides: 'Hors-jeu',
-    corners: 'Corners'
-  };
-  return labels[metric] || metric;
-};
+import { getMetricLabel } from '../utils/labels';
 
 export default function MatchCardValueBetSelector({
   valueBets,

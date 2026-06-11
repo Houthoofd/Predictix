@@ -4,23 +4,11 @@ import {
   getMetricPeriodRatio,
   getAverage
 } from '../utils/poissonUtils';
+import { getMetricLabel } from '../utils/labels';
 import MatchCardHeader from './MatchCardHeader';
 import MatchCardTeams from './MatchCardTeams';
 import MatchCardKebabMenu from './MatchCardKebabMenu';
 import MatchCardValueBetSelector from './MatchCardValueBetSelector';
-
-const getMetricLabel = (metric) => {
-  const labels = {
-    fouls: 'Fautes',
-    yellow_cards: 'Cartons Jaunes',
-    possession: 'Possession',
-    shots_on_target: 'Tirs Cadrés',
-    shots: 'Tirs',
-    offsides: 'Hors-jeu',
-    corners: 'Corners'
-  };
-  return labels[metric] || metric;
-};
 
 export default function MagicMatchCard({
   sig,

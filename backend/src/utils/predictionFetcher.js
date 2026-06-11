@@ -50,15 +50,53 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
   
   const rawRows = await dbQueryFn(sql, params);
 
-  // Deduplicate predictions based on home_team, away_team, and date to avoid duplicates from multiple scraper sources
-  const uniqueRowsMap = new Map();
+  const getMatchTimestamp = (dateStr, timeStr) => {
+    if (!dateStr) return 0;
+    const dateParts = dateStr.split('-');
+    if (dateParts.length !== 3) return 0;
+    
+    let hh = 12;
+    let mm = 0;
+    if (timeStr && typeof timeStr === 'string') {
+      const timeParts = timeStr.trim().match(/^(\d{1,2}):(\d{2})$/);
+      if (timeParts) {
+        hh = parseInt(timeParts[1], 10);
+        mm = parseInt(timeParts[2], 10);
+      }
+    }
+    
+    return Date.UTC(
+      parseInt(dateParts[0], 10),
+      parseInt(dateParts[1], 10) - 1,
+      parseInt(dateParts[2], 10),
+      hh,
+      mm,
+      0,
+      0
+    );
+  };
+
+  // Deduplicate predictions based on home_team, away_team, and date (within 30 hours) to avoid duplicates from multiple scraper sources
+  const deduplicated = [];
   for (const row of rawRows) {
     if (!row.home_team || !row.away_team) continue;
-    const key = `${row.home_team.toLowerCase().trim()}_vs_${row.away_team.toLowerCase().trim()}_${row.date}`;
-    const existing = uniqueRowsMap.get(key);
-    if (!existing) {
-      uniqueRowsMap.set(key, row);
+    const homeClean = row.home_team.toLowerCase().trim();
+    const awayClean = row.away_team.toLowerCase().trim();
+    const rowTime = getMatchTimestamp(row.date, row.time);
+    
+    const duplicateIndex = deduplicated.findIndex(existing => {
+      const extHome = existing.home_team.toLowerCase().trim();
+      const extAway = existing.away_team.toLowerCase().trim();
+      if (extHome !== homeClean || extAway !== awayClean) return false;
+      
+      const existingTime = getMatchTimestamp(existing.date, existing.time);
+      return Math.abs(rowTime - existingTime) <= 30 * 60 * 60 * 1000; // 30 hours
+    });
+    
+    if (duplicateIndex === -1) {
+      deduplicated.push(row);
     } else {
+      const existing = deduplicated[duplicateIndex];
       let replace = false;
       // 1. Prefer finished over non-finished
       if (row.is_finished > existing.is_finished) {
@@ -84,11 +122,11 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
         }
       }
       if (replace) {
-        uniqueRowsMap.set(key, row);
+        deduplicated[duplicateIndex] = row;
       }
     }
   }
-  const rows = Array.from(uniqueRowsMap.values());
+  const rows = deduplicated;
   
   // Fetch finished matches to index home, away, and H2H matches in memory
   const allFinished = await dbQueryFn(`

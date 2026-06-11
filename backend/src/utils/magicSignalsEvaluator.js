@@ -51,17 +51,55 @@ export async function evaluateMagicSignals(minCoverage = 50.0) {
     coverageMap.set(row.tournament, row.coverage_rate);
   }
 
-  // Get all matches (including finished ones) and deduplicate them to avoid duplicates from multiple scraper sources
+  const getMatchTimestamp = (dateStr, timeStr) => {
+    if (!dateStr) return 0;
+    const dateParts = dateStr.split('-');
+    if (dateParts.length !== 3) return 0;
+    
+    let hh = 12;
+    let mm = 0;
+    if (timeStr && typeof timeStr === 'string') {
+      const timeParts = timeStr.trim().match(/^(\d{1,2}):(\d{2})$/);
+      if (timeParts) {
+        hh = parseInt(timeParts[1], 10);
+        mm = parseInt(timeParts[2], 10);
+      }
+    }
+    
+    return Date.UTC(
+      parseInt(dateParts[0], 10),
+      parseInt(dateParts[1], 10) - 1,
+      parseInt(dateParts[2], 10),
+      hh,
+      mm,
+      0,
+      0
+    );
+  };
+
+  // Get all matches (including finished ones) and deduplicate them to avoid duplicates from multiple scraper sources (within 30 hours)
   const rawUpcomingMatches = await dbQuery("SELECT * FROM scraped_predictions WHERE is_historical = 0 ORDER BY date ASC, time ASC");
   
-  const uniqueUpcomingMap = new Map();
+  const deduplicated = [];
   for (const match of rawUpcomingMatches) {
     if (!match.home_team || !match.away_team) continue;
-    const key = `${match.home_team.toLowerCase().trim()}_vs_${match.away_team.toLowerCase().trim()}_${match.date}`;
-    const existing = uniqueUpcomingMap.get(key);
-    if (!existing) {
-      uniqueUpcomingMap.set(key, match);
+    const homeClean = match.home_team.toLowerCase().trim();
+    const awayClean = match.away_team.toLowerCase().trim();
+    const matchTime = getMatchTimestamp(match.date, match.time);
+    
+    const duplicateIndex = deduplicated.findIndex(existing => {
+      const extHome = existing.home_team.toLowerCase().trim();
+      const extAway = existing.away_team.toLowerCase().trim();
+      if (extHome !== homeClean || extAway !== awayClean) return false;
+      
+      const existingTime = getMatchTimestamp(existing.date, existing.time);
+      return Math.abs(matchTime - existingTime) <= 30 * 60 * 60 * 1000; // 30 hours
+    });
+    
+    if (duplicateIndex === -1) {
+      deduplicated.push(match);
     } else {
+      const existing = deduplicated[duplicateIndex];
       let replace = false;
       // 1. Prefer finished over non-finished
       if (match.is_finished > existing.is_finished) {
@@ -87,11 +125,11 @@ export async function evaluateMagicSignals(minCoverage = 50.0) {
         }
       }
       if (replace) {
-        uniqueUpcomingMap.set(key, match);
+        deduplicated[duplicateIndex] = match;
       }
     }
   }
-  const upcomingMatches = Array.from(uniqueUpcomingMap.values());
+  const upcomingMatches = deduplicated;
   
   // Fetch finished matches once to build in-memory H2H mapping
   const allFinished = await dbQuery(`

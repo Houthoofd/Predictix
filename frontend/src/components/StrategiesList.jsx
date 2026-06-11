@@ -1,5 +1,6 @@
 import React from 'react';
 import { Database, TrendingUp, ToggleRight, ToggleLeft, Trash2, HelpCircle } from 'lucide-react';
+import { getMetricLabel } from '../utils/labels';
 
 export default function StrategiesList({
   strategies,
@@ -13,19 +14,6 @@ export default function StrategiesList({
   handleToggleStatus,
   handleDeleteStrategy
 }) {
-  const getMetricLabel = (metric) => {
-    const labels = {
-      fouls: 'Fautes commises',
-      yellow_cards: 'Cartons Jaunes',
-      possession: 'Possession',
-      shots_on_target: 'Tirs Cadrés',
-      shots: 'Tirs',
-      offsides: 'Hors-jeu',
-      corners: 'Corners'
-    };
-    return labels[metric] || metric;
-  };
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

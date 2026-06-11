@@ -41,7 +41,22 @@ export const getMetricLabel = (metric) => {
     shots: 'Tirs',
     offsides: 'Hors-jeu',
     corners: 'Corners',
-    first_half_points: 'Points 1ère MT'
+    first_half_points: 'Points 1ère MT',
+    goals: 'Buts / Points',
+    total_rebounds: 'Rebonds',
+    assists: 'Passes Décisives',
+    blocks: 'Contres',
+    steals: 'Interceptions',
+    field_goals: 'Paniers Réussis',
+    free_throws: 'Lancers Francs',
+    aces: 'Aces',
+    double_faults: 'Doubles Fautes',
+    first_serve: '1er Service (%)',
+    break_points: 'Balles de Break',
+    tries: 'Essais',
+    penalties: 'Pénalités',
+    conversions: 'Transformations',
+    saves: 'Arrêts'
   };
   return labels[metric] || metric;
 };

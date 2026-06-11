@@ -1,5 +1,6 @@
 import React from 'react';
 import { Info } from 'lucide-react';
+import { getMetricLabel } from '../utils/labels';
 
 const getMetricBadgeStyle = (metric) => {
   switch (metric) {
@@ -15,20 +16,6 @@ const getMetricBadgeStyle = (metric) => {
     default:
       return { background: 'rgba(139, 92, 246, 0.1)', border: '1px solid rgba(139, 92, 246, 0.3)', color: '#8b5cf6' };
   }
-};
-
-const getMetricLabel = (metric) => {
-  const labels = {
-    fouls: 'Fautes',
-    yellow_cards: 'Cartons Jaunes',
-    possession: 'Possession',
-    shots_on_target: 'Tirs Cadrés',
-    shots: 'Tirs',
-    offsides: 'Hors-jeu',
-    corners: 'Corners',
-    first_half_points: 'Points 1ère MT'
-  };
-  return labels[metric] || metric;
 };
 
 const getMetricExplanation = (metric) => {
