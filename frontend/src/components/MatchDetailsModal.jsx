@@ -32,7 +32,10 @@ export default function MatchDetailsModal({
   const [showValueBetsPanel, setShowValueBetsPanel] = React.useState(false);
   const tabsRef = React.useRef(null);
 
-  const getMetricTitle = (key) => key === 'corners' ? 'Corners 1MT' : getPoissonMetricTitle(key);
+  const getMetricTitle = (key) => {
+    const sport = selectedMatchDetails?.sport || 'football';
+    return key === 'corners' ? 'Corners 1MT' : getPoissonMetricTitle(key, sport);
+  };
 
   const getAverage = React.useCallback((matches, metric, isHomeOnly = false, isAwayOnly = false) => {
     return getPoissonAverage(

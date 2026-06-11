@@ -110,7 +110,8 @@ export const getMetricExplanation = (key) => {
   return explanations[key] || 'Indicateur statistique officiel de la rencontre évalué pour cette opportunité.';
 };
 
-export const getMetricTitle = (key) => {
+export const getMetricTitle = (key, sport = 'football') => {
+  const cleanSport = (sport || 'football').toLowerCase().trim();
   const titles = {
     corners: 'Corners',
     fouls: 'Fautes Commises',
@@ -147,7 +148,7 @@ export const getMetricTitle = (key) => {
     tries: 'Essais',
     penalties: 'Pénalités',
     conversions: 'Transformations',
-    goals: 'Buts',
+    goals: cleanSport === 'basketball' || cleanSport === 'rugby' || cleanSport === 'american-football' || cleanSport.includes('rugby') ? 'Points' : (cleanSport === 'tennis' || cleanSport === 'volleyball' || cleanSport === 'table-tennis' || cleanSport === 'badminton' ? 'Sets' : 'Buts'),
     first_half_points: 'Points 1ère MT',
     saves: 'Arrêts'
   };

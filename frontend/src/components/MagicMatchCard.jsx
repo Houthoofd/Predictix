@@ -112,7 +112,8 @@ export default function MagicMatchCard({
     over_odds: simulatedOddsStr,
     under_odds: simulatedOddsStr,
     notes: `Placé depuis les Pronostics Magiques. Marché: ${currentBet.metricTitle} (${currentBet.tip} ${currentBet.line})`,
-    match_url: sig.match_url || ''
+    match_url: sig.match_url || '',
+    sport: matchDetails?.sport || sig.sport || 'football'
   } : {
     match_id: sig.match_id,
     date: sig.date,
@@ -128,7 +129,8 @@ export default function MagicMatchCard({
     over_odds: isPossession ? '1.85' : '1.90',
     under_odds: '1.80',
     notes: `Placé depuis les Pronostics Magiques. Règle: ${sig.strategy_name}`,
-    match_url: sig.match_url || ''
+    match_url: sig.match_url || '',
+    sport: matchDetails?.sport || sig.sport || 'football'
   };
 
   const getMetricParameters = (mDetails, metric, period) => {

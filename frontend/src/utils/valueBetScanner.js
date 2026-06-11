@@ -57,7 +57,7 @@ export function getValueBetsForMatch(matchDetails) {
         if (overProb >= 0.53 && overProb <= maxProbLimit) {
           list.push({
             metric: m,
-            metricTitle: getPoissonMetricTitle(m),
+            metricTitle: getPoissonMetricTitle(m, matchDetails.sport || 'football'),
             line,
             tip: 'Plus de',
             probability: Math.round(overProb * 100),
@@ -67,7 +67,7 @@ export function getValueBetsForMatch(matchDetails) {
         if (underProb >= 0.53 && underProb <= maxProbLimit) {
           list.push({
             metric: m,
-            metricTitle: getPoissonMetricTitle(m),
+            metricTitle: getPoissonMetricTitle(m, matchDetails.sport || 'football'),
             line,
             tip: 'Moins de',
             probability: Math.round(underProb * 100),
