@@ -79,9 +79,10 @@ export async function evaluateMagicSignals(minCoverage = 50.0) {
 
   // For each upcoming match, check H2H data
   for (const match of upcomingMatches) {
-    // Check league coverage rate first
+    // Check league coverage rate first (except for basketball)
+    const isBasketball = (match.sport || 'football').toLowerCase().trim() === 'basketball';
     const leagueCoverage = coverageMap.has(match.tournament) ? coverageMap.get(match.tournament) : 100.0;
-    if (leagueCoverage < minCoverage) {
+    if (leagueCoverage < minCoverage && !isBasketball) {
       continue;
     }
 

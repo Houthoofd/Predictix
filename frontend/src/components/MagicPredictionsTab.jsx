@@ -79,7 +79,11 @@ export default function MagicPredictionsTab({
     const matchSport = selectedMagicSport === 'all' || (s.sport || 'football') === selectedMagicSport;
     const isTodayOrFuture = s.date >= todayStr;
     const matchDateMode = viewMode === 'today' ? isTodayOrFuture : !isTodayOrFuture;
-    return matchMetric && matchSport && matchDateMode;
+    
+    // If basketball is selected, ignore custom strategy signals to avoid duplicates and show all matches directly
+    const matchStrategy = selectedMagicSport !== 'basketball' || s.strategy_id === 0;
+    
+    return matchMetric && matchSport && matchDateMode && matchStrategy;
   });
 
   const availableMetrics = ['all', ...new Set(signals.map(s => s.metric))];
