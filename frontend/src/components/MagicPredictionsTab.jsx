@@ -55,8 +55,8 @@ export default function MagicPredictionsTab({
   const filteredSignals = signals.filter(s => {
     const matchMetric = filterMetric === 'all' || s.metric === filterMetric;
     const matchSport = selectedMagicSport === 'all' || (s.sport || 'football') === selectedMagicSport;
-    const isToday = s.date === todayStr;
-    const matchDateMode = viewMode === 'today' ? isToday : !isToday;
+    const isTodayOrFuture = s.date >= todayStr;
+    const matchDateMode = viewMode === 'today' ? isTodayOrFuture : !isTodayOrFuture;
     return matchMetric && matchSport && matchDateMode;
   });
 
@@ -114,7 +114,7 @@ export default function MagicPredictionsTab({
           }}
           onClick={() => setViewMode('today')}
         >
-          Matchs du Jour ({todayStr.split('-').reverse().join('/')})
+          Matchs du Jour & À venir
         </button>
         <button 
           style={{ 

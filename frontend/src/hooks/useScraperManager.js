@@ -1,5 +1,13 @@
 import { useState } from 'react';
 
+const getLocalDateString = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export default function useScraperManager({ showToast, refreshAllDataSilent }) {
   const [scraping, setScraping] = useState(false), [scraperLogs, setScraperLogs] = useState([]);
   const [scrapeProgress, setScrapeProgress] = useState(0), [scrapeTimeRemaining, setScrapeTimeRemaining] = useState('');
@@ -7,7 +15,7 @@ export default function useScraperManager({ showToast, refreshAllDataSilent }) {
   const [matchesRemaining, setMatchesRemaining] = useState(0);
   const [currentPrimary, setCurrentPrimary] = useState(0), [totalPrimary, setTotalPrimary] = useState(0);
   const [currentDeep, setCurrentDeep] = useState(0), [totalDeep, setTotalDeep] = useState(0);
-  const [scraperTargetDate, setScraperTargetDate] = useState(''), [selectedScraperSource, setSelectedScraperSource] = useState('matchendirect');
+  const [scraperTargetDate, setScraperTargetDate] = useState(getLocalDateString()), [selectedScraperSource, setSelectedScraperSource] = useState('matchendirect');
   const [selectedScraperSport, setSelectedScraperSport] = useState('football'), [liveScrapedMatches, setLiveScrapedMatches] = useState([]);
   const [selectedScraperStrategyId, setSelectedScraperStrategyId] = useState(''), [scrapeResultStats, setScrapeResultStats] = useState(null);
   const [showScrapeResultModal, setShowScrapeResultModal] = useState(false);
