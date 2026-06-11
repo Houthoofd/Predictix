@@ -134,7 +134,7 @@ export async function reScrapeMatch(matchId) {
       reschedule(matchId, cronRetryIntervalLive);
     } else {
       logCron(`Match ${matchId} finished!`);
-      insertNotification(`Match terminé : ${details.home_team} vs ${details.away_team} (Score: ${details.score || 'N/A'})`, 'info');
+      insertNotification(`Match terminé : ${details.home_team || match.home_team} vs ${details.away_team || match.away_team} (Score: ${details.score || match.score || 'N/A'})`, 'info');
       const retries = retryCounts.get(matchId) || 0;
       dbRun('INSERT INTO cron_history (match_id, home_team, away_team, sport, status, retries, score) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [matchId, details.home_team || match.home_team, details.away_team || match.away_team, sport, 'SUCCESS', retries, details.score || 'N/A'])
