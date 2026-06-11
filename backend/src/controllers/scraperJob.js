@@ -119,7 +119,8 @@ export async function runScrapeJob(options, sendEvent) {
       if (details) {
         const matchDateRaw = details.date || m.date || '';
         const matchDateNormalized = parseFrenchDate(matchDateRaw) || matchDateRaw;
-        const expectedIsoDate = targetDate || new Date().toISOString().substring(0, 10);
+        const parsedTargetDate = targetDate ? (parseFrenchDate(targetDate) || targetDate) : null;
+        const expectedIsoDate = parsedTargetDate || new Date().toISOString().substring(0, 10);
         if (matchDateNormalized && expectedIsoDate && matchDateNormalized.substring(0, 10) !== expectedIsoDate) {
           sendEvent('log', { message: `[Tor Port ${socksPort}] [Date Filter] [Ignoré] Match ${details.home_team || m.home_team} vs ${details.away_team || m.away_team} ignoré car sa date (${matchDateNormalized.substring(0, 10)}) ne correspond pas à la date cible (${expectedIsoDate}).` });
           continue;

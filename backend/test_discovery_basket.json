@@ -1,0 +1,1113 @@
+{
+  "metadata": {
+    "scraped_at": "2026-06-11T07:39:17+02:00",
+    "source_url": "https://www.matchendirect.fr/",
+    "total_matches": 29
+  },
+  "all_matches": [
+    {
+      "match_id": "lp004qr3",
+      "time": "20:00",
+      "date": "",
+      "tournament": "Lega A - Play OffsITALY:",
+      "home_team": "Olimpia Milano",
+      "away_team": "Venezia",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/lp004qr3/#/match-summary"
+      ],
+      "match_url": "/match/lp004qr3/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "OMzS7Ile",
+      "time": "20:00",
+      "date": "",
+      "tournament": "ACB - Play OffsSPAIN:",
+      "home_team": "Barcelona",
+      "away_team": "Tenerife",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/OMzS7Ile/#/match-summary"
+      ],
+      "match_url": "/match/OMzS7Ile/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "Y957llqg",
+      "time": "Planned",
+      "date": "",
+      "tournament": "NBA - Play OffsUSA:",
+      "home_team": "New York Knicks",
+      "away_team": "San Antonio Spurs",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "107 - 106",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/Y957llqg/#/match-summary"
+      ],
+      "match_url": "/match/Y957llqg/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "xnxdDDw2",
+      "time": "20:30",
+      "date": "",
+      "tournament": "Pro Basketball League - Play OffsBELGIUM:",
+      "home_team": "Oostende",
+      "away_team": "Antwerp Giants",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/xnxdDDw2/#/match-summary"
+      ],
+      "match_url": "/match/xnxdDDw2/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "Wt7pDMad",
+      "time": "Planned",
+      "date": "",
+      "tournament": "LBF WomenBRAZIL:",
+      "home_team": "Campinas W",
+      "away_team": "Sodie Mesquita W",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "90 - 69",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/Wt7pDMad/#/match-summary"
+      ],
+      "match_url": "/match/Wt7pDMad/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "rVDVzQi3",
+      "time": "Planned",
+      "date": "",
+      "tournament": "LBF WomenBRAZIL:",
+      "home_team": "Salvador W",
+      "away_team": "Cerrado W",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "42 - 105",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/rVDVzQi3/#/match-summary"
+      ],
+      "match_url": "/match/rVDVzQi3/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "vV1ZrJq4",
+      "time": "Planned",
+      "date": "",
+      "tournament": "CEBLCANADA:",
+      "home_team": "Niagara River Lions",
+      "away_team": "Scarborough Shooting Stars",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "93 - 104",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/vV1ZrJq4/#/match-summary"
+      ],
+      "match_url": "/match/vV1ZrJq4/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "Qo0sscEG",
+      "time": "Planned",
+      "date": "",
+      "tournament": "CEBLCANADA:",
+      "home_team": "Montreal Alliance",
+      "away_team": "Brampton Honey Badgers",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "105 - 92",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/Qo0sscEG/#/match-summary"
+      ],
+      "match_url": "/match/Qo0sscEG/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "MDgjuyqT",
+      "time": "Planned",
+      "date": "",
+      "tournament": "CEBLCANADA:",
+      "home_team": "Calgary Surge",
+      "away_team": "Saskatoon Mamba",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "88 - 94",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/MDgjuyqT/#/match-summary"
+      ],
+      "match_url": "/match/MDgjuyqT/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "88Rf4vBF",
+      "time": "17:15",
+      "date": "",
+      "tournament": "NBL - Play OffsCZECH REPUBLIC:",
+      "home_team": "Nymburk",
+      "away_team": "Pardubice",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/88Rf4vBF/#/match-summary"
+      ],
+      "match_url": "/match/88Rf4vBF/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "EkrMEgge",
+      "time": "Planned",
+      "date": "",
+      "tournament": "LNB - Winners stageDOMINICAN REPUBLIC:",
+      "home_team": "Reales de la Vega",
+      "away_team": "Metros de Santiago",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "78 - 82",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/EkrMEgge/#/match-summary"
+      ],
+      "match_url": "/match/EkrMEgge/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "MFoUCXN7",
+      "time": "Planned",
+      "date": "",
+      "tournament": "LNB - Winners stageDOMINICAN REPUBLIC:",
+      "home_team": "Caneros",
+      "away_team": "Gigantes San Francisco",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "97 - 101",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/MFoUCXN7/#/match-summary"
+      ],
+      "match_url": "/match/MFoUCXN7/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "x4T1bBXi",
+      "time": "14:00",
+      "date": "",
+      "tournament": "IBL - Play OffsINDONESIA:",
+      "home_team": "Dewa United",
+      "away_team": "Pelita Jaya",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/x4T1bBXi/#/match-summary"
+      ],
+      "match_url": "/match/x4T1bBXi/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "QR6h9aCL",
+      "time": "19:50",
+      "date": "",
+      "tournament": "Super League - Play OffsISRAEL:",
+      "home_team": "Hapoel Tel Aviv",
+      "away_team": "Hapoel Jerusalem",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/QR6h9aCL/#/match-summary"
+      ],
+      "match_url": "/match/QR6h9aCL/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "rkAP7i84",
+      "time": "17:20",
+      "date": "",
+      "tournament": "Liga Leumit - Play OffsISRAEL:",
+      "home_team": "Maccabi Ashdod",
+      "away_team": "Ironi Nahariya",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/rkAP7i84/#/match-summary"
+      ],
+      "match_url": "/match/rkAP7i84/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "rquT45vh",
+      "time": "15:45",
+      "date": "",
+      "tournament": "Division 1 - Play OffsLEBANON:",
+      "home_team": "Beirut Club",
+      "away_team": "Al-Riyadi",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/rquT45vh/#/match-summary"
+      ],
+      "match_url": "/match/rquT45vh/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "p8whwocS",
+      "time": "17:50",
+      "date": "",
+      "tournament": "LKL - Play OffsLITHUANIA:",
+      "home_team": "Neptunas",
+      "away_team": "Lietkabelis",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/p8whwocS/#/match-summary"
+      ],
+      "match_url": "/match/p8whwocS/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "WfnHtAp4",
+      "time": "Planned",
+      "date": "",
+      "tournament": "CIBACOPA - Play OffsMEXICO:",
+      "home_team": "Angeles CDMX",
+      "away_team": "Astros",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "93 - 92",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/WfnHtAp4/#/match-summary"
+      ],
+      "match_url": "/match/WfnHtAp4/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "rJoPqzcD",
+      "time": "Planned",
+      "date": "",
+      "tournament": "CIBACOPA - Play OffsMEXICO:",
+      "home_team": "Frayles de Guasave",
+      "away_team": "Halcones de Obregon",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "90 - 82",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/rJoPqzcD/#/match-summary"
+      ],
+      "match_url": "/match/rJoPqzcD/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "ARbiEHXg",
+      "time": "10:00",
+      "date": "",
+      "tournament": "MPBLPHILIPPINES:",
+      "home_team": "Rizal Golden Coolers",
+      "away_team": "Pasig City",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/ARbiEHXg/#/match-summary"
+      ],
+      "match_url": "/match/ARbiEHXg/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "GO1aCe26",
+      "time": "12:00",
+      "date": "",
+      "tournament": "MPBLPHILIPPINES:",
+      "home_team": "Bataan Risers",
+      "away_team": "Bacolod Masskara",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/GO1aCe26/#/match-summary"
+      ],
+      "match_url": "/match/GO1aCe26/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "lx07AZWI",
+      "time": "14:00",
+      "date": "",
+      "tournament": "MPBLPHILIPPINES:",
+      "home_team": "Quezon City",
+      "away_team": "Basilan Steel",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/lx07AZWI/#/match-summary"
+      ],
+      "match_url": "/match/lx07AZWI/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "tnL94McS",
+      "time": "Planned",
+      "date": "",
+      "tournament": "BSNPUERTO RICO:",
+      "home_team": "Criollos de Caguas",
+      "away_team": "Mets de Guaynabo",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "104 - 89",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/tnL94McS/#/match-summary"
+      ],
+      "match_url": "/match/tnL94McS/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "CUBua0Lk",
+      "time": "Planned",
+      "date": "",
+      "tournament": "BSNPUERTO RICO:",
+      "home_team": "Gigantes de Carolina",
+      "away_team": "San German",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "89 - 93",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/CUBua0Lk/#/match-summary"
+      ],
+      "match_url": "/match/CUBua0Lk/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "pUlKRv2C",
+      "time": "AOT",
+      "date": "",
+      "tournament": "WNBAUSA:",
+      "home_team": "Toronto Tempo W",
+      "away_team": "Connecticut Sun W",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "106 - 102",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/pUlKRv2C/#/match-summary"
+      ],
+      "match_url": "/match/pUlKRv2C/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "vmrfKJme",
+      "time": "Planned",
+      "date": "",
+      "tournament": "WNBAUSA:",
+      "home_team": "Seattle Storm W",
+      "away_team": "Los Angeles Sparks W",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "83 - 88",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/vmrfKJme/#/match-summary"
+      ],
+      "match_url": "/match/vmrfKJme/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "MBkNow4b",
+      "time": "14:30",
+      "date": "",
+      "tournament": "VBAVIETNAM:",
+      "home_team": "Da Nang Dragons",
+      "away_team": "Can Tho Catfish",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/MBkNow4b/#/match-summary"
+      ],
+      "match_url": "/match/MBkNow4b/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "W20C7Vlo",
+      "time": "Planned",
+      "date": "",
+      "tournament": "AmeriCup U18 WomenWORLD:",
+      "home_team": "Paraguay U18 W",
+      "away_team": "Argentina U18 W",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "38 - 84",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/W20C7Vlo/#/match-summary"
+      ],
+      "match_url": "/match/W20C7Vlo/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "b9hbVYth",
+      "time": "Planned",
+      "date": "",
+      "tournament": "AmeriCup U18 WomenWORLD:",
+      "home_team": "USA U18 W",
+      "away_team": "Mexico U18 W",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "125 - 53",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/b9hbVYth/#/match-summary"
+      ],
+      "match_url": "/match/b9hbVYth/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    }
+  ],
+  "matches": [
+    {
+      "match_id": "lp004qr3",
+      "time": "20:00",
+      "date": "",
+      "tournament": "Lega A - Play OffsITALY:",
+      "home_team": "Olimpia Milano",
+      "away_team": "Venezia",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/lp004qr3/#/match-summary"
+      ],
+      "match_url": "/match/lp004qr3/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "OMzS7Ile",
+      "time": "20:00",
+      "date": "",
+      "tournament": "ACB - Play OffsSPAIN:",
+      "home_team": "Barcelona",
+      "away_team": "Tenerife",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/OMzS7Ile/#/match-summary"
+      ],
+      "match_url": "/match/OMzS7Ile/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "Y957llqg",
+      "time": "Planned",
+      "date": "",
+      "tournament": "NBA - Play OffsUSA:",
+      "home_team": "New York Knicks",
+      "away_team": "San Antonio Spurs",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "107 - 106",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/Y957llqg/#/match-summary"
+      ],
+      "match_url": "/match/Y957llqg/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "xnxdDDw2",
+      "time": "20:30",
+      "date": "",
+      "tournament": "Pro Basketball League - Play OffsBELGIUM:",
+      "home_team": "Oostende",
+      "away_team": "Antwerp Giants",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/xnxdDDw2/#/match-summary"
+      ],
+      "match_url": "/match/xnxdDDw2/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "Wt7pDMad",
+      "time": "Planned",
+      "date": "",
+      "tournament": "LBF WomenBRAZIL:",
+      "home_team": "Campinas W",
+      "away_team": "Sodie Mesquita W",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "90 - 69",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/Wt7pDMad/#/match-summary"
+      ],
+      "match_url": "/match/Wt7pDMad/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "rVDVzQi3",
+      "time": "Planned",
+      "date": "",
+      "tournament": "LBF WomenBRAZIL:",
+      "home_team": "Salvador W",
+      "away_team": "Cerrado W",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "42 - 105",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/rVDVzQi3/#/match-summary"
+      ],
+      "match_url": "/match/rVDVzQi3/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "vV1ZrJq4",
+      "time": "Planned",
+      "date": "",
+      "tournament": "CEBLCANADA:",
+      "home_team": "Niagara River Lions",
+      "away_team": "Scarborough Shooting Stars",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "93 - 104",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/vV1ZrJq4/#/match-summary"
+      ],
+      "match_url": "/match/vV1ZrJq4/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "Qo0sscEG",
+      "time": "Planned",
+      "date": "",
+      "tournament": "CEBLCANADA:",
+      "home_team": "Montreal Alliance",
+      "away_team": "Brampton Honey Badgers",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "105 - 92",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/Qo0sscEG/#/match-summary"
+      ],
+      "match_url": "/match/Qo0sscEG/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "MDgjuyqT",
+      "time": "Planned",
+      "date": "",
+      "tournament": "CEBLCANADA:",
+      "home_team": "Calgary Surge",
+      "away_team": "Saskatoon Mamba",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "88 - 94",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/MDgjuyqT/#/match-summary"
+      ],
+      "match_url": "/match/MDgjuyqT/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "88Rf4vBF",
+      "time": "17:15",
+      "date": "",
+      "tournament": "NBL - Play OffsCZECH REPUBLIC:",
+      "home_team": "Nymburk",
+      "away_team": "Pardubice",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/88Rf4vBF/#/match-summary"
+      ],
+      "match_url": "/match/88Rf4vBF/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "EkrMEgge",
+      "time": "Planned",
+      "date": "",
+      "tournament": "LNB - Winners stageDOMINICAN REPUBLIC:",
+      "home_team": "Reales de la Vega",
+      "away_team": "Metros de Santiago",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "78 - 82",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/EkrMEgge/#/match-summary"
+      ],
+      "match_url": "/match/EkrMEgge/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "MFoUCXN7",
+      "time": "Planned",
+      "date": "",
+      "tournament": "LNB - Winners stageDOMINICAN REPUBLIC:",
+      "home_team": "Caneros",
+      "away_team": "Gigantes San Francisco",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "97 - 101",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/MFoUCXN7/#/match-summary"
+      ],
+      "match_url": "/match/MFoUCXN7/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "x4T1bBXi",
+      "time": "14:00",
+      "date": "",
+      "tournament": "IBL - Play OffsINDONESIA:",
+      "home_team": "Dewa United",
+      "away_team": "Pelita Jaya",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/x4T1bBXi/#/match-summary"
+      ],
+      "match_url": "/match/x4T1bBXi/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "QR6h9aCL",
+      "time": "19:50",
+      "date": "",
+      "tournament": "Super League - Play OffsISRAEL:",
+      "home_team": "Hapoel Tel Aviv",
+      "away_team": "Hapoel Jerusalem",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/QR6h9aCL/#/match-summary"
+      ],
+      "match_url": "/match/QR6h9aCL/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "rkAP7i84",
+      "time": "17:20",
+      "date": "",
+      "tournament": "Liga Leumit - Play OffsISRAEL:",
+      "home_team": "Maccabi Ashdod",
+      "away_team": "Ironi Nahariya",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/rkAP7i84/#/match-summary"
+      ],
+      "match_url": "/match/rkAP7i84/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "rquT45vh",
+      "time": "15:45",
+      "date": "",
+      "tournament": "Division 1 - Play OffsLEBANON:",
+      "home_team": "Beirut Club",
+      "away_team": "Al-Riyadi",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/rquT45vh/#/match-summary"
+      ],
+      "match_url": "/match/rquT45vh/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "p8whwocS",
+      "time": "17:50",
+      "date": "",
+      "tournament": "LKL - Play OffsLITHUANIA:",
+      "home_team": "Neptunas",
+      "away_team": "Lietkabelis",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/p8whwocS/#/match-summary"
+      ],
+      "match_url": "/match/p8whwocS/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "WfnHtAp4",
+      "time": "Planned",
+      "date": "",
+      "tournament": "CIBACOPA - Play OffsMEXICO:",
+      "home_team": "Angeles CDMX",
+      "away_team": "Astros",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "93 - 92",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/WfnHtAp4/#/match-summary"
+      ],
+      "match_url": "/match/WfnHtAp4/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "rJoPqzcD",
+      "time": "Planned",
+      "date": "",
+      "tournament": "CIBACOPA - Play OffsMEXICO:",
+      "home_team": "Frayles de Guasave",
+      "away_team": "Halcones de Obregon",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "90 - 82",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/rJoPqzcD/#/match-summary"
+      ],
+      "match_url": "/match/rJoPqzcD/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "ARbiEHXg",
+      "time": "10:00",
+      "date": "",
+      "tournament": "MPBLPHILIPPINES:",
+      "home_team": "Rizal Golden Coolers",
+      "away_team": "Pasig City",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/ARbiEHXg/#/match-summary"
+      ],
+      "match_url": "/match/ARbiEHXg/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "GO1aCe26",
+      "time": "12:00",
+      "date": "",
+      "tournament": "MPBLPHILIPPINES:",
+      "home_team": "Bataan Risers",
+      "away_team": "Bacolod Masskara",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/GO1aCe26/#/match-summary"
+      ],
+      "match_url": "/match/GO1aCe26/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "lx07AZWI",
+      "time": "14:00",
+      "date": "",
+      "tournament": "MPBLPHILIPPINES:",
+      "home_team": "Quezon City",
+      "away_team": "Basilan Steel",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/lx07AZWI/#/match-summary"
+      ],
+      "match_url": "/match/lx07AZWI/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "tnL94McS",
+      "time": "Planned",
+      "date": "",
+      "tournament": "BSNPUERTO RICO:",
+      "home_team": "Criollos de Caguas",
+      "away_team": "Mets de Guaynabo",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "104 - 89",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/tnL94McS/#/match-summary"
+      ],
+      "match_url": "/match/tnL94McS/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "CUBua0Lk",
+      "time": "Planned",
+      "date": "",
+      "tournament": "BSNPUERTO RICO:",
+      "home_team": "Gigantes de Carolina",
+      "away_team": "San German",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "89 - 93",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/CUBua0Lk/#/match-summary"
+      ],
+      "match_url": "/match/CUBua0Lk/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "pUlKRv2C",
+      "time": "AOT",
+      "date": "",
+      "tournament": "WNBAUSA:",
+      "home_team": "Toronto Tempo W",
+      "away_team": "Connecticut Sun W",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "106 - 102",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/pUlKRv2C/#/match-summary"
+      ],
+      "match_url": "/match/pUlKRv2C/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "vmrfKJme",
+      "time": "Planned",
+      "date": "",
+      "tournament": "WNBAUSA:",
+      "home_team": "Seattle Storm W",
+      "away_team": "Los Angeles Sparks W",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "83 - 88",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/vmrfKJme/#/match-summary"
+      ],
+      "match_url": "/match/vmrfKJme/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "MBkNow4b",
+      "time": "14:30",
+      "date": "",
+      "tournament": "VBAVIETNAM:",
+      "home_team": "Da Nang Dragons",
+      "away_team": "Can Tho Catfish",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/MBkNow4b/#/match-summary"
+      ],
+      "match_url": "/match/MBkNow4b/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "W20C7Vlo",
+      "time": "Planned",
+      "date": "",
+      "tournament": "AmeriCup U18 WomenWORLD:",
+      "home_team": "Paraguay U18 W",
+      "away_team": "Argentina U18 W",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "38 - 84",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/W20C7Vlo/#/match-summary"
+      ],
+      "match_url": "/match/W20C7Vlo/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    },
+    {
+      "match_id": "b9hbVYth",
+      "time": "Planned",
+      "date": "",
+      "tournament": "AmeriCup U18 WomenWORLD:",
+      "home_team": "USA U18 W",
+      "away_team": "Mexico U18 W",
+      "home_logo": "",
+      "away_logo": "",
+      "score": "125 - 53",
+      "first_half_corners_home": null,
+      "first_half_corners_away": null,
+      "historical_links": [
+        "/match/b9hbVYth/#/match-summary"
+      ],
+      "match_url": "/match/b9hbVYth/#/match-summary",
+      "statistics": null,
+      "sport": "football"
+    }
+  ]
+}

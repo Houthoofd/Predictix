@@ -12,7 +12,39 @@ const exeName = isWindows ? 'predictix-crawler.exe' : 'predictix-crawler';
 export function ensureScraperCompiled(scraperPath) {
   return new Promise((resolve, reject) => {
     const exePath = path.join(scraperPath, 'cmd', 'predictix-crawler', exeName);
-    if (fs.existsSync(exePath)) {
+    const goDir = path.join(scraperPath, 'cmd', 'predictix-crawler');
+    
+    let needsCompile = !fs.existsSync(exePath);
+    
+    if (!needsCompile && process.env.NODE_ENV !== 'production') {
+      try {
+        const exeStat = fs.statSync(exePath);
+        const checkNewer = (dir) => {
+          if (!fs.existsSync(dir)) return false;
+          const files = fs.readdirSync(dir);
+          for (const file of files) {
+            const filePath = path.join(dir, file);
+            const stat = fs.statSync(filePath);
+            if (stat.isDirectory()) {
+              if (file !== 'node_modules' && file !== '.git' && checkNewer(filePath)) {
+                return true;
+              }
+            } else if (file.endsWith('.go') || file.endsWith('.json')) {
+              if (stat.mtime > exeStat.mtime) {
+                console.log(`[Predictix Crawler] Source file changed: ${file} (mtime: ${stat.mtime} > exe: ${exeStat.mtime}). Recompiling...`);
+                return true;
+              }
+            }
+          }
+          return false;
+        };
+        needsCompile = checkNewer(goDir);
+      } catch (err) {
+        console.warn(`[Predictix Crawler] Error checking modification times: ${err.message}`);
+      }
+    }
+
+    if (!needsCompile) {
       return resolve();
     }
     
@@ -22,7 +54,7 @@ export function ensureScraperCompiled(scraperPath) {
       return reject(new Error(errorMsg));
     }
     
-    console.log(`[Predictix Crawler] Executable not found. Compiling at: ${scraperPath}`);
+    console.log(`[Predictix Crawler] Executable not found or outdated. Compiling at: ${scraperPath}`);
     const buildCmd = `go build -o ${exeName}`;
     const buildCwd = path.join(scraperPath, 'cmd', 'predictix-crawler');
     
