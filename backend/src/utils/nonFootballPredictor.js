@@ -1,7 +1,7 @@
 /**
  * Predicts and enriches non-football match details (points, sets, goals, runs, etc.)
  */
-export function enrichNonFootballMatch(row, h2hMatches, homeMatches, awayMatches, homeLogo, awayLogo, diagnostic, enrichedHomeMatches, enrichedAwayMatches, enrichedH2HMatches) {
+export function enrichNonFootballMatch(row, h2hMatches, homeMatches, awayMatches, homeLogo, awayLogo, diagnostic, enrichedHomeMatches, enrichedAwayMatches, enrichedH2HMatches, calibrationDelta = 0) {
   const cleanHomeTeamKey = (row.home_team || '').toLowerCase().trim();
   const cleanAwayTeamKey = (row.away_team || '').toLowerCase().trim();
   const sport = (row.sport || 'football').toLowerCase().trim();
@@ -108,8 +108,12 @@ export function enrichNonFootballMatch(row, h2hMatches, homeMatches, awayMatches
     bestTip = probVal % 2 === 0 ? "Plus de" : "Moins de";
   }
   
-  // Ensure probability is in a realistic range (e.g. 50% - 85%)
+  // Ensure probability is in a realistic range (e.g. 50% - 85%) before calibration
   probVal = Math.max(50, Math.min(85, probVal));
+  
+  // Apply calibration delta
+  let calibratedProb = probVal + (calibrationDelta * 100);
+  probVal = Math.max(50, Math.min(95, Math.round(calibratedProb)));
   
   const labelMapping = {
     basketball: 'Points 1ère MT',

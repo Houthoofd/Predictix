@@ -24,7 +24,7 @@ export { evaluateSmartScrapingFilter } from './smartScraperFilter.js';
 /**
  * Enriches a single match predictions with regressed averages, Poisson calculations, and Value Bets edges
  */
-export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatches, awayMatches, activeCrawlHistoryMatches = new Set(), customLogosMap = {}, valueBetMinEdge = 5, footballCornerLine = 4.5) {
+export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatches, awayMatches, activeCrawlHistoryMatches = new Set(), customLogosMap = {}, valueBetMinEdge = 5, footballCornerLine = 4.5, calibrationDelta = 0) {
   const cleanHomeTeamKey = (row.home_team || '').toLowerCase().trim();
   const cleanAwayTeamKey = (row.away_team || '').toLowerCase().trim();
   const homeLogo = customLogosMap[cleanHomeTeamKey] || row.home_logo;
@@ -113,7 +113,7 @@ export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatc
   if (sport !== 'football') {
     return enrichNonFootballMatch(
       row, h2hMatches, homeMatches, awayMatches, homeLogo, awayLogo, diagnostic, 
-      enrichedHomeMatches, enrichedAwayMatches, enrichedH2HMatches
+      enrichedHomeMatches, enrichedAwayMatches, enrichedH2HMatches, calibrationDelta
     );
   }
 
@@ -122,8 +122,17 @@ export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatc
   const lambda1MT = homeRegressed + awayRegressed;
 
   const targetLine = footballCornerLine;
-  const overProb = poissonOver(lambda1MT, targetLine);
-  const underProb = poissonUnder(lambda1MT, targetLine);
+  let overProb = poissonOver(lambda1MT, targetLine);
+  let underProb = poissonUnder(lambda1MT, targetLine);
+
+  // Apply calibration delta to the preferred side of the main tip
+  if (overProb >= underProb) {
+    overProb = Math.min(0.99, Math.max(0.01, overProb + calibrationDelta));
+    underProb = 1 - overProb;
+  } else {
+    underProb = Math.min(0.99, Math.max(0.01, underProb + calibrationDelta));
+    overProb = 1 - underProb;
+  }
 
   let dynamicBestTip = row.best_tip;
   let dynamicCardLine = row.card_line;
@@ -176,8 +185,17 @@ export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatc
     const is1stHalf = o.market_type === '1st_half';
     const lambda = is1stHalf ? lambda1MT : lambda1MT * 2.2;
     
-    const overProb = poissonOver(lambda, o.line);
-    const underProb = poissonUnder(lambda, o.line);
+    let overProb = poissonOver(lambda, o.line);
+    let underProb = poissonUnder(lambda, o.line);
+    
+    // Apply calibration delta to the preferred side of this line
+    if (overProb >= underProb) {
+      overProb = Math.min(0.99, Math.max(0.01, overProb + calibrationDelta));
+      underProb = 1 - overProb;
+    } else {
+      underProb = Math.min(0.99, Math.max(0.01, underProb + calibrationDelta));
+      overProb = 1 - underProb;
+    }
     
     const overValue = o.over_decimal ? overProb * o.over_decimal : 0;
     const underValue = o.under_decimal ? underProb * o.under_decimal : 0;
@@ -369,6 +387,26 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
   const leagueAverages = computeLeagueAverages(allHistoricalMatches);
   const enrichedRows = [];
 
+  let calibrationDelta = 0;
+  try {
+    const completedBets = await dbQueryFn(`
+      SELECT probability, status 
+      FROM bets 
+      WHERE status IN ('WON', 'LOST') AND probability IS NOT NULL
+    `);
+    
+    if (completedBets && completedBets.length > 0) {
+      const totalBets = completedBets.length;
+      const totalWon = completedBets.filter(b => b.status === 'WON').length;
+      const sumPredictedProb = completedBets.reduce((sum, b) => sum + (b.probability / 100), 0);
+      
+      const k = 20; // Bayesian smoothing constant
+      calibrationDelta = (totalWon - sumPredictedProb) / (totalBets + k);
+    }
+  } catch (err) {
+    console.warn("[Prediction Engine] Could not calculate calibration delta:", err.message);
+  }
+
   let valueBetMinEdge = 5;
   let footballCornerLine = 4.5;
   try {
@@ -424,7 +462,7 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
       ORDER BY date DESC LIMIT 10
     `, [row.home_team]);
     
-    const normalizedHome = homeMatches.map(normalizeMatchRow);
+    const normalizeHome = homeMatches.map(normalizeMatchRow);
     
     const awayMatches = await dbQueryFn(`
       SELECT first_half_corners_home, first_half_corners_away, home_team, away_team, home_logo, away_logo, score, date, time, tournament, statistics_json
@@ -434,9 +472,9 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
       ORDER BY date DESC LIMIT 10
     `, [row.away_team]);
 
-    const normalizedAway = awayMatches.map(normalizeMatchRow);
+    const normalizeAway = awayMatches.map(normalizeMatchRow);
     
-    const enriched = enrichMatchPredictions(row, leagueAverages, normalizedH2H, normalizedHome, normalizedAway, activeCrawlHistoryMatches, customLogosMap, valueBetMinEdge, footballCornerLine);
+    const enriched = enrichMatchPredictions(row, leagueAverages, normalizedH2H, normalizeHome, normalizeAway, activeCrawlHistoryMatches, customLogosMap, valueBetMinEdge, footballCornerLine, calibrationDelta);
     enrichedRows.push(enriched);
   }
 

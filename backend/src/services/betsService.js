@@ -211,6 +211,36 @@ export async function getBetsStats() {
   const currentMonthStr = new Date().toISOString().substring(0, 7);
   const currentMonthProfit = monthlyStats[currentMonthStr]?.profit || 0;
 
+  // Compute model calibration stats
+  const completedWithProb = allBets.filter(b => b.status !== 'PENDING' && b.status !== 'REFUNDED' && b.probability !== null && b.probability !== undefined);
+  let calibrationStats = {
+    totalBets: 0,
+    totalWon: 0,
+    avgPredictedProb: 0,
+    actualWinRate: 0,
+    bias: 0,
+    calibrationDelta: 0
+  };
+  if (completedWithProb.length > 0) {
+    const totalBets = completedWithProb.length;
+    const totalWon = completedWithProb.filter(b => b.status === 'WON').length;
+    const sumPredictedProb = completedWithProb.reduce((sum, b) => sum + (b.probability / 100), 0);
+    const avgPredictedProb = sumPredictedProb / totalBets;
+    const actualWinRate = totalWon / totalBets;
+    
+    const k = 20; // Bayesian smoothing constant
+    const delta = (totalWon - sumPredictedProb) / (totalBets + k);
+    
+    calibrationStats = {
+      totalBets,
+      totalWon,
+      avgPredictedProb: parseFloat((avgPredictedProb * 100).toFixed(1)),
+      actualWinRate: parseFloat((actualWinRate * 100).toFixed(1)),
+      bias: parseFloat(((actualWinRate - avgPredictedProb) * 100).toFixed(1)),
+      calibrationDelta: parseFloat((delta * 100).toFixed(1))
+    };
+  }
+
   return {
     bankroll: { initial: bankroll.initial_balance, current: bankroll.balance, currency: bankroll.currency },
     summary: {
@@ -221,7 +251,8 @@ export async function getBetsStats() {
       current_month_profit: parseFloat(currentMonthProfit.toFixed(2)),
       counts: { total: allBets.length, won: wonCount, lost: lostCount, pending: pendingCount, refunded: refundedCount, settled: settledCount }
     },
-    charts: { history, leagues: leaguesList, bookmakers: bookmakersList, monthly: monthlyList }
+    charts: { history, leagues: leaguesList, bookmakers: bookmakersList, monthly: monthlyList },
+    calibration: calibrationStats
   };
 }
 

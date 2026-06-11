@@ -5,7 +5,8 @@ export default function useBetsManager({ showToast, showConfirm, onSettledBets }
   const [bets, setBets] = useState([]);
   const [stats, setStats] = useState({
     summary: { total_profit: 0, total_stake: 0, roi: 0, win_rate: 0, current_month_profit: 0, counts: { total: 0, won: 0, lost: 0, pending: 0, refunded: 0, settled: 0 } },
-    charts: { history: [], leagues: [], bookmakers: [], monthly: [] }
+    charts: { history: [], leagues: [], bookmakers: [], monthly: [] },
+    calibration: { totalBets: 0, totalWon: 0, avgPredictedProb: 0, actualWinRate: 0, bias: 0, calibrationDelta: 0 }
   });
   const [betRefreshLoading, setBetRefreshLoading] = useState({});
   const [globalRefreshLoading, setGlobalRefreshLoading] = useState(false);

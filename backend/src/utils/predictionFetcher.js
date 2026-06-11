@@ -106,6 +106,26 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
   const leagueAverages = computeLeagueAverages(allHistoricalMatches);
   const enrichedRows = [];
 
+  let calibrationDelta = 0;
+  try {
+    const completedBets = await dbQueryFn(`
+      SELECT probability, status 
+      FROM bets 
+      WHERE status IN ('WON', 'LOST') AND probability IS NOT NULL
+    `);
+    
+    if (completedBets && completedBets.length > 0) {
+      const totalBets = completedBets.length;
+      const totalWon = completedBets.filter(b => b.status === 'WON').length;
+      const sumPredictedProb = completedBets.reduce((sum, b) => sum + (b.probability / 100), 0);
+      
+      const k = 20; // Bayesian smoothing constant
+      calibrationDelta = (totalWon - sumPredictedProb) / (totalBets + k);
+    }
+  } catch (err) {
+    console.warn("[Prediction Fetcher] Could not calculate calibration delta:", err.message);
+  }
+
   let customLogosMap = {};
   try {
     const customLogosRows = await dbQueryFn("SELECT * FROM custom_team_logos");
@@ -140,7 +160,7 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
     const normalizedHome = rawHome.map(normalizeMatchRow);
     const normalizedAway = rawAway.map(normalizeMatchRow);
     
-    const enriched = enrichMatchPredictions(row, leagueAverages, normalizedH2H, normalizedHome, normalizedAway, activeCrawlHistoryMatches, customLogosMap);
+    const enriched = enrichMatchPredictions(row, leagueAverages, normalizedH2H, normalizedHome, normalizedAway, activeCrawlHistoryMatches, customLogosMap, undefined, undefined, calibrationDelta);
     enrichedRows.push(enriched);
   }
 

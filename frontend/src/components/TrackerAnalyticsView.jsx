@@ -164,6 +164,7 @@ export default function TrackerAnalyticsView({
   };
 
   const startBalance = stats.bankroll?.initial || 1000;
+  const calibration = stats.calibration || { totalBets: 0, totalWon: 0, avgPredictedProb: 0, actualWinRate: 0, bias: 0, calibrationDelta: 0 };
 
   // 1. Sort bets chronologically to draw the correct time evolution
   const sortedBets = React.useMemo(() => {
@@ -559,6 +560,51 @@ export default function TrackerAnalyticsView({
               <h4 style={{ fontSize: '18px', fontFamily: 'Outfit', fontWeight: 800, margin: '2px 0 0 0', color: advancedStats.mathExpectancy >= 0 ? '#2ecc71' : '#e74c3c' }}>
                 {advancedStats.mathExpectancy >= 0 ? '+' : ''}{advancedStats.mathExpectancy.toFixed(2)} {currency}
               </h4>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Calibration & Fiabilité des Modèles Panel */}
+      {completedBets.length > 0 && calibration.totalBets > 0 && (
+        <div className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+          <h3 style={{ fontSize: '15px', fontFamily: 'Outfit', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px', borderRadius: '50%', background: 'rgba(191, 90, 242, 0.15)', color: '#bf5af2', fontSize: '11px', fontWeight: 900 }}>🎯</span>
+            Calibration Dynamique & Fiabilité des Modèles
+          </h3>
+          <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', margin: 0, lineHeight: '1.5' }}>
+            Predictix analyse l'historique de vos paris validés pour corriger d'éventuels biais systématiques du modèle Poisson. 
+            Ce coefficient d'ajustement est automatiquement réinjecté dans les estimations de cotes et value bets futurs.
+          </p>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '15px', marginTop: '5px' }}>
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Paris Calibrés</span>
+              <span style={{ fontSize: '15px', fontWeight: 800, fontFamily: 'Outfit' }}>{calibration.totalBets} paris</span>
+            </div>
+            
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Probabilité Moyenne</span>
+              <span style={{ fontSize: '15px', fontWeight: 800, fontFamily: 'Outfit', color: 'var(--text-secondary)' }}>{calibration.avgPredictedProb}%</span>
+            </div>
+            
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Taux de Réussite Réel</span>
+              <span style={{ fontSize: '15px', fontWeight: 800, fontFamily: 'Outfit', color: '#bf5af2' }}>{calibration.actualWinRate}%</span>
+            </div>
+            
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Biais (Réel - Prédit)</span>
+              <span style={{ fontSize: '15px', fontWeight: 800, fontFamily: 'Outfit', color: calibration.bias >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                {calibration.bias >= 0 ? '+' : ''}{calibration.bias}%
+              </span>
+            </div>
+            
+            <div style={{ background: 'rgba(191, 90, 242, 0.04)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(191, 90, 242, 0.2)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontSize: '10px', color: '#bf5af2', fontWeight: 700, textTransform: 'uppercase' }}>Ajustement Appliqué</span>
+              <span style={{ fontSize: '15px', fontWeight: 800, fontFamily: 'Outfit', color: calibration.calibrationDelta >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                {calibration.calibrationDelta >= 0 ? '+' : ''}{calibration.calibrationDelta}%
+              </span>
             </div>
           </div>
         </div>
