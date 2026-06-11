@@ -35,6 +35,57 @@ export default function MagicMatchCard({
 }) {
   const [selectedBet, setSelectedBet] = useState(null);
 
+  const handlePlaceGbdtBet = (period) => {
+    if (!matchDetails || !matchDetails.gbdt_predictions) return;
+    let gbdt = matchDetails.gbdt_predictions;
+    if (typeof gbdt === 'string') {
+      try { gbdt = JSON.parse(gbdt); } catch (e) {}
+    }
+    const periodPred = gbdt?.[period];
+    if (!periodPred) return;
+
+    const line = period === 'full_time' ? 9.5 : 4.5;
+    const prob = period === 'first_half' ? periodPred.over_4_5_prob 
+               : period === 'second_half' ? periodPred.over_4_5_prob 
+               : periodPred.over_9_5_prob;
+    
+    let odds = 1.85;
+    try {
+      if (matchDetails.odds_corners) {
+        const oddsList = JSON.parse(matchDetails.odds_corners);
+        const matchMarket = period === 'full_time' ? 'full_time' : '1st_half';
+        const foundOdds = oddsList.find(o => o.line === line && o.market_type === matchMarket);
+        if (foundOdds && foundOdds.over_decimal) {
+          odds = foundOdds.over_decimal;
+        }
+      }
+    } catch(e) {}
+
+    const periodLabel = period === 'first_half' ? '1ère Mi-Temps' 
+                      : period === 'second_half' ? '2ème Mi-Temps' 
+                      : 'Match Complet';
+
+    const customPred = {
+      match_id: matchDetails.match_id,
+      date: matchDetails.date || sig.date,
+      time: matchDetails.time || sig.time,
+      tournament: matchDetails.tournament || sig.tournament,
+      home_team: matchDetails.home_team || sig.home_team,
+      away_team: matchDetails.away_team || sig.away_team,
+      best_tip: 'Over',
+      card_line: String(line),
+      probability: `${prob}%`,
+      win_rate: `${prob}%`,
+      over_odds: String(odds),
+      under_odds: String(odds),
+      notes: `Placé depuis l'estimation GBDT ${periodLabel} (Attendu: ${periodPred.expected} corners).`,
+      match_url: matchDetails.match_url || sig.match_url || '',
+      sport: 'football'
+    };
+
+    handleQuickPlaceBet(customPred);
+  };
+
   const isPossession = sig.metric === 'possession';
   const isSelected = selectedPredIds && selectedPredIds.includes(sig.match_id);
 
@@ -243,6 +294,7 @@ export default function MagicMatchCard({
             meanHome={meanHome}
             meanAway={meanAway}
             h2hAvg={h2hAvg}
+            onPlaceGbdtBet={handlePlaceGbdtBet}
           />
         ) : (
           matchDetails && matchDetails.best_tip && (

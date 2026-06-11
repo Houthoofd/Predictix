@@ -23,7 +23,8 @@ export default function MatchCardValueBetSelector({
   lambda,
   meanHome,
   meanAway,
-  h2hAvg
+  h2hAvg,
+  onPlaceGbdtBet
 }) {
   return (
     <div style={{ 
@@ -76,9 +77,35 @@ export default function MatchCardValueBetSelector({
               const expVal = gbdt?.[period]?.expected || 'N/A';
               const labels = { first_half: '1ère MT', second_half: '2ème MT', full_time: 'Match' };
               return (
-                <div key={period} style={{ background: 'rgba(0, 0, 0, 0.25)', border: '1px solid rgba(255, 255, 255, 0.04)', borderRadius: '8px', padding: '8px', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-secondary)' }}>{labels[period]}</div>
-                  <div style={{ fontSize: '15px', fontWeight: 800, color: '#bf5af2' }}>{expVal}<span style={{ fontSize: '9px', color: 'var(--text-muted)', marginLeft: '2px', fontWeight: 500 }}>corn.</span></div>
+                <div 
+                  key={period} 
+                  onClick={() => onPlaceGbdtBet && onPlaceGbdtBet(period)}
+                  style={{ 
+                    background: 'rgba(0, 0, 0, 0.25)', 
+                    border: '1px solid rgba(255, 255, 255, 0.04)', 
+                    borderRadius: '8px', 
+                    padding: '8px 4px', 
+                    textAlign: 'center', 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    gap: '4px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease-in-out',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(191, 90, 242, 0.12)';
+                    e.currentTarget.style.borderColor = 'rgba(191, 90, 242, 0.3)';
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(0, 0, 0, 0.25)';
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.04)';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}
+                >
+                  <div style={{ fontSize: '9.5px', fontWeight: 700, color: 'var(--text-secondary)' }}>{labels[period]}</div>
+                  <div style={{ fontSize: '14px', fontWeight: 800, color: '#bf5af2' }}>{expVal}<span style={{ fontSize: '8.5px', color: 'var(--text-muted)', marginLeft: '1px', fontWeight: 500 }}>corn.</span></div>
+                  <span style={{ fontSize: '8.5px', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', opacity: 0.75 }}>Placer @ Over</span>
                 </div>
               );
             })}

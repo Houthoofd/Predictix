@@ -111,7 +111,7 @@ export default function MatchDetailsPoissonSimulator({
   };
 
   const labelsMap = isBasket
-    ? { quarter_1: 'Q1', quarter_2: 'Q2', quarter_3: 'Q3', quarter_4: 'Q4', full_time: 'Match Entier' }
+    ? { quarter_1: 'Q1', quarter_2: 'Q2', quarter_3: 'Q3', quarter_4: 'Q4', first_half: '1ère MT', second_half: '2ème MT', full_time: 'Match' }
     : isHockey
     ? { period_1: 'P1', period_2: 'P2', period_3: 'P3', full_time: 'Match Entier' }
     : isTennis
@@ -119,7 +119,7 @@ export default function MatchDetailsPoissonSimulator({
     : { first_half: '1ère MT', second_half: '2ème MT', full_time: 'Match Entier' };
 
   const longLabelsMap = isBasket
-    ? { quarter_1: 'Q1', quarter_2: 'Q2', quarter_3: 'Q3', quarter_4: 'Q4', full_time: 'Match' }
+    ? { quarter_1: 'Q1', quarter_2: 'Q2', quarter_3: 'Q3', quarter_4: 'Q4', first_half: '1ère Mi-Temps', second_half: '2ème Mi-Temps', full_time: 'Match' }
     : isHockey
     ? { period_1: '1ère Période', period_2: '2ème Période', period_3: '3ème Période', full_time: 'Match' }
     : isTennis
@@ -193,7 +193,9 @@ export default function MatchDetailsPoissonSimulator({
               { id: 'quarter_2', label: '2ème QT' },
               { id: 'quarter_3', label: '3ème QT' },
               { id: 'quarter_4', label: '4ème QT' },
-              { id: 'full_time', label: 'Match Entier' }
+              { id: 'first_half', label: '1ère MT' },
+              { id: 'second_half', label: '2ème MT' },
+              { id: 'full_time', label: 'Match' }
             ]
           : isHockey
           ? [
