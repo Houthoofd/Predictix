@@ -2,8 +2,25 @@ import React, { useState, useMemo } from 'react';
 import { Sparkles, AlertCircle, RefreshCw } from 'lucide-react';
 import { getValueBetsForMatch } from '../utils/valueBetScanner';
 import { sportLabels, getMetricLabel, parseTournament } from '../utils/labels';
+import { getAverage } from '../utils/poissonUtils';
 import MagicPredictionsGroup from './MagicPredictionsGroup';
 import MagicMatchCard from './MagicMatchCard';
+
+const getExpectedPoints = (match) => {
+  if (!match) return 0;
+  if ((match.sport || 'football').toLowerCase() === 'basketball') {
+    const homeAvg = getAverage(match.recent_home_matches, 'first_half_points', true, false, match.home_team, match.away_team) || 0;
+    const awayAvg = getAverage(match.recent_away_matches, 'first_half_points', false, true, match.home_team, match.away_team) || 0;
+    if (homeAvg > 0 || awayAvg > 0) {
+      return homeAvg + awayAvg;
+    }
+    if (match.card_line) {
+      const lineVal = parseFloat(match.card_line);
+      if (!isNaN(lineVal)) return lineVal;
+    }
+  }
+  return 0;
+};
 
 
 export default function MagicPredictionsTab({
@@ -85,12 +102,9 @@ export default function MagicPredictionsTab({
         if (selectedMagicSport === 'basketball') {
           const matchA = (predictions || []).find(p => p.match_id === a.match_id);
           const matchB = (predictions || []).find(p => p.match_id === b.match_id);
-          const probA = matchA && matchA.probability ? parseInt(matchA.probability, 10) : 0;
-          const probB = matchB && matchB.probability ? parseInt(matchB.probability, 10) : 0;
-          if (probB !== probA) {
-            return probB - probA;
-          }
-          return (b.avg_value || 0) - (a.avg_value || 0);
+          const pointsA = getExpectedPoints(matchA) || a.avg_value || 0;
+          const pointsB = getExpectedPoints(matchB) || b.avg_value || 0;
+          return pointsB - pointsA;
         }
         return 0;
       });
@@ -254,12 +268,9 @@ export default function MagicPredictionsTab({
               const matchB = (predictions || []).find(p => p.match_id === b.match_id);
 
               if (selectedMagicSport === 'basketball') {
-                const probA = matchA && matchA.probability ? parseInt(matchA.probability, 10) : 0;
-                const probB = matchB && matchB.probability ? parseInt(matchB.probability, 10) : 0;
-                if (probB !== probA) {
-                  return probB - probA;
-                }
-                return (b.avg_value || 0) - (a.avg_value || 0);
+                const pointsA = getExpectedPoints(matchA) || a.avg_value || 0;
+                const pointsB = getExpectedPoints(matchB) || b.avg_value || 0;
+                return pointsB - pointsA;
               }
 
               const betsA = getValueBetsForMatch(matchA);

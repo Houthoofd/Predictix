@@ -205,7 +205,34 @@ export default function MagicMatchCard({
       </div>
 
       <div style={{ display: 'flex', zIndex: 1, flexDirection: 'column', gap: '12px' }}>
-        {valueBets.length > 0 && currentBet ? (
+        {sig.sport === 'basketball' && matchDetails ? (
+          <div style={{ 
+            background: 'rgba(191, 90, 242, 0.05)', border: '1px solid rgba(191, 90, 242, 0.22)',
+            padding: '12px 14px', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '10px'
+          }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '9.5px', fontWeight: 800, color: '#bf5af2', textTransform: 'uppercase', letterSpacing: '0.08em' }}>POINTS ATTENDUS 1ère MT</span>
+              <span style={{ color: 'var(--color-success)', fontSize: '11.5px', fontWeight: 800, background: 'rgba(16, 185, 129, 0.08)', padding: '2px 8px', borderRadius: '6px', border: '1px solid rgba(16, 185, 129, 0.15)' }}>
+                {lambda ? `${lambda.toFixed(1)} pts` : 'N/A'}
+              </span>
+            </div>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginTop: '4px' }}>
+              <div style={{ background: 'rgba(0, 0, 0, 0.25)', border: '1px solid rgba(255, 255, 255, 0.04)', borderRadius: '8px', padding: '8px', textAlign: 'center' }}>
+                <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--text-secondary)' }}>Moy. Dom</div>
+                <div style={{ fontSize: '13px', fontWeight: 800, color: '#fff', marginTop: '2px' }}>{meanHome ? meanHome.toFixed(1) : 'N/A'}</div>
+              </div>
+              <div style={{ background: 'rgba(0, 0, 0, 0.25)', border: '1px solid rgba(255, 255, 255, 0.04)', borderRadius: '8px', padding: '8px', textAlign: 'center' }}>
+                <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--text-secondary)' }}>Moy. Ext</div>
+                <div style={{ fontSize: '13px', fontWeight: 800, color: '#fff', marginTop: '2px' }}>{meanAway ? meanAway.toFixed(1) : 'N/A'}</div>
+              </div>
+              <div style={{ background: 'rgba(0, 0, 0, 0.25)', border: '1px solid rgba(255, 255, 255, 0.04)', borderRadius: '8px', padding: '8px', textAlign: 'center' }}>
+                <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--text-secondary)' }}>Moy. H2H</div>
+                <div style={{ fontSize: '13px', fontWeight: 800, color: '#bf5af2', marginTop: '2px' }}>{h2hAvg ? h2hAvg.toFixed(1) : 'N/A'}</div>
+              </div>
+            </div>
+          </div>
+        ) : valueBets.length > 0 && currentBet ? (
           <MatchCardValueBetSelector
             valueBets={valueBets}
             currentBet={currentBet}
