@@ -150,7 +150,8 @@ export default function MatchDetailsPoissonSimulator({
       over_odds: isOver ? selectedOdds : 1.85,
       under_odds: !isOver ? selectedOdds : 1.85,
       match_url: selectedMatchDetails.match_url || '',
-      notes: `Simulation Poisson - ${getMetricTitle(activeMetric)} [${periodNote}]. Option: ${option === 'Over' ? 'Plus de' : 'Moins de'} ${line} (Probabilité: ${Math.round(prob * 100)}%, Cote Estimée: ${bookieOdds.toFixed(2)}, Cote Juste: ${fairOdds.toFixed(2)})`
+      notes: `Simulation Poisson - ${getMetricTitle(activeMetric)} [${periodNote}]. Option: ${option === 'Over' ? 'Plus de' : 'Moins de'} ${line} (Probabilité: ${Math.round(prob * 100)}%, Cote Estimée: ${bookieOdds.toFixed(2)}, Cote Juste: ${fairOdds.toFixed(2)})`,
+      sport: selectedMatchDetails.sport || 'football'
     };
 
     handleQuickPlaceBet(pred);

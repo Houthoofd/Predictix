@@ -39,7 +39,7 @@ export default function BasketTable({
                   </td>
                   <td style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{bet.league}</td>
                   <td style={{ fontFamily: 'Outfit', fontWeight: 600 }}>
-                    {formatTipLabel(bet.best_tip, bet.card_line, bet.sport)}
+                    {formatTipLabel(bet.best_tip, bet.card_line, bet.sport, bet.notes)}
                   </td>
                   <td>
                     <input 

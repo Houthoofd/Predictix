@@ -89,16 +89,68 @@ export function parseTournament(t) {
   return { country: 'International', league: clean };
 }
 
-export const formatTipLabel = (tip, line, sport) => {
-  const cleanTip = (tip || '').toLowerCase();
-  const cleanSport = (sport || 'football').toLowerCase();
-  
-  if (cleanTip === 'over' || cleanTip === 'plus de') {
-    return cleanSport === 'football' ? `Plus de ${line} Corners (1MT)` : `Over ${line}`;
-  } else if (cleanTip === 'under' || cleanTip === 'moins de') {
-    return cleanSport === 'football' ? `Moins de ${line} Corners (1MT)` : `Under ${line}`;
+export const formatTipLabel = (tip, line, sport, notes = '') => {
+  const cleanTip = (tip || '').toLowerCase().trim();
+  const cleanSport = (sport || 'football').toLowerCase().trim();
+  const cleanNotes = (notes || '').toLowerCase();
+
+  // Determine the metric based on notes, fallback to guessing by sport
+  let isCorners = false;
+  let isGoals = false;
+  let isPoints = false;
+  let isSets = false;
+
+  if (cleanNotes.includes('corner')) {
+    isCorners = true;
+  } else if (cleanNotes.includes('but') || cleanNotes.includes('goal')) {
+    isGoals = true;
+  } else if (cleanNotes.includes('point')) {
+    isPoints = true;
+  } else if (cleanNotes.includes('set')) {
+    isSets = true;
+  } else {
+    // Guessing by sport
+    if (cleanSport === 'football' || cleanSport === 'hockey' || cleanSport === 'futsal') {
+      const lineNum = parseFloat(line);
+      // Usually corners are >= 4.5, goals are <= 3.5
+      if (!isNaN(lineNum) && lineNum >= 4.5) {
+        isCorners = true;
+      } else {
+        isGoals = true;
+      }
+    } else if (cleanSport === 'basketball' || cleanSport === 'rugby' || cleanSport === 'american-football' || cleanSport === 'handball') {
+      isPoints = true;
+    } else if (cleanSport === 'tennis' || cleanSport === 'volleyball' || cleanSport === 'table-tennis' || cleanSport === 'badminton') {
+      isSets = true;
+    }
   }
-  
+
+  // Format label
+  const isOver = cleanTip === 'over' || cleanTip === 'plus de';
+  const isUnder = cleanTip === 'under' || cleanTip === 'moins de';
+
+  if (isOver || isUnder) {
+    const prefix = isOver ? 'Plus de' : 'Moins de';
+    if (isCorners) {
+      // Check if notes indicate first half
+      const is1MT = cleanNotes.includes('1ère mi-temps') || cleanNotes.includes('1mt') || cleanNotes.includes('1st half');
+      return `${prefix} ${line} Corners${is1MT ? ' (1MT)' : ''}`;
+    }
+    if (isGoals) {
+      return `${prefix} ${line} Buts`;
+    }
+    if (isPoints) {
+      // Check if notes indicate first half
+      const is1MT = cleanNotes.includes('1ère mi-temps') || cleanNotes.includes('1mt') || cleanNotes.includes('first half') || cleanNotes.includes('1er qt') || cleanNotes.includes('quarter');
+      return `${prefix} ${line} Points${is1MT ? ' (MT/QT)' : ''}`;
+    }
+    if (isSets) {
+      return `${prefix} ${line} Sets`;
+    }
+    // Fallback for other metrics/sports
+    return `${isOver ? 'Over' : 'Under'} ${line}`;
+  }
+
   const lineNum = parseFloat(line);
   if (cleanTip === '1' || cleanTip === 'home' || cleanTip === 'domicile') {
     if (!isNaN(lineNum) && lineNum !== 0) {
@@ -115,7 +167,8 @@ export const formatTipLabel = (tip, line, sport) => {
   if (cleanTip === 'x' || cleanTip === 'n' || cleanTip === 'nul' || cleanTip === 'match nul') {
     return 'N (Match Nul)';
   }
-  
+
   return `${tip} ${line}`;
 };
+
 

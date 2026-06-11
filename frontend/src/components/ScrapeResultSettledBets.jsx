@@ -112,7 +112,7 @@ export default function ScrapeResultSettledBets({
                   <div>
                     <span style={{ color: 'var(--text-muted)' }}>Pronostic :</span>{' '}
                     <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                      {formatTipLabel(bet.best_tip, bet.card_line, bet.sport)}
+                      {formatTipLabel(bet.best_tip, bet.card_line, bet.sport, bet.notes)}
                     </span>
                   </div>
                   <div>

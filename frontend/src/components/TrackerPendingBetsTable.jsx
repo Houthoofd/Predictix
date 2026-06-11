@@ -120,7 +120,7 @@ export default function TrackerPendingBetsTable({
                     <span>{bet.league}</span>
                   </td>
                   <td style={{ fontFamily: 'Outfit', fontWeight: 600 }}>
-                    {formatTipLabel(bet.best_tip, bet.card_line, bet.sport)}
+                    {formatTipLabel(bet.best_tip, bet.card_line, bet.sport, bet.notes)}
                   </td>
                   <td style={{ fontWeight: 700 }}>{bet.stake} {currency}</td>
                   <td>{bet.odds}</td>

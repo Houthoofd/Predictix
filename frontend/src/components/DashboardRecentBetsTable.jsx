@@ -34,7 +34,7 @@ export default function DashboardRecentBetsTable({ bets, currency, setActiveTab 
                 <td style={{ fontWeight: 600 }}>{bet.home_team} vs {bet.away_team}</td>
                 <td style={{ fontSize: '13px' }}>{bet.league}</td>
                 <td style={{ fontFamily: 'Outfit', fontWeight: 600 }}>
-                  {formatTipLabel(bet.best_tip, bet.card_line, bet.sport)}
+                  {formatTipLabel(bet.best_tip, bet.card_line, bet.sport, bet.notes)}
                 </td>
                 <td>{bet.stake} {currency}</td>
                 <td>{bet.odds}</td>
