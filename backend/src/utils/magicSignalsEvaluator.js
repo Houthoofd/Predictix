@@ -92,7 +92,6 @@ export async function evaluateMagicSignals(minCoverage = 50.0) {
 
     // Default strategy logic: evaluate "goals" (Buts / Points) for all matches
     // BUT for basketball, default to "first_half_points"!
-    const isBasketball = (match.sport || 'football').toLowerCase().trim() === 'basketball';
     const limit = 5;
     const metric = isBasketball ? 'first_half_points' : 'goals';
 
