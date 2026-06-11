@@ -48,8 +48,47 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
     }
   }
   
-  sql += ' ORDER BY scraped_at DESC, time ASC';
-  const rows = await dbQueryFn(sql, params);
+  const rawRows = await dbQueryFn(sql, params);
+
+  // Deduplicate predictions based on home_team, away_team, and date to avoid duplicates from multiple scraper sources
+  const uniqueRowsMap = new Map();
+  for (const row of rawRows) {
+    if (!row.home_team || !row.away_team) continue;
+    const key = `${row.home_team.toLowerCase().trim()}_vs_${row.away_team.toLowerCase().trim()}_${row.date}`;
+    const existing = uniqueRowsMap.get(key);
+    if (!existing) {
+      uniqueRowsMap.set(key, row);
+    } else {
+      let replace = false;
+      // 1. Prefer finished over non-finished
+      if (row.is_finished > existing.is_finished) {
+        replace = true;
+      } else if (row.is_finished === existing.is_finished) {
+        // 2. Prefer the one with detailed statistics
+        const hasStatsRow = row.statistics_json && row.statistics_json !== 'null' && row.statistics_json !== '';
+        const hasStatsExisting = existing.statistics_json && existing.statistics_json !== 'null' && existing.statistics_json !== '';
+        if (hasStatsRow && !hasStatsExisting) {
+          replace = true;
+        } else if (hasStatsRow === hasStatsExisting) {
+          // 3. Prefer a standard ID (numeric or link) over default ID (containing underscore)
+          const isDefaultIdRow = row.match_id.includes('_');
+          const isDefaultIdExisting = existing.match_id.includes('_');
+          if (!isDefaultIdRow && isDefaultIdExisting) {
+            replace = true;
+          } else if (isDefaultIdRow === isDefaultIdExisting) {
+            // 4. Prefer the most recently scraped
+            if (new Date(row.scraped_at) > new Date(existing.scraped_at)) {
+              replace = true;
+            }
+          }
+        }
+      }
+      if (replace) {
+        uniqueRowsMap.set(key, row);
+      }
+    }
+  }
+  const rows = Array.from(uniqueRowsMap.values());
   
   // Fetch finished matches to index home, away, and H2H matches in memory
   const allFinished = await dbQueryFn(`

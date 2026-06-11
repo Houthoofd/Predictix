@@ -66,12 +66,36 @@ export async function importScrapedMatches(matches, scrapedAt) {
     const awayClean = (match.away_team || '').replace(/[▲▼]/g, '').trim();
 
     const sql = `
-      INSERT OR REPLACE INTO scraped_predictions (
+      INSERT INTO scraped_predictions (
         match_id, time, date, tournament, home_team, away_team, score,
         over_odds, under_odds, card_line, probability, best_tip, win_rate, status,
         is_live, is_finished, first_half_corners_home, first_half_corners_away, odds_corners,
         home_logo, away_logo, historical_links, match_url, statistics_json, sport, scraped_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(match_id) DO UPDATE SET
+        time = excluded.time,
+        date = excluded.date,
+        tournament = excluded.tournament,
+        score = excluded.score,
+        status = excluded.status,
+        is_live = excluded.is_live,
+        is_finished = excluded.is_finished,
+        first_half_corners_home = COALESCE(excluded.first_half_corners_home, scraped_predictions.first_half_corners_home),
+        first_half_corners_away = COALESCE(excluded.first_half_corners_away, scraped_predictions.first_half_corners_away),
+        odds_corners = COALESCE(excluded.odds_corners, scraped_predictions.odds_corners),
+        home_logo = COALESCE(excluded.home_logo, scraped_predictions.home_logo),
+        away_logo = COALESCE(excluded.away_logo, scraped_predictions.away_logo),
+        historical_links = COALESCE(excluded.historical_links, scraped_predictions.historical_links),
+        match_url = COALESCE(excluded.match_url, scraped_predictions.match_url),
+        statistics_json = COALESCE(excluded.statistics_json, scraped_predictions.statistics_json),
+        sport = COALESCE(excluded.sport, scraped_predictions.sport),
+        card_line = COALESCE(excluded.card_line, scraped_predictions.card_line),
+        best_tip = COALESCE(excluded.best_tip, scraped_predictions.best_tip),
+        probability = COALESCE(excluded.probability, scraped_predictions.probability),
+        win_rate = COALESCE(excluded.win_rate, scraped_predictions.win_rate),
+        over_odds = COALESCE(excluded.over_odds, scraped_predictions.over_odds),
+        under_odds = COALESCE(excluded.under_odds, scraped_predictions.under_odds),
+        scraped_at = CURRENT_TIMESTAMP
     `;
 
     await dbRun(sql, [

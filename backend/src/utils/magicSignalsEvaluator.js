@@ -51,8 +51,47 @@ export async function evaluateMagicSignals(minCoverage = 50.0) {
     coverageMap.set(row.tournament, row.coverage_rate);
   }
 
-  // Get all matches (including finished ones)
-  const upcomingMatches = await dbQuery("SELECT * FROM scraped_predictions WHERE is_historical = 0 ORDER BY date ASC, time ASC");
+  // Get all matches (including finished ones) and deduplicate them to avoid duplicates from multiple scraper sources
+  const rawUpcomingMatches = await dbQuery("SELECT * FROM scraped_predictions WHERE is_historical = 0 ORDER BY date ASC, time ASC");
+  
+  const uniqueUpcomingMap = new Map();
+  for (const match of rawUpcomingMatches) {
+    if (!match.home_team || !match.away_team) continue;
+    const key = `${match.home_team.toLowerCase().trim()}_vs_${match.away_team.toLowerCase().trim()}_${match.date}`;
+    const existing = uniqueUpcomingMap.get(key);
+    if (!existing) {
+      uniqueUpcomingMap.set(key, match);
+    } else {
+      let replace = false;
+      // 1. Prefer finished over non-finished
+      if (match.is_finished > existing.is_finished) {
+        replace = true;
+      } else if (match.is_finished === existing.is_finished) {
+        // 2. Prefer the one with detailed statistics
+        const hasStatsRow = match.statistics_json && match.statistics_json !== 'null' && match.statistics_json !== '';
+        const hasStatsExisting = existing.statistics_json && existing.statistics_json !== 'null' && existing.statistics_json !== '';
+        if (hasStatsRow && !hasStatsExisting) {
+          replace = true;
+        } else if (hasStatsRow === hasStatsExisting) {
+          // 3. Prefer a standard ID (numeric or link) over default ID (containing underscore)
+          const isDefaultIdRow = match.match_id.includes('_');
+          const isDefaultIdExisting = existing.match_id.includes('_');
+          if (!isDefaultIdRow && isDefaultIdExisting) {
+            replace = true;
+          } else if (isDefaultIdRow === isDefaultIdExisting) {
+            // 4. Prefer the most recently scraped
+            if (new Date(match.scraped_at) > new Date(existing.scraped_at)) {
+              replace = true;
+            }
+          }
+        }
+      }
+      if (replace) {
+        uniqueUpcomingMap.set(key, match);
+      }
+    }
+  }
+  const upcomingMatches = Array.from(uniqueUpcomingMap.values());
   
   // Fetch finished matches once to build in-memory H2H mapping
   const allFinished = await dbQuery(`
