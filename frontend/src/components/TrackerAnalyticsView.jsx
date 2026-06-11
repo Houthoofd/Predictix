@@ -29,6 +29,140 @@ export default function TrackerAnalyticsView({
   const currency = stats.bankroll?.currency || '€';
   const [activePoint, setActivePoint] = React.useState(null);
 
+  const [showLgChart, setShowLgChart] = React.useState(false);
+  const [showBmChart, setShowBmChart] = React.useState(false);
+  const [showSpChart, setShowSpChart] = React.useState(false);
+  const [showOddsChart, setShowOddsChart] = React.useState(false);
+  const [showTipChart, setShowTipChart] = React.useState(false);
+  const [showCatChart, setShowCatChart] = React.useState(false);
+
+  const renderDataSection = (title, items, isChart, setIsChart, maxHeight = '250px') => {
+    const hasData = items && items.length > 0;
+    
+    return (
+      <div className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 style={{ fontSize: '15px', fontFamily: 'Outfit', fontWeight: 700, margin: 0 }}>{title}</h3>
+          {hasData && (
+            <div style={{ 
+              display: 'flex', 
+              background: 'rgba(0, 0, 0, 0.25)', 
+              border: '1px solid rgba(255, 255, 255, 0.08)', 
+              borderRadius: '8px', 
+              padding: '2px', 
+              gap: '2px' 
+            }}>
+              <button 
+                onClick={() => setIsChart(false)}
+                style={{
+                  border: 'none',
+                  background: !isChart ? 'linear-gradient(135deg, #7f00ff 0%, #0082ff 100%)' : 'transparent',
+                  color: !isChart ? '#fff' : 'var(--text-secondary)',
+                  fontSize: '10.5px',
+                  fontWeight: 700,
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  outline: 'none'
+                }}
+              >
+                Tableau
+              </button>
+              <button 
+                onClick={() => setIsChart(true)}
+                style={{
+                  border: 'none',
+                  background: isChart ? 'linear-gradient(135deg, #7f00ff 0%, #0082ff 100%)' : 'transparent',
+                  color: isChart ? '#fff' : 'var(--text-secondary)',
+                  fontSize: '10.5px',
+                  fontWeight: 700,
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  outline: 'none'
+                }}
+              >
+                Graphique
+              </button>
+            </div>
+          )}
+        </div>
+
+        {!hasData ? (
+          <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12.5px' }}>
+            Aucune donnée historique.
+          </div>
+        ) : !isChart ? (
+          /* TABLEAU VIEW */
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: maxHeight, overflowY: 'auto', paddingRight: '4px' }}>
+            {items.map((item, idx) => {
+              const displayName = item.name || item.label || 'Inconnu';
+              const formattedName = displayName.charAt(0).toUpperCase() + displayName.slice(1);
+              const wr = item.total > 0 ? ((item.won / item.total) * 100).toFixed(0) : 0;
+              return (
+                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.01)', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                  <div>
+                    <div style={{ fontSize: '12.5px', fontWeight: 700 }}>{formattedName}</div>
+                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                      Taux de réussite: {wr}% ({item.total} paris)
+                    </div>
+                  </div>
+                  <span style={{ fontSize: '13px', fontWeight: 800, color: item.profit >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                    {item.profit >= 0 ? '+' : ''}{item.profit.toFixed(2)} {currency}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          /* GRAPHIQUE VIEW */
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: maxHeight, overflowY: 'auto', paddingRight: '4px' }}>
+            {items.map((item, idx) => {
+              const displayName = item.name || item.label || 'Inconnu';
+              const formattedName = displayName.charAt(0).toUpperCase() + displayName.slice(1);
+              const wr = item.total > 0 ? Math.round((item.won / item.total) * 100) : 0;
+              const isProfitPositive = item.profit >= 0;
+              const progressColor = isProfitPositive 
+                ? 'linear-gradient(90deg, #10b981 0%, #059669 100%)' 
+                : 'linear-gradient(90deg, #ef4444 0%, #dc2626 100%)';
+              const trackColor = 'rgba(255, 255, 255, 0.05)';
+              
+              return (
+                <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '6px', background: 'rgba(255,255,255,0.01)', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700 }}>{formattedName} <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 500 }}>({item.total} paris)</span></span>
+                    <span style={{ fontSize: '12px', fontWeight: 800, color: isProfitPositive ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                      {isProfitPositive ? '+' : ''}{item.profit.toFixed(2)} {currency}
+                    </span>
+                  </div>
+                  
+                  {/* Progress bar container */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ flexGrow: 1, height: '7px', background: trackColor, borderRadius: '4px', overflow: 'hidden', position: 'relative' }}>
+                      <div style={{ 
+                        height: '100%', 
+                        background: progressColor, 
+                        width: `${wr}%`, 
+                        borderRadius: '4px',
+                        transition: 'width 0.8s cubic-bezier(0.4, 0, 0.2, 1)',
+                        boxShadow: isProfitPositive ? '0 0 8px rgba(16, 185, 129, 0.4)' : '0 0 8px rgba(239, 68, 68, 0.4)'
+                      }} />
+                    </div>
+                    <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-secondary)', minWidth: '32px', textAlign: 'right', fontFamily: 'Outfit' }}>
+                      {wr}%
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const startBalance = stats.bankroll?.initial || 1000;
 
   // 1. Sort bets chronologically to draw the correct time evolution
@@ -443,149 +577,16 @@ export default function TrackerAnalyticsView({
         
         {/* Left Col: Leagues, Bookmakers and Sports performance lists */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          
-          <div className="glass-card" style={{ padding: '20px' }}>
-            <h3 style={{ fontSize: '15px', fontFamily: 'Outfit', fontWeight: 700, marginBottom: '12px' }}>Rentabilité par Ligue</h3>
-            {leaguesList.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '250px', overflowY: 'auto', paddingRight: '4px' }}>
-                {leaguesList.map((lg) => (
-                  <div key={lg.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.01)', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
-                    <div>
-                      <div style={{ fontSize: '12.5px', fontWeight: 700 }}>{lg.name}</div>
-                      <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                        Taux de réussite: {((lg.won / lg.total) * 100).toFixed(0)}% ({lg.total} paris)
-                      </div>
-                    </div>
-                    <span style={{ fontSize: '13px', fontWeight: 800, color: lg.profit >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
-                      {lg.profit >= 0 ? '+' : ''}{lg.profit.toFixed(2)} {currency}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12.5px' }}>Aucune donnée historique.</div>
-            )}
-          </div>
-
-          <div className="glass-card" style={{ padding: '20px' }}>
-            <h3 style={{ fontSize: '15px', fontFamily: 'Outfit', fontWeight: 700, marginBottom: '12px' }}>Rentabilité par Bookmaker</h3>
-            {bookmakersList.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '250px', overflowY: 'auto', paddingRight: '4px' }}>
-                {bookmakersList.map((bm) => (
-                  <div key={bm.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.01)', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
-                    <div>
-                      <div style={{ fontSize: '12.5px', fontWeight: 700 }}>{bm.name}</div>
-                      <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                        Taux de réussite: {((bm.won / bm.total) * 100).toFixed(0)}% ({bm.total} paris)
-                      </div>
-                    </div>
-                    <span style={{ fontSize: '13px', fontWeight: 800, color: bm.profit >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
-                      {bm.profit >= 0 ? '+' : ''}{bm.profit.toFixed(2)} {currency}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12.5px' }}>Aucune donnée historique.</div>
-            )}
-          </div>
-
-          <div className="glass-card" style={{ padding: '20px' }}>
-            <h3 style={{ fontSize: '15px', fontFamily: 'Outfit', fontWeight: 700, marginBottom: '12px' }}>Rentabilité par Sport</h3>
-            {sportsList.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '250px', overflowY: 'auto', paddingRight: '4px' }}>
-                {sportsList.map((sp) => {
-                  const label = sp.name.charAt(0).toUpperCase() + sp.name.slice(1);
-                  return (
-                    <div key={sp.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.01)', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
-                      <div>
-                        <div style={{ fontSize: '12.5px', fontWeight: 700 }}>{label}</div>
-                        <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                          Taux de réussite: {((sp.won / sp.total) * 100).toFixed(0)}% ({sp.total} paris)
-                        </div>
-                      </div>
-                      <span style={{ fontSize: '13px', fontWeight: 800, color: sp.profit >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
-                        {sp.profit >= 0 ? '+' : ''}{sp.profit.toFixed(2)} {currency}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12.5px' }}>Aucune donnée historique.</div>
-            )}
-          </div>
-
+          {renderDataSection("Rentabilité par Ligue", leaguesList, showLgChart, setShowLgChart)}
+          {renderDataSection("Rentabilité par Bookmaker", bookmakersList, showBmChart, setShowBmChart)}
+          {renderDataSection("Rentabilité par Sport", sportsList, showSpChart, setShowSpChart)}
         </div>
 
         {/* Right Col: Tip Types, Odds Ranges and Bet Categories breakdowns */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          
-          <div className="glass-card" style={{ padding: '20px' }}>
-            <h3 style={{ fontSize: '15px', fontFamily: 'Outfit', fontWeight: 700, marginBottom: '12px' }}>Rentabilité par Tranche de Cote</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {oddsRangesList.map((rg) => (
-                <div key={rg.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.01)', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
-                  <div>
-                    <div style={{ fontSize: '12.5px', fontWeight: 700 }}>{rg.label}</div>
-                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                      Taux de réussite: {rg.total > 0 ? ((rg.won / rg.total) * 100).toFixed(0) : 0}% ({rg.total} paris)
-                    </div>
-                  </div>
-                  <span style={{ fontSize: '13px', fontWeight: 800, color: rg.profit >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
-                    {rg.profit >= 0 ? '+' : ''}{rg.profit.toFixed(2)} {currency}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="glass-card" style={{ padding: '20px' }}>
-            <h3 style={{ fontSize: '15px', fontFamily: 'Outfit', fontWeight: 700, marginBottom: '12px' }}>Rentabilité par Type de Conseil</h3>
-            {tipTypesList.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '250px', overflowY: 'auto', paddingRight: '4px' }}>
-                {tipTypesList.map((tip) => (
-                  <div key={tip.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.01)', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
-                    <div>
-                      <div style={{ fontSize: '12.5px', fontWeight: 700 }}>{tip.name}</div>
-                      <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                        Taux de réussite: {((tip.won / tip.total) * 100).toFixed(0)}% ({tip.total} paris)
-                      </div>
-                    </div>
-                    <span style={{ fontSize: '13px', fontWeight: 800, color: tip.profit >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
-                      {tip.profit >= 0 ? '+' : ''}{tip.profit.toFixed(2)} {currency}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12.5px' }}>Aucune donnée historique.</div>
-            )}
-          </div>
-
-          <div className="glass-card" style={{ padding: '20px' }}>
-            <h3 style={{ fontSize: '15px', fontFamily: 'Outfit', fontWeight: 700, marginBottom: '12px' }}>Rentabilité par Type de Pari</h3>
-            {betCategoriesList.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {betCategoriesList.map((cat) => (
-                  <div key={cat.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.01)', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
-                    <div>
-                      <div style={{ fontSize: '12.5px', fontWeight: 700 }}>{cat.name}</div>
-                      <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                        Taux de réussite: {((cat.won / cat.total) * 100).toFixed(0)}% ({cat.total} paris)
-                      </div>
-                    </div>
-                    <span style={{ fontSize: '13px', fontWeight: 800, color: cat.profit >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
-                      {cat.profit >= 0 ? '+' : ''}{cat.profit.toFixed(2)} {currency}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12.5px' }}>Aucune donnée historique.</div>
-            )}
-          </div>
-
+          {renderDataSection("Rentabilité par Tranche de Cote", oddsRangesList, showOddsChart, setShowOddsChart)}
+          {renderDataSection("Rentabilité par Type de Conseil", tipTypesList, showTipChart, setShowTipChart)}
+          {renderDataSection("Rentabilité par Type de Pari", betCategoriesList, showCatChart, setShowCatChart)}
         </div>
 
       </div>
