@@ -62,6 +62,9 @@ export function parsePromptToStrategy(prompt) {
   } else if (text.includes('transformation') || text.includes('conversion')) {
     metric = 'conversions';
     metricLabel = 'Transformations';
+  } else if ((text.includes('mi-temps') || text.includes('half') || text.includes('period') || text.includes('mt')) && (text.includes('but') || text.includes('goal') || text.includes('point') || text.includes('score'))) {
+    metric = 'first_half_points';
+    metricLabel = 'Points 1ère Mi-Temps';
   } else if (text.includes('but') || text.includes('goal') || text.includes('point') || text.includes('score')) {
     metric = 'goals';
     metricLabel = 'Buts / Points';
@@ -125,6 +128,7 @@ export function parsePromptToStrategy(prompt) {
     else if (metric === 'penalties') threshold = 3.5;
     else if (metric === 'conversions') threshold = 3.5;
     else if (metric === 'goals') threshold = 5.5;
+    else if (metric === 'first_half_points') threshold = 75.5;
     else if (metric === 'saves') threshold = 14.5;
     else threshold = 4.5;
   }

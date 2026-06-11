@@ -8,7 +8,7 @@ export function enrichNonFootballMatch(row, h2hMatches, homeMatches, awayMatches
 
   // 1. Get default line depending on the sport
   let defaultLine = 2.5;
-  if (sport === 'basketball') defaultLine = 165.5;
+  if (sport === 'basketball') defaultLine = 80.5;
   else if (sport === 'tennis') defaultLine = 2.5;
   else if (sport.includes('rugby')) defaultLine = 42.5;
   else if (sport === 'handball') defaultLine = 52.5;
@@ -23,6 +23,23 @@ export function enrichNonFootballMatch(row, h2hMatches, homeMatches, awayMatches
   // 2. Parse scores from recent and H2H matches to calculate average
   const totals = [];
   const parseTotalScore = (m) => {
+    if (sport === 'basketball') {
+      if (m.statistics_json) {
+        try {
+          const stats = JSON.parse(m.statistics_json);
+          if (stats && stats.first_half_points && stats.first_half_points.home !== undefined && stats.first_half_points.away !== undefined) {
+            return parseFloat(stats.first_half_points.home) + parseFloat(stats.first_half_points.away);
+          }
+        } catch (e) {}
+      }
+      if (!m.score) return null;
+      const match = m.score.match(/(\d+)\s*-\s*(\d+)/);
+      if (match) {
+        return (parseFloat(match[1]) + parseFloat(match[2])) * 0.49; // approx. 49% of final score
+      }
+      return null;
+    }
+
     if (!m.score) return null;
     const match = m.score.match(/(\d+)\s*-\s*(\d+)/);
     if (match) {
@@ -95,7 +112,7 @@ export function enrichNonFootballMatch(row, h2hMatches, homeMatches, awayMatches
   probVal = Math.max(50, Math.min(85, probVal));
   
   const labelMapping = {
-    basketball: 'Points',
+    basketball: 'Points 1ère MT',
     tennis: 'Sets',
     volleyball: 'Sets',
     handball: 'Buts',

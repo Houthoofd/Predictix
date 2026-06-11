@@ -23,10 +23,19 @@ export const metricLabels = {
   penalties: 'pénalités',
   conversions: 'transformations',
   goals: 'buts / points',
+  first_half_points: 'points 1ère mi-temps',
   saves: 'arrêts'
 };
 
 export async function evaluateMagicSignals(minCoverage = 50.0) {
+  // Fetch active custom strategies
+  let activeStrategies = [];
+  try {
+    activeStrategies = await dbQuery("SELECT * FROM custom_strategies WHERE status = 'ACTIVE'");
+  } catch (err) {
+    console.warn("Could not fetch custom strategies, defaulting to empty list:", err.message);
+  }
+
   // Fetch coverage rate per league
   const coverageRows = await dbQuery(`
     SELECT 
@@ -109,8 +118,6 @@ export async function evaluateMagicSignals(minCoverage = 50.0) {
       rationaleText = `Aucun historique H2H disponible. Ouvrez les détails du match pour lancer l'analyse H2H.`;
     }
 
-    const metricLabel = metricLabels[metric] || metric;
-
     signals.push({
       id: `${match.match_id}_all`,
       match_id: match.match_id,
@@ -134,6 +141,98 @@ export async function evaluateMagicSignals(minCoverage = 50.0) {
       sport: match.sport || 'football',
       scraped_at: match.scraped_at
     });
+
+    // Evaluate active custom strategies
+    for (const strategy of activeStrategies) {
+      let conds = {};
+      try {
+        conds = JSON.parse(strategy.conditions_json);
+      } catch (e) {
+        continue;
+      }
+      
+      const stratLimit = conds.limit || 5;
+      const stratMetric = strategy.metric;
+      const operator = conds.operator || '>=';
+      const threshold = parseFloat(conds.threshold);
+      
+      let stratValues = [];
+      for (const h2h of h2hMatches) {
+        if (stratValues.length >= stratLimit) break;
+        
+        let stats = null;
+        try {
+          if (h2h.statistics_json) {
+            stats = JSON.parse(h2h.statistics_json);
+          }
+        } catch (e) {
+          continue;
+        }
+        
+        if (stratMetric === 'goals') {
+          if (h2h.score) {
+            const scoreMatch = h2h.score.match(/(\d+)\s*-\s*(\d+)/);
+            if (scoreMatch) {
+              const val = parseFloat(scoreMatch[1]) + parseFloat(scoreMatch[2]);
+              stratValues.push(val);
+            }
+          }
+        } else if (stratMetric === 'possession') {
+          if (stats && stats.possession && stats.possession.home !== undefined && stats.possession.away !== undefined) {
+            const val = (h2h.home_team === match.home_team) 
+              ? parseFloat(stats.possession.home) 
+              : parseFloat(stats.possession.away);
+            stratValues.push(val);
+          }
+        } else {
+          if (stats && stats[stratMetric] && stats[stratMetric].home !== undefined && stats[stratMetric].away !== undefined) {
+            const val = parseFloat(stats[stratMetric].home) + parseFloat(stats[stratMetric].away);
+            stratValues.push(val);
+          }
+        }
+      }
+      
+      if (stratValues.length === 0) continue;
+      
+      const stratSum = stratValues.reduce((acc, curr) => acc + curr, 0);
+      const stratAvg = parseFloat((stratSum / stratValues.length).toFixed(1));
+      
+      let qualified = false;
+      if (operator === '>=') qualified = stratAvg >= threshold;
+      else if (operator === '<=') qualified = stratAvg <= threshold;
+      else if (operator === '>') qualified = stratAvg > threshold;
+      else if (operator === '<') qualified = stratAvg < threshold;
+      
+      if (qualified) {
+        const metricLabel = metricLabels[stratMetric] || stratMetric;
+        const opText = operator === '>=' ? 'au moins' : (operator === '<=' ? 'maximum' : (operator === '>' ? 'plus de' : 'moins de'));
+        const rationaleText = `Moyenne H2H de ${metricLabel} sur les ${stratValues.length} dernières confrontations : ${stratAvg} (Seuil ciblé : ${opText} ${threshold}).`;
+        
+        signals.push({
+          id: `${match.match_id}_${strategy.id}`,
+          match_id: match.match_id,
+          time: match.time,
+          date: match.date,
+          tournament: match.tournament,
+          home_team: match.home_team,
+          away_team: match.away_team,
+          home_logo: match.home_logo,
+          away_logo: match.away_logo,
+          score: match.score,
+          match_url: match.match_url,
+          strategy_id: strategy.id,
+          strategy_name: strategy.name,
+          metric: stratMetric,
+          prompt: strategy.prompt || '',
+          avg_value: stratAvg,
+          threshold: threshold,
+          operator: operator,
+          rationale: rationaleText,
+          sport: match.sport || 'football',
+          scraped_at: match.scraped_at
+        });
+      }
+    }
   }
 
   return signals;
