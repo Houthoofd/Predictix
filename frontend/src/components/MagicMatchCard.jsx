@@ -205,7 +205,7 @@ export default function MagicMatchCard({
       </div>
 
       <div style={{ display: 'flex', zIndex: 1, flexDirection: 'column', gap: '12px' }}>
-        {valueBets.length > 0 && currentBet && (
+        {valueBets.length > 0 && currentBet ? (
           <MatchCardValueBetSelector
             valueBets={valueBets}
             currentBet={currentBet}
@@ -217,6 +217,26 @@ export default function MagicMatchCard({
             meanAway={meanAway}
             h2hAvg={h2hAvg}
           />
+        ) : (
+          matchDetails && matchDetails.best_tip && (
+            <div style={{ 
+              background: 'rgba(191, 90, 242, 0.05)', border: '1px solid rgba(191, 90, 242, 0.22)',
+              padding: '10px 12px', borderRadius: '10px', display: 'flex', flexDirection: 'column', gap: '6px'
+            }} onClick={(e) => e.stopPropagation()}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '9px', fontWeight: 800, color: '#bf5af2', textTransform: 'uppercase', letterSpacing: '0.08em' }}>PRÉDICTION CONSTATÉE</span>
+              </div>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 0' }}>
+                <span>{matchDetails.best_tip} {matchDetails.card_line}</span>
+                <span style={{ color: 'var(--color-success)', fontSize: '11px', background: 'rgba(16, 185, 129, 0.08)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(16, 185, 129, 0.12)' }}>
+                  {matchDetails.probability || 'N/A'}
+                </span>
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', background: 'rgba(0, 0, 0, 0.2)', border: '1px solid rgba(255, 255, 255, 0.04)', borderRadius: '6px', padding: '8px 10px', marginTop: '4px', lineHeight: '1.45' }}>
+                L'algorithme estime <strong style={{ color: 'var(--color-success)' }}>{matchDetails.probability || 'N/A'}</strong> de probabilité de voir {matchDetails.best_tip.toLowerCase()} {matchDetails.card_line.toLowerCase()}.
+              </div>
+            </div>
+          )
         )}
 
         <div style={{ display: 'flex', justifyContent: 'space-between', background: 'var(--bg-tertiary)', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '12.5px', alignItems: 'center' }}>

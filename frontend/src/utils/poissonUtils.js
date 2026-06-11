@@ -148,6 +148,7 @@ export const getMetricTitle = (key) => {
     penalties: 'Pénalités',
     conversions: 'Transformations',
     goals: 'Buts',
+    first_half_points: 'Points 1ère MT',
     saves: 'Arrêts'
   };
   if (titles[key]) return titles[key];
@@ -202,6 +203,43 @@ export const getAverage = (matches, metric, isHomeOnly = false, isAwayOnly = fal
         if (m.first_half_corners_home !== null && m.first_half_corners_home !== undefined &&
             m.first_half_corners_away !== null && m.first_half_corners_away !== undefined) {
           sum += (m.first_half_corners_home + m.first_half_corners_away);
+          count++;
+        }
+      }
+      continue;
+    }
+
+    if (metric === 'first_half_points') {
+      let valHome = null;
+      let valAway = null;
+      let stats = null;
+      try {
+        if (m.statistics_json) {
+          stats = typeof m.statistics_json === 'string' ? JSON.parse(m.statistics_json) : m.statistics_json;
+        }
+      } catch (e) {}
+
+      if (stats && stats.first_half_points && stats.first_half_points.home !== undefined && stats.first_half_points.away !== undefined) {
+        valHome = parseFloat(stats.first_half_points.home);
+        valAway = parseFloat(stats.first_half_points.away);
+      } else if (m.score) {
+        // Fallback approximation: 49% of final score
+        const matchScore = m.score.match(/(\d+)\s*-\s*(\d+)/);
+        if (matchScore) {
+          valHome = parseFloat(matchScore[1]) * 0.49;
+          valAway = parseFloat(matchScore[2]) * 0.49;
+        }
+      }
+
+      if (valHome !== null && valAway !== null) {
+        if (isHomeOnly) {
+          sum += m.home_team === homeTeam ? valHome : valAway;
+          count++;
+        } else if (isAwayOnly) {
+          sum += m.away_team === awayTeam ? valAway : valHome;
+          count++;
+        } else {
+          sum += (valHome + valAway);
           count++;
         }
       }

@@ -40,7 +40,8 @@ export const getMetricLabel = (metric) => {
     shots_on_target: 'Tirs Cadrés',
     shots: 'Tirs',
     offsides: 'Hors-jeu',
-    corners: 'Corners'
+    corners: 'Corners',
+    first_half_points: 'Points 1ère MT'
   };
   return labels[metric] || metric;
 };

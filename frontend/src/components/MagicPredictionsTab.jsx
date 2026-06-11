@@ -36,6 +36,11 @@ export default function MagicPredictionsTab({
 
   React.useEffect(() => {
     setCollapsedLeagues({});
+    if (selectedMagicSport === 'basketball') {
+      setSortBy('confidence');
+    } else {
+      setSortBy('date');
+    }
   }, [selectedMagicSport]);
 
   React.useEffect(() => {
@@ -73,8 +78,26 @@ export default function MagicPredictionsTab({
       }
       groups[groupKey].push(sig);
     });
+
+    // Sort signals inside league groups if basketball
+    Object.keys(groups).forEach(key => {
+      groups[key].sort((a, b) => {
+        if (selectedMagicSport === 'basketball') {
+          const matchA = (predictions || []).find(p => p.match_id === a.match_id);
+          const matchB = (predictions || []).find(p => p.match_id === b.match_id);
+          const probA = matchA && matchA.probability ? parseInt(matchA.probability, 10) : 0;
+          const probB = matchB && matchB.probability ? parseInt(matchB.probability, 10) : 0;
+          if (probB !== probA) {
+            return probB - probA;
+          }
+          return (b.avg_value || 0) - (a.avg_value || 0);
+        }
+        return 0;
+      });
+    });
+
     return groups;
-  }, [filteredSignals]);
+  }, [filteredSignals, predictions, selectedMagicSport]);
 
   const sortedLeagues = useMemo(() => {
     return Object.keys(leagueGroups).sort();
@@ -229,6 +252,16 @@ export default function MagicPredictionsTab({
             const sortedSignals = [...filteredSignals].sort((a, b) => {
               const matchA = (predictions || []).find(p => p.match_id === a.match_id);
               const matchB = (predictions || []).find(p => p.match_id === b.match_id);
+
+              if (selectedMagicSport === 'basketball') {
+                const probA = matchA && matchA.probability ? parseInt(matchA.probability, 10) : 0;
+                const probB = matchB && matchB.probability ? parseInt(matchB.probability, 10) : 0;
+                if (probB !== probA) {
+                  return probB - probA;
+                }
+                return (b.avg_value || 0) - (a.avg_value || 0);
+              }
+
               const betsA = getValueBetsForMatch(matchA);
               const betsAProb = betsA.length > 0 ? betsA[0].probability : 0;
               const betsB = getValueBetsForMatch(matchB);

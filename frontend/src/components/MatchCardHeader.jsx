@@ -25,7 +25,8 @@ const getMetricLabel = (metric) => {
     shots_on_target: 'Tirs Cadrés',
     shots: 'Tirs',
     offsides: 'Hors-jeu',
-    corners: 'Corners'
+    corners: 'Corners',
+    first_half_points: 'Points 1ère MT'
   };
   return labels[metric] || metric;
 };
@@ -38,7 +39,8 @@ const getMetricExplanation = (metric) => {
     possession: 'Possession moyenne du ballon.',
     shots_on_target: 'Tirs cadrés cadrés par match.',
     shots: 'Tirs totaux par match.',
-    offsides: 'Hors-jeu signalés par match.'
+    offsides: 'Hors-jeu signalés par match.',
+    first_half_points: 'Total des points marqués en première mi-temps (somme des Q1 et Q2).'
   };
   return explanations[metric] || `Statistiques pour ${metric}.`;
 };

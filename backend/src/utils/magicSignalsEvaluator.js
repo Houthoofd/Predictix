@@ -90,18 +90,41 @@ export async function evaluateMagicSignals(minCoverage = 50.0) {
     const h2hMatches = h2hMatchesMap.get(h2hKey) || [];
 
     // Default strategy logic: evaluate "goals" (Buts / Points) for all matches
+    // BUT for basketball, default to "first_half_points"!
+    const isBasketball = (match.sport || 'football').toLowerCase().trim() === 'basketball';
     const limit = 5;
-    const metric = 'goals';
+    const metric = isBasketball ? 'first_half_points' : 'goals';
 
     let values = [];
     for (const h2h of h2hMatches) {
       if (values.length >= limit) break;
 
-      if (h2h.score) {
-        const scoreMatch = h2h.score.match(/(\d+)\s*-\s*(\d+)/);
-        if (scoreMatch) {
-          const val = parseFloat(scoreMatch[1]) + parseFloat(scoreMatch[2]);
-          values.push(val);
+      if (isBasketball) {
+        let stats = null;
+        try {
+          if (h2h.statistics_json) {
+            stats = JSON.parse(h2h.statistics_json);
+          }
+        } catch (e) {}
+        if (stats && stats.first_half_points && stats.first_half_points.home !== undefined && stats.first_half_points.away !== undefined) {
+          values.push(parseFloat(stats.first_half_points.home) + parseFloat(stats.first_half_points.away));
+          continue;
+        }
+        // Fallback to 49% of final score if no first_half_points stats are present
+        if (h2h.score) {
+          const scoreMatch = h2h.score.match(/(\d+)\s*-\s*(\d+)/);
+          if (scoreMatch) {
+            const val = (parseFloat(scoreMatch[1]) + parseFloat(scoreMatch[2])) * 0.49;
+            values.push(val);
+          }
+        }
+      } else {
+        if (h2h.score) {
+          const scoreMatch = h2h.score.match(/(\d+)\s*-\s*(\d+)/);
+          if (scoreMatch) {
+            const val = parseFloat(scoreMatch[1]) + parseFloat(scoreMatch[2]);
+            values.push(val);
+          }
         }
       }
     }
@@ -112,7 +135,8 @@ export async function evaluateMagicSignals(minCoverage = 50.0) {
     if (values.length > 0) {
       const sum = values.reduce((acc, curr) => acc + curr, 0);
       avg = parseFloat((sum / values.length).toFixed(1));
-      rationaleText = `Moyenne de buts/points sur les ${values.length} dernières confrontations H2H : ${avg}.`;
+      const metricLabel = metricLabels[metric] || metric;
+      rationaleText = `Moyenne de ${metricLabel} sur les ${values.length} dernières confrontations H2H : ${avg}.`;
     } else {
       avg = 0;
       rationaleText = `Aucun historique H2H disponible. Ouvrez les détails du match pour lancer l'analyse H2H.`;
@@ -174,6 +198,17 @@ export async function evaluateMagicSignals(minCoverage = 50.0) {
             const scoreMatch = h2h.score.match(/(\d+)\s*-\s*(\d+)/);
             if (scoreMatch) {
               const val = parseFloat(scoreMatch[1]) + parseFloat(scoreMatch[2]);
+              stratValues.push(val);
+            }
+          }
+        } else if (stratMetric === 'first_half_points') {
+          if (stats && stats.first_half_points && stats.first_half_points.home !== undefined && stats.first_half_points.away !== undefined) {
+            const val = parseFloat(stats.first_half_points.home) + parseFloat(stats.first_half_points.away);
+            stratValues.push(val);
+          } else if (h2h.score) {
+            const scoreMatch = h2h.score.match(/(\d+)\s*-\s*(\d+)/);
+            if (scoreMatch) {
+              const val = (parseFloat(scoreMatch[1]) + parseFloat(scoreMatch[2])) * 0.49;
               stratValues.push(val);
             }
           }

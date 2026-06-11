@@ -11,7 +11,8 @@ export function getValueBetsForMatch(matchDetails) {
   const popularMarkets = [
     'corners', 'fouls', 'yellow_cards', 'red_cards', 'shots_on_target', 'shots', 'offsides',
     'goals', 'total_rebounds', 'assists', 'blocks', 'steals', 'field_goals', 'free_throws',
-    'aces', 'double_faults', 'first_serve', 'break_points', 'tries', 'penalties', 'conversions', 'saves'
+    'aces', 'double_faults', 'first_serve', 'break_points', 'tries', 'penalties', 'conversions', 'saves',
+    'first_half_points'
   ];
   
   const allMatches = [
@@ -46,12 +47,14 @@ export function getValueBetsForMatch(matchDetails) {
       const startK = Math.max(0, Math.floor(lambda) - 4);
       const endK = Math.ceil(lambda) + 4;
 
+      const maxProbLimit = (m === 'first_half_points') ? 0.85 : 0.70;
+
       for (let k = startK; k <= endK; k++) {
         const line = k + 0.5;
         const overProb = poissonOver(lambda, line);
         const underProb = poissonUnder(lambda, line);
 
-        if (overProb >= 0.53 && overProb <= 0.70) {
+        if (overProb >= 0.53 && overProb <= maxProbLimit) {
           list.push({
             metric: m,
             metricTitle: getPoissonMetricTitle(m),
@@ -61,7 +64,7 @@ export function getValueBetsForMatch(matchDetails) {
             fairOdds: 1 / overProb
           });
         }
-        if (underProb >= 0.53 && underProb <= 0.70) {
+        if (underProb >= 0.53 && underProb <= maxProbLimit) {
           list.push({
             metric: m,
             metricTitle: getPoissonMetricTitle(m),
