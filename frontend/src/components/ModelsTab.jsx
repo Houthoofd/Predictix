@@ -18,6 +18,24 @@ import {
   TrendingDown
 } from 'lucide-react';
 
+const formatLastTrained = (timestamp) => {
+  if (!timestamp) return 'Jamais';
+  try {
+    const date = new Date(timestamp);
+    if (isNaN(date.getTime())) return 'Jamais';
+    return date.toLocaleString('fr-FR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+  } catch (e) {
+    return 'Jamais';
+  }
+};
+
 export default function ModelsTab() {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
