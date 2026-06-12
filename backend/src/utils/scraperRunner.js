@@ -74,12 +74,15 @@ export function ensureScraperCompiled(scraperPath) {
  */
 export async function scrapeSingleMatch(scraperPath, link, skipOdds = false, onSpawn = null, socksPort = 9050, scraper = 'matchendirect', sport = 'football') {
   const maxAttempts = 2;
+  const useTor = scraper !== 'flashscore';
   
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const torActive = await isTorActive(socksPort);
-    if (!torActive) {
-      console.warn(`[Predictix Scraper] Tor is inactive on port ${socksPort}. Skipping scrape for: ${link}`);
-      return null;
+    if (useTor) {
+      const torActive = await isTorActive(socksPort);
+      if (!torActive) {
+        console.warn(`[Predictix Scraper] Tor is inactive on port ${socksPort}. Skipping scrape for: ${link}`);
+        return null;
+      }
     }
 
     const result = await new Promise((resolve) => {
@@ -90,7 +93,8 @@ export async function scrapeSingleMatch(scraperPath, link, skipOdds = false, onS
       }
       const tmpOutFile = path.join(dataDir, `tmp_${Date.now()}_${Math.random().toString(36).substring(7)}.json`);
       
-      let args = ['-source', scraper, '-action', 'scrape', '-url', link, '-socks-port', String(socksPort), '-output', tmpOutFile];
+      const currentSocksPort = useTor ? socksPort : 0;
+      let args = ['-source', scraper, '-action', 'scrape', '-url', link, '-socks-port', String(currentSocksPort), '-output', tmpOutFile];
       if (scraper === 'flashscore') {
         args.push('-sport', sport);
       } else if (skipOdds) {
@@ -190,6 +194,9 @@ export function runDiscoveryProcess(scraperPath, scriptName, outputDirs, targetD
     const tmpOutFile = path.join(dataDir, `tmp_disc_${Date.now()}_${Math.random().toString(36).substring(7)}.json`);
     
     const args = ['-source', scraper, '-action', 'discover', '-sport', sport, '-output', tmpOutFile];
+    if (scraper === 'flashscore') {
+      args.push('-socks-port', '0');
+    }
     if (targetDate) {
       args.push('-date', targetDate);
     }

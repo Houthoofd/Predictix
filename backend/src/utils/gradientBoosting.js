@@ -110,6 +110,19 @@ export class DecisionTreeRegressor {
   }
 }
 
+function predictNodeRecursive(node, x) {
+  if (!node) return 0;
+  if (node.value !== undefined && node.value !== null) return node.value;
+  const val = x[node.feature];
+  if (val === undefined || val === null) {
+    return 0; // Default fallback for missing features
+  }
+  if (val <= node.threshold) {
+    return predictNodeRecursive(node.left, x);
+  }
+  return predictNodeRecursive(node.right, x);
+}
+
 /**
  * Pure JavaScript Gradient Boosting Regressor (GBDT)
  */
@@ -142,22 +155,25 @@ export class GradientBoostingRegressor {
     }
   }
 
+  load(serialized) {
+    if (!serialized) return;
+    this.nEstimators = serialized.n_estimators || this.nEstimators;
+    this.learningRate = serialized.learning_rate || this.learningRate;
+    this.maxDepth = serialized.max_depth || this.maxDepth;
+    this.minSamplesSplit = serialized.min_samples_split || this.minSamplesSplit;
+    this.initValue = serialized.init_value !== undefined ? serialized.init_value : this.initValue;
+    this.trees = serialized.trees || [];
+  }
+
   predict(X) {
-    if (this.trees.length === 0) return X.map(() => this.initValue);
-    const predictions = new Array(X.length).fill(this.initValue);
-    for (const tree of this.trees) {
-      const treePreds = tree.predict(X);
-      for (let j = 0; j < X.length; j++) {
-        predictions[j] += this.learningRate * treePreds[j];
-      }
-    }
-    return predictions;
+    return X.map(x => this.predictRow(x));
   }
 
   predictRow(x) {
     let pred = this.initValue;
     for (const tree of this.trees) {
-      pred += this.learningRate * tree.predictRow(tree.root, x);
+      const root = tree.root !== undefined ? tree.root : tree;
+      pred += this.learningRate * predictNodeRecursive(root, x);
     }
     return pred;
   }

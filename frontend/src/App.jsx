@@ -197,6 +197,7 @@ export default function App() {
                   totalDeep={scraper.totalDeep}
                   scraperLogs={scraper.scraperLogs}
                   handleStopScraping={scraper.handleStopScraping}
+                  handleResetScraper={scraper.handleResetScraper}
                   handleTriggerScraping={scraper.handleTriggerScraping}
                   handleStartDetailedScraping={scraper.handleStartDetailedScraping}
                   handleOneClickScraping={scraper.handleOneClickScraping}

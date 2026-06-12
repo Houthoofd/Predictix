@@ -272,6 +272,20 @@ export default function useScraperManager({ showToast, refreshAllDataSilent }) {
     }
   };
 
+  const handleResetScraper = () => {
+    setScrapePhase('idle');
+    setScrapeProgress(0);
+    setScrapeTimeRemaining('');
+    setMatchesRemaining(0);
+    setCurrentPrimary(0);
+    setTotalPrimary(0);
+    setCurrentDeep(0);
+    setTotalDeep(0);
+    setLiveScrapedMatches([]);
+    setScraperLogs([]);
+    setScrapeResultStats(null);
+  };
+
   return {
     scraping,
     scraperLogs,
@@ -300,6 +314,7 @@ export default function useScraperManager({ showToast, refreshAllDataSilent }) {
     setShowScrapeResultModal,
     handleTriggerScraping,
     handleStartDetailedScraping,
-    handleStopScraping
+    handleStopScraping,
+    handleResetScraper
   };
 }

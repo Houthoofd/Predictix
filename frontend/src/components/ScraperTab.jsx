@@ -17,6 +17,7 @@ export default function ScraperTab({
   totalDeep,
   scraperLogs,
   handleStopScraping,
+  handleResetScraper,
   handleTriggerScraping,
   handleStartDetailedScraping,
   handleOneClickScraping,
@@ -116,6 +117,7 @@ export default function ScraperTab({
         handleTriggerScraping={handleTriggerScraping}
         handleStartDetailedScraping={handleStartDetailedScraping}
         handleStopScraping={handleStopScraping}
+        handleResetScraper={handleResetScraper}
         scrapeTimeRemaining={scrapeTimeRemaining}
         scrapeProgress={scrapeProgress}
         matchesRemaining={matchesRemaining}

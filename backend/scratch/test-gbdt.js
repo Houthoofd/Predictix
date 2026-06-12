@@ -1,5 +1,6 @@
 import { dbQuery } from '../src/db/database.js';
-import { trainGBDTModels, enrichMatchPredictions } from '../src/utils/predictionEngine.js';
+import { trainGBDTModels } from '../src/utils/gbdtTrainer.js';
+import { enrichMatchPredictions } from '../src/utils/predictionEngine.js';
 
 async function test() {
   try {

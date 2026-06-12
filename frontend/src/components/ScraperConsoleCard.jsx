@@ -20,6 +20,7 @@ export default function ScraperConsoleCard({
   handleTriggerScraping,
   handleStartDetailedScraping,
   handleStopScraping,
+  handleResetScraper,
   scrapeTimeRemaining,
   scrapeProgress,
   matchesRemaining,
@@ -148,9 +149,18 @@ export default function ScraperConsoleCard({
                 Arrêter le Scraper
               </button>
             </>
-          ) : (
+          ) : scraping ? (
             <button className="btn btn-danger" style={{ height: '36px' }} onClick={handleStopScraping}>
               Arrêter le Scraper
+            </button>
+          ) : (
+            <button 
+              className="btn btn-secondary" 
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '36px', fontWeight: 700 }} 
+              onClick={handleResetScraper}
+            >
+              <RefreshCcw size={14} />
+              <span>Nouveau Scraping</span>
             </button>
           )}
         </div>

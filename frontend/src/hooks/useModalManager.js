@@ -102,6 +102,11 @@ export default function useModalManager({ showToast, showConfirm, predictions, b
   };
 
   const handleOpenEditBetModal = (bet) => {
+    const parsedLine = parseFloat(bet.card_line);
+    const parsedOdds = parseFloat(bet.odds);
+    const parsedStake = parseFloat(bet.stake);
+    const parsedProb = bet.probability ? parseInt(String(bet.probability).replace('%', '')) : '';
+
     setEditBetForm({
       id: bet.id || '',
       match_id: bet.match_id || '',
@@ -111,10 +116,10 @@ export default function useModalManager({ showToast, showConfirm, predictions, b
       home_team: bet.home_team || '',
       away_team: bet.away_team || '',
       best_tip: bet.best_tip || 'Over',
-      card_line: bet.card_line || 4.5,
-      odds: bet.odds || 1.85,
-      stake: bet.stake || 50,
-      probability: bet.probability || '',
+      card_line: isNaN(parsedLine) ? 4.5 : parsedLine,
+      odds: isNaN(parsedOdds) ? 1.85 : parsedOdds,
+      stake: isNaN(parsedStake) ? 50 : parsedStake,
+      probability: isNaN(parsedProb) ? '' : parsedProb,
       bookmaker: bet.bookmaker || 'Unibet',
       status: bet.status || 'PENDING',
       notes: bet.notes || '',
@@ -128,7 +133,14 @@ export default function useModalManager({ showToast, showConfirm, predictions, b
     const rawProb = pred.probability ? String(pred.probability) : '';
     const probNum = parseInt(rawProb.replace('%', ''));
     const lineNum = parseFloat(pred.card_line);
-    const oddsNum = pred.best_tip.toLowerCase() === 'over' ? parseFloat(pred.over_odds) : parseFloat(pred.under_odds);
+    
+    const isOver = pred.best_tip && (pred.best_tip.toLowerCase() === 'over' || pred.best_tip.toLowerCase() === 'plus de');
+    const oddsNum = isOver ? parseFloat(pred.over_odds) : parseFloat(pred.under_odds);
+
+    const defaultStakePct = globalSettings ? parseFloat(globalSettings.default_stake_pct) : 5;
+    const stakePct = isNaN(defaultStakePct) ? 5 : defaultStakePct;
+    const cleanBalance = (balance !== undefined && balance !== null && !isNaN(parseFloat(balance))) ? parseFloat(balance) : 1000;
+    const stakeNum = Math.round(cleanBalance * (stakePct / 100)) || 50;
 
     const now = new Date();
     setNewBetForm({
@@ -141,7 +153,7 @@ export default function useModalManager({ showToast, showConfirm, predictions, b
       best_tip: pred.best_tip || 'Over',
       card_line: isNaN(lineNum) ? 4.5 : lineNum,
       odds: isNaN(oddsNum) ? 1.85 : oddsNum,
-      stake: Math.round(balance * (parseFloat(globalSettings?.default_stake_pct || 5) / 100)),
+      stake: stakeNum,
       probability: isNaN(probNum) ? '' : probNum,
       bookmaker: globalSettings?.default_bookmaker || 'Unibet',
       status: 'PENDING',
@@ -158,9 +170,18 @@ export default function useModalManager({ showToast, showConfirm, predictions, b
       return;
     }
 
-    const probNum = parseInt(pred.probability.replace('%', ''));
+    const rawProb = pred.probability ? String(pred.probability) : '';
+    const probNum = parseInt(rawProb.replace('%', ''));
     const lineNum = parseFloat(pred.card_line);
-    const oddsNum = pred.best_tip.toLowerCase() === 'over' ? parseFloat(pred.over_odds) : parseFloat(pred.under_odds);
+
+    const isOver = pred.best_tip && (pred.best_tip.toLowerCase() === 'over' || pred.best_tip.toLowerCase() === 'plus de');
+    const oddsNum = isOver ? parseFloat(pred.over_odds) : parseFloat(pred.under_odds);
+
+    const defaultStakePct = globalSettings ? parseFloat(globalSettings.default_stake_pct) : 5;
+    const stakePct = isNaN(defaultStakePct) ? 5 : defaultStakePct;
+    const cleanBalance = (balance !== undefined && balance !== null && !isNaN(parseFloat(balance))) ? parseFloat(balance) : 1000;
+    const stakeNum = Math.round(cleanBalance * (stakePct / 100)) || 50;
+
     const now = new Date();
 
     const newBasketBet = {
@@ -174,7 +195,7 @@ export default function useModalManager({ showToast, showConfirm, predictions, b
       best_tip: pred.best_tip || 'Over',
       card_line: isNaN(lineNum) ? 4.5 : lineNum,
       odds: isNaN(oddsNum) ? 1.85 : oddsNum,
-      stake: Math.round(balance * (parseFloat(globalSettings?.default_stake_pct || 5) / 100)),
+      stake: stakeNum,
       probability: isNaN(probNum) ? '' : probNum,
       bookmaker: globalSettings?.default_bookmaker || 'Unibet',
       status: 'PENDING',
@@ -188,9 +209,18 @@ export default function useModalManager({ showToast, showConfirm, predictions, b
   };
 
   const handleInstantPlaceBet = async (pred, balance, fetchAllData) => {
-    const probNum = parseInt(pred.probability.replace('%', ''));
+    const rawProb = pred.probability ? String(pred.probability) : '';
+    const probNum = parseInt(rawProb.replace('%', ''));
     const lineNum = parseFloat(pred.card_line);
-    const oddsNum = pred.best_tip.toLowerCase() === 'over' ? parseFloat(pred.over_odds) : parseFloat(pred.under_odds);
+
+    const isOver = pred.best_tip && (pred.best_tip.toLowerCase() === 'over' || pred.best_tip.toLowerCase() === 'plus de');
+    const oddsNum = isOver ? parseFloat(pred.over_odds) : parseFloat(pred.under_odds);
+
+    const defaultStakePct = globalSettings ? parseFloat(globalSettings.default_stake_pct) : 5;
+    const stakePct = isNaN(defaultStakePct) ? 5 : defaultStakePct;
+    const cleanBalance = (balance !== undefined && balance !== null && !isNaN(parseFloat(balance))) ? parseFloat(balance) : 1000;
+    const stakeNum = Math.round(cleanBalance * (stakePct / 100)) || 50;
+
     const now = new Date();
 
     const instantBet = {
@@ -203,7 +233,7 @@ export default function useModalManager({ showToast, showConfirm, predictions, b
       best_tip: pred.best_tip || 'Over',
       card_line: isNaN(lineNum) ? 4.5 : lineNum,
       odds: isNaN(oddsNum) ? 1.85 : oddsNum,
-      stake: Math.round(balance * (parseFloat(globalSettings?.default_stake_pct || 5) / 100)),
+      stake: stakeNum,
       probability: isNaN(probNum) ? '' : probNum,
       bookmaker: globalSettings?.default_bookmaker || 'Unibet',
       status: 'PENDING',
@@ -234,10 +264,19 @@ export default function useModalManager({ showToast, showConfirm, predictions, b
     if (selectedPredIds.length === 0) return;
     const selectedPreds = predictions.filter(pred => selectedPredIds.includes(pred.match_id));
     
+    const defaultStakePct = globalSettings ? parseFloat(globalSettings.default_stake_pct) : 5;
+    const stakePct = isNaN(defaultStakePct) ? 5 : defaultStakePct;
+    const cleanBalance = (balance !== undefined && balance !== null && !isNaN(parseFloat(balance))) ? parseFloat(balance) : 1000;
+    const stakeNum = Math.round(cleanBalance * (stakePct / 100)) || 50;
+
     const defaultBets = selectedPreds.map(pred => {
-      const probNum = parseInt(pred.probability.replace('%', ''));
+      const rawProb = pred.probability ? String(pred.probability) : '';
+      const probNum = parseInt(rawProb.replace('%', ''));
       const lineNum = parseFloat(pred.card_line);
-      const oddsNum = pred.best_tip.toLowerCase() === 'over' ? parseFloat(pred.over_odds) : parseFloat(pred.under_odds);
+
+      const isOver = pred.best_tip && (pred.best_tip.toLowerCase() === 'over' || pred.best_tip.toLowerCase() === 'plus de');
+      const oddsNum = isOver ? parseFloat(pred.over_odds) : parseFloat(pred.under_odds);
+
       const now = new Date();
       
       return {
@@ -250,7 +289,7 @@ export default function useModalManager({ showToast, showConfirm, predictions, b
         best_tip: pred.best_tip || 'Over',
         card_line: isNaN(lineNum) ? 4.5 : lineNum,
         odds: isNaN(oddsNum) ? 1.85 : oddsNum,
-        stake: Math.round(balance * (parseFloat(globalSettings?.default_stake_pct || 5) / 100)) || 50,
+        stake: stakeNum,
         probability: isNaN(probNum) ? '' : probNum,
         bookmaker: globalSettings?.default_bookmaker || 'Unibet',
         status: 'PENDING',
@@ -261,7 +300,7 @@ export default function useModalManager({ showToast, showConfirm, predictions, b
     });
     
     setBatchBetsForm(defaultBets);
-    setBatchGlobalStake(Math.round(balance * (parseFloat(globalSettings?.default_stake_pct || 5) / 100)) || 50);
+    setBatchGlobalStake(stakeNum);
     setBatchGlobalBookmaker(globalSettings?.default_bookmaker || 'Unibet');
     setShowBatchBetModal(true);
   };

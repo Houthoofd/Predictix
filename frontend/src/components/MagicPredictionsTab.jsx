@@ -53,11 +53,7 @@ export default function MagicPredictionsTab({
 
   React.useEffect(() => {
     setCollapsedLeagues({});
-    if (selectedMagicSport === 'basketball') {
-      setSortBy('confidence');
-    } else {
-      setSortBy('date');
-    }
+    setSortBy('date');
   }, [selectedMagicSport]);
 
   React.useEffect(() => {

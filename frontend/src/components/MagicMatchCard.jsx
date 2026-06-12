@@ -143,8 +143,15 @@ export default function MagicMatchCard({
       }
     }
 
-    const hAvg = getAverage(mDetails.recent_home_matches, metric, true, false, mDetails.home_team, mDetails.away_team);
-    const aAvg = getAverage(mDetails.recent_away_matches, metric, false, true, mDetails.home_team, mDetails.away_team);
+    let hAvg;
+    let aAvg;
+    if (mDetails.sport === 'basketball' && (metric === 'first_half_points' || metric === 'goals') && mDetails.home_avg_first_half_points !== undefined && mDetails.home_avg_first_half_points !== null) {
+      hAvg = mDetails.home_avg_first_half_points / 0.502;
+      aAvg = mDetails.away_avg_first_half_points / 0.502;
+    } else {
+      hAvg = getAverage(mDetails.recent_home_matches, metric, true, false, mDetails.home_team, mDetails.away_team);
+      aAvg = getAverage(mDetails.recent_away_matches, metric, false, true, mDetails.home_team, mDetails.away_team);
+    }
 
     if (hAvg === null || aAvg === null) return null;
 
@@ -160,7 +167,10 @@ export default function MagicMatchCard({
         mAway = aAvg / 0.46;
       }
     } else {
-      const ratio = getMetricPeriodRatio(metric, period);
+      let ratio = getMetricPeriodRatio(metric, period);
+      if (mDetails.sport === 'basketball') {
+        ratio = { quarter_1: 0.254, quarter_2: 0.248, quarter_3: 0.250, quarter_4: 0.248, first_half: 0.502, second_half: 0.498, full_time: 1.00 }[period] || 0.25;
+      }
       mHome = hAvg * ratio;
       mAway = aAvg * ratio;
     }

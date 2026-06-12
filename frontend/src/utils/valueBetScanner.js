@@ -39,8 +39,15 @@ export function getValueBetsForMatch(matchDetails) {
   const metricsToScan = Array.from(metrics).filter(m => popularMarkets.includes(m));
 
   for (const m of metricsToScan) {
-    const homeAvg = getAverage(matchDetails.recent_home_matches, m, true, false, matchDetails.home_team, matchDetails.away_team);
-    const awayAvg = getAverage(matchDetails.recent_away_matches, m, false, true, matchDetails.home_team, matchDetails.away_team);
+    let homeAvg;
+    let awayAvg;
+    if (matchDetails.sport === 'basketball' && (m === 'first_half_points' || m === 'goals') && matchDetails.home_avg_first_half_points !== undefined && matchDetails.home_avg_first_half_points !== null) {
+      homeAvg = matchDetails.home_avg_first_half_points;
+      awayAvg = matchDetails.away_avg_first_half_points;
+    } else {
+      homeAvg = getAverage(matchDetails.recent_home_matches, m, true, false, matchDetails.home_team, matchDetails.away_team);
+      awayAvg = getAverage(matchDetails.recent_away_matches, m, false, true, matchDetails.home_team, matchDetails.away_team);
+    }
 
     if (homeAvg !== null && awayAvg !== null) {
       const lambda = homeAvg + awayAvg;

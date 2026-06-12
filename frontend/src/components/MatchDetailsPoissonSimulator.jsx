@@ -50,9 +50,35 @@ export default function MatchDetailsPoissonSimulator({
       cov = parseFloat(pred.covariance || 0);
       isGBDT = true;
     }
+  } else if (isBasket && (activeMetric === 'goals' || activeMetric === 'first_half_points') && selectedMatchDetails.home_avg_first_half_points !== undefined && selectedMatchDetails.home_avg_first_half_points !== null) {
+    if (simPeriod === 'first_half') {
+      meanHome = selectedMatchDetails.home_avg_first_half_points;
+      meanAway = selectedMatchDetails.away_avg_first_half_points;
+      cov = selectedMatchDetails.covariance_basket_1mt || 0;
+      isGBDT = !!selectedMatchDetails.covariance_basket_1mt;
+    } else if (simPeriod === 'quarter_1' && selectedMatchDetails.home_avg_first_quarter_points !== undefined && selectedMatchDetails.home_avg_first_quarter_points !== null) {
+      meanHome = selectedMatchDetails.home_avg_first_quarter_points;
+      meanAway = selectedMatchDetails.away_avg_first_quarter_points;
+      cov = selectedMatchDetails.covariance_basket_1qt || 0;
+      isGBDT = !!selectedMatchDetails.covariance_basket_1qt;
+    } else {
+      const hAvg = selectedMatchDetails.home_avg_first_half_points / 0.502;
+      const aAvg = selectedMatchDetails.away_avg_first_half_points / 0.502;
+      const ratio = { quarter_1: 0.254, quarter_2: 0.248, quarter_3: 0.250, quarter_4: 0.248, first_half: 0.502, second_half: 0.498, full_time: 1.00 }[simPeriod] || 0.25;
+      meanHome = hAvg * ratio;
+      meanAway = aAvg * ratio;
+      cov = 0;
+    }
   } else {
-    const hAvg = getAverage(selectedMatchDetails.recent_home_matches, activeMetric, true);
-    const aAvg = getAverage(selectedMatchDetails.recent_away_matches, activeMetric, false, true);
+    let hAvg;
+    let aAvg;
+    if (selectedMatchDetails.sport === 'basketball' && (activeMetric === 'first_half_points' || activeMetric === 'goals') && selectedMatchDetails.home_avg_first_half_points !== undefined && selectedMatchDetails.home_avg_first_half_points !== null) {
+      hAvg = selectedMatchDetails.home_avg_first_half_points / 0.502;
+      aAvg = selectedMatchDetails.away_avg_first_half_points / 0.502;
+    } else {
+      hAvg = getAverage(selectedMatchDetails.recent_home_matches, activeMetric, true);
+      aAvg = getAverage(selectedMatchDetails.recent_away_matches, activeMetric, false, true);
+    }
     
     if (hAvg === null || aAvg === null) {
       return (
