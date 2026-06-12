@@ -101,6 +101,29 @@ export default function useModalManager({ showToast, showConfirm, predictions, b
     }
   };
 
+  const handleOpenEditBetModal = (bet) => {
+    setEditBetForm({
+      id: bet.id || '',
+      match_id: bet.match_id || '',
+      date: bet.date || '',
+      time: bet.time || '',
+      league: bet.league || '',
+      home_team: bet.home_team || '',
+      away_team: bet.away_team || '',
+      best_tip: bet.best_tip || 'Over',
+      card_line: bet.card_line || 4.5,
+      odds: bet.odds || 1.85,
+      stake: bet.stake || 50,
+      probability: bet.probability || '',
+      bookmaker: bet.bookmaker || 'Unibet',
+      status: bet.status || 'PENDING',
+      notes: bet.notes || '',
+      match_url: bet.match_url || '',
+      sport: bet.sport || 'football'
+    });
+    setShowEditBetModal(true);
+  };
+
   const handleQuickPlaceBet = (pred, balance) => {
     const rawProb = pred.probability ? String(pred.probability) : '';
     const probNum = parseInt(rawProb.replace('%', ''));
@@ -319,6 +342,7 @@ export default function useModalManager({ showToast, showConfirm, predictions, b
     setResetAmount,
     handleAddBet,
     handleEditBet,
+    handleOpenEditBetModal,
     handleQuickPlaceBet,
     handleAddToBasket,
     handleInstantPlaceBet,

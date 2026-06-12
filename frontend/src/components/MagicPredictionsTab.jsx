@@ -77,7 +77,14 @@ export default function MagicPredictionsTab({
   const filteredSignals = signals.filter(s => {
     const matchMetric = filterMetric === 'all' || s.metric === filterMetric;
     const matchSport = selectedMagicSport === 'all' || (s.sport || 'football') === selectedMagicSport;
-    const isTodayOrFuture = s.date >= todayStr;
+    
+    // Find if the match is finished
+    const matchDetails = (predictions || []).find(p => p.match_id === s.match_id);
+    const isFinished = matchDetails 
+      ? matchDetails.is_finished === 1 
+      : (s.is_finished === 1 || (s.score && s.score.trim() !== '-' && s.score.trim() !== '' && s.score.includes('-')));
+
+    const isTodayOrFuture = s.date >= todayStr && !isFinished;
     const matchDateMode = viewMode === 'today' ? isTodayOrFuture : !isTodayOrFuture;
     
     // If basketball is selected, ignore custom strategy signals to avoid duplicates and show all matches directly

@@ -246,7 +246,7 @@ export default function App() {
                   globalRefreshLoading={bets.globalRefreshLoading}
                   subTab={navigation.trackerSubTab}
                   setSubTab={navigation.setTrackerSubTab}
-                  onOpenEditBetModal={modals.setEditBetForm}
+                  onOpenEditBetModal={modals.handleOpenEditBetModal}
                 />
               )}
 

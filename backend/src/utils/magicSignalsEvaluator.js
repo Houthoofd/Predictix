@@ -240,6 +240,7 @@ export async function evaluateMagicSignals(minCoverage = 50.0) {
       operator: '>=',
       rationale: rationaleText,
       sport: match.sport || 'football',
+      is_finished: match.is_finished || 0,
       scraped_at: match.scraped_at
     });
 
@@ -341,6 +342,7 @@ export async function evaluateMagicSignals(minCoverage = 50.0) {
           operator: operator,
           rationale: rationaleText,
           sport: match.sport || 'football',
+          is_finished: match.is_finished || 0,
           scraped_at: match.scraped_at
         });
       }
