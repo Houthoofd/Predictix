@@ -24,6 +24,7 @@ import AppModals from './components/AppModals';
 import AppToasts from './components/AppToasts';
 import PageHeaderTitle from './components/PageHeaderTitle';
 import SettingsTab from './components/SettingsTab';
+import ModelsTab from './components/ModelsTab';
 
 export default function App() {
   const [settings, setSettings] = useState(null);
@@ -280,6 +281,10 @@ export default function App() {
 
               {activeTab === 'crons' && (
                 <CronsTab showNotification={notify.showNotification} />
+              )}
+
+              {activeTab === 'models' && (
+                <ModelsTab />
               )}
 
               {activeTab === 'settings' && (

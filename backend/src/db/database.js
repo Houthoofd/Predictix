@@ -257,7 +257,8 @@ function initDb() {
         ['cron_retry_interval_fail', '15'],
         ['cron_max_retries', '5'],
         ['cron_db_backup', 'true'],
-        ['cron_db_backup_keep_days', '7']
+        ['cron_db_backup_keep_days', '7'],
+        ['use_gbdt_models', 'true']
       ];
       for (const [key, val] of defaults) {
         db.run('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)', [key, val]);

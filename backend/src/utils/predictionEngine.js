@@ -24,7 +24,7 @@ export { evaluateSmartScrapingFilter } from './smartScraperFilter.js';
 /**
  * Enriches a single match predictions with regressed averages, Poisson calculations, and Value Bets edges
  */
-export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatches, awayMatches, activeCrawlHistoryMatches = new Set(), customLogosMap = {}, valueBetMinEdge = 5, footballCornerLine = 4.5, calibrationDelta = 0, basketballLeagueAverages = {}) {
+export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatches, awayMatches, activeCrawlHistoryMatches = new Set(), customLogosMap = {}, valueBetMinEdge = 5, footballCornerLine = 4.5, calibrationDelta = 0, basketballLeagueAverages = {}, useGbdtModels = true) {
   const cleanHomeTeamKey = (row.home_team || '').toLowerCase().trim();
   const cleanAwayTeamKey = (row.away_team || '').toLowerCase().trim();
   const homeLogo = customLogosMap[cleanHomeTeamKey] || row.home_logo;
@@ -114,7 +114,7 @@ export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatc
     return enrichNonFootballMatch(
       row, h2hMatches, homeMatches, awayMatches, homeLogo, awayLogo, diagnostic, 
       enrichedHomeMatches, enrichedAwayMatches, enrichedH2HMatches, calibrationDelta,
-      basketballLeagueAverages
+      basketballLeagueAverages, useGbdtModels
     );
   }
 
@@ -234,7 +234,7 @@ export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatc
   let gbdt2MTExpected = lambda1MT * 1.15;
   let gbdtFTExpected = lambda1MT * 2.15;
 
-  if (model1MT && teamAverages) {
+  if (useGbdtModels && model1MT && teamAverages) {
     const home = row.home_team;
     const away = row.away_team;
     const homeAvg1MT = teamAverages[home]?.count1MT > 0 ? (teamAverages[home].sum1MT / teamAverages[home].count1MT) : 2.2;
@@ -470,12 +470,14 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
 
   let valueBetMinEdge = 5;
   let footballCornerLine = 4.5;
+  let useGbdtModels = true;
   try {
-    const settingsRows = await dbQueryFn("SELECT * FROM settings WHERE key IN ('value_bet_min_edge', 'football_corner_line')");
+    const settingsRows = await dbQueryFn("SELECT * FROM settings WHERE key IN ('value_bet_min_edge', 'football_corner_line', 'use_gbdt_models')");
     if (settingsRows && Array.isArray(settingsRows)) {
       settingsRows.forEach(r => {
         if (r.key === 'value_bet_min_edge') valueBetMinEdge = parseFloat(r.value) || 5;
         if (r.key === 'football_corner_line') footballCornerLine = parseFloat(r.value) || 4.5;
+        if (r.key === 'use_gbdt_models') useGbdtModels = r.value === 'true';
       });
     }
   } catch (err) {
@@ -535,7 +537,7 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
 
     const normalizeAway = awayMatches.map(normalizeMatchRow);
     
-    const enriched = enrichMatchPredictions(row, leagueAverages, normalizedH2H, normalizeHome, normalizeAway, activeCrawlHistoryMatches, customLogosMap, valueBetMinEdge, footballCornerLine, calibrationDelta, basketballLeagueAverages);
+    const enriched = enrichMatchPredictions(row, leagueAverages, normalizedH2H, normalizeHome, normalizeAway, activeCrawlHistoryMatches, customLogosMap, valueBetMinEdge, footballCornerLine, calibrationDelta, basketballLeagueAverages, useGbdtModels);
     enrichedRows.push(enriched);
   }
 

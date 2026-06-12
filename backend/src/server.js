@@ -34,11 +34,13 @@ import betsRoutes from './routes/bets.js';
 import scraperRoutes from './routes/scraper.js';
 import strategiesRoutes from './routes/strategies.js';
 import settingsRoutes from './routes/settings.js';
+import modelsRoutes from './routes/models.js';
 
 app.use('/api', betsRoutes);
 app.use('/api', scraperRoutes);
 app.use('/api', strategiesRoutes);
 app.use('/api', settingsRoutes);
+app.use('/api', modelsRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

@@ -9,7 +9,7 @@ import {
 /**
  * Predicts and enriches non-football match details (points, sets, goals, runs, etc.)
  */
-export function enrichNonFootballMatch(row, h2hMatches, homeMatches, awayMatches, homeLogo, awayLogo, diagnostic, enrichedHomeMatches, enrichedAwayMatches, enrichedH2HMatches, calibrationDelta = 0, basketballLeagueAverages = {}) {
+export function enrichNonFootballMatch(row, h2hMatches, homeMatches, awayMatches, homeLogo, awayLogo, diagnostic, enrichedHomeMatches, enrichedAwayMatches, enrichedH2HMatches, calibrationDelta = 0, basketballLeagueAverages = {}, useGbdtModels = true) {
   const cleanHomeTeamKey = (row.home_team || '').toLowerCase().trim();
   const cleanAwayTeamKey = (row.away_team || '').toLowerCase().trim();
   const sport = (row.sport || 'football').toLowerCase().trim();
@@ -186,7 +186,7 @@ export function enrichNonFootballMatch(row, h2hMatches, homeMatches, awayMatches
     let home_proj_1mt = expectedPace1stHalf * expectedEffHome;
     let away_proj_1mt = expectedPace1stHalf * expectedEffAway;
 
-    if (modelBasket1MT) {
+    if (useGbdtModels && modelBasket1MT) {
       const X1MT = {
         home_projected: home_proj_1mt,
         away_projected: away_proj_1mt,
@@ -207,7 +207,7 @@ export function enrichNonFootballMatch(row, h2hMatches, homeMatches, awayMatches
     home_avg_first_quarter_points = home_proj_1qt;
     away_avg_first_quarter_points = away_proj_1qt;
 
-    if (modelBasket1QT) {
+    if (useGbdtModels && modelBasket1QT) {
       const X1QT = {
         home_projected: home_proj_1qt,
         away_projected: away_proj_1qt,

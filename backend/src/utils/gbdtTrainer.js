@@ -19,13 +19,20 @@ export let leagueAveragesCache = null;
 export let basketballLeagueAveragesCache = {};
 export let lastTrainTime = 0;
 const TRAIN_COOLDOWN = 120000; // 2 minutes cooldown
+export let sampleCounts = {
+  corners_1mt: 0,
+  corners_ft: 0,
+  corners_2mt: 0,
+  basket_1mt: 0,
+  basket_1qt: 0
+};
 
 /**
  * Train GBDT models on scraped predictions and update covariances
  */
-export async function trainGBDTModels(dbQueryFn) {
+export async function trainGBDTModels(dbQueryFn, force = false) {
   const now = Date.now();
-  if (model1MT && now - lastTrainTime < TRAIN_COOLDOWN) {
+  if (!force && model1MT && now - lastTrainTime < TRAIN_COOLDOWN) {
     return;
   }
   lastTrainTime = now;
@@ -367,6 +374,12 @@ export async function trainGBDTModels(dbQueryFn) {
       teamHistories[m.away_team].push(m);
     }
 
+    sampleCounts.corners_1mt = trainingInput.samples_1mt.length;
+    sampleCounts.corners_ft = trainingInput.samples_ft.length;
+    sampleCounts.corners_2mt = trainingInput.samples_2mt.length;
+    sampleCounts.basket_1mt = trainingInput.samples_basket_1mt.length;
+    sampleCounts.basket_1qt = trainingInput.samples_basket_1qt.length;
+
     const isWindows = process.platform === 'win32';
     const exeName = isWindows ? 'predictix-crawler.exe' : 'predictix-crawler';
     const scraperPath = process.env.SCRAPER_PATH || 'E:\\Developpement\\scrapper-v3';
@@ -444,4 +457,58 @@ export async function trainGBDTModels(dbQueryFn) {
   } catch (error) {
     console.error("[GBDT Train] Error training GBDT models:", error);
   }
+}
+
+export function getGBDTModelsStatus() {
+  return {
+    lastTrainTime,
+    sampleCounts,
+    models: {
+      corners_1mt: {
+        trained: !!model1MT,
+        nEstimators: model1MT?.nEstimators || 15,
+        learningRate: model1MT?.learningRate || 0.1,
+        maxDepth: model1MT?.maxDepth || 3,
+        covariance: covariance1MT,
+        numTrees: model1MT?.trees?.length || 0,
+        sampleCount: sampleCounts.corners_1mt
+      },
+      corners_ft: {
+        trained: !!modelFT,
+        nEstimators: modelFT?.nEstimators || 15,
+        learningRate: modelFT?.learningRate || 0.1,
+        maxDepth: modelFT?.maxDepth || 3,
+        covariance: covarianceFT,
+        numTrees: modelFT?.trees?.length || 0,
+        sampleCount: sampleCounts.corners_ft
+      },
+      corners_2mt: {
+        trained: !!model2MT,
+        nEstimators: model2MT?.nEstimators || 15,
+        learningRate: model2MT?.learningRate || 0.1,
+        maxDepth: model2MT?.maxDepth || 3,
+        covariance: covariance2MT,
+        numTrees: model2MT?.trees?.length || 0,
+        sampleCount: sampleCounts.corners_2mt
+      },
+      basket_1mt: {
+        trained: !!modelBasket1MT,
+        nEstimators: modelBasket1MT?.nEstimators || 15,
+        learningRate: modelBasket1MT?.learningRate || 0.1,
+        maxDepth: modelBasket1MT?.maxDepth || 3,
+        covariance: covarianceBasket1MT,
+        numTrees: modelBasket1MT?.trees?.length || 0,
+        sampleCount: sampleCounts.basket_1mt
+      },
+      basket_1qt: {
+        trained: !!modelBasket1QT,
+        nEstimators: modelBasket1QT?.nEstimators || 15,
+        learningRate: modelBasket1QT?.learningRate || 0.1,
+        maxDepth: modelBasket1QT?.maxDepth || 3,
+        covariance: covarianceBasket1QT,
+        numTrees: modelBasket1QT?.trees?.length || 0,
+        sampleCount: sampleCounts.basket_1qt
+      }
+    }
+  };
 }

@@ -9,7 +9,8 @@ import {
   ShieldAlert,
   ChevronDown,
   Clock,
-  Settings
+  Settings,
+  Brain
 } from 'lucide-react';
 import { sportLabels, ALL_SPORTS } from '../utils/labels';
 import { sportIcons } from './SidebarIcons';
@@ -375,6 +376,19 @@ export default function Sidebar({
           >
             <ShieldAlert size={20} style={{ color: activeTab === 'integrity' ? '#ff3b30' : undefined }} />
             {!sidebarCollapsed && <span>Qualité des Données</span>}
+          </button>
+          <button 
+            className={`${styles.navItem} ${activeTab === 'models' ? styles.active : ''}`}
+            onClick={() => setActiveTab('models')}
+            title={sidebarCollapsed ? "Modèles GBDT" : ""}
+            style={{
+              '--item-accent': '#bf5af2',
+              borderLeft: activeTab === 'models' ? '3px solid #bf5af2' : undefined,
+              color: activeTab === 'models' ? '#bf5af2' : undefined
+            }}
+          >
+            <Brain size={20} style={{ color: activeTab === 'models' ? '#bf5af2' : undefined }} />
+            {!sidebarCollapsed && <span>Modèles GBDT</span>}
           </button>
           <button 
             className={`${styles.navItem} ${activeTab === 'settings' ? styles.active : ''}`}
