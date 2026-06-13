@@ -139,6 +139,7 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
   const homeMatchesMap = new Map();
   const awayMatchesMap = new Map();
   const h2hMatchesMap = new Map();
+  const allTeamMatchesMap = new Map();
 
   for (const m of allFinished) {
     const home = m.home_team;
@@ -160,6 +161,23 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
     const awayArr = awayMatchesMap.get(away);
     if (awayArr.length < 10) {
       awayArr.push(m);
+    }
+
+    // All team history (limit 10 for SOS lookup)
+    if (!allTeamMatchesMap.has(home)) {
+      allTeamMatchesMap.set(home, []);
+    }
+    const allHomeArr = allTeamMatchesMap.get(home);
+    if (allHomeArr.length < 10) {
+      allHomeArr.push(m);
+    }
+
+    if (!allTeamMatchesMap.has(away)) {
+      allTeamMatchesMap.set(away, []);
+    }
+    const allAwayArr = allTeamMatchesMap.get(away);
+    if (allAwayArr.length < 10) {
+      allAwayArr.push(m);
     }
 
     // H2H history (limit 15)
@@ -313,7 +331,8 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
       footballCornerLine, 
       currentCalibrationDelta,
       basketballLeagueAverages,
-      useGbdtModels
+      useGbdtModels,
+      allTeamMatchesMap
     );
     enrichedRows.push(enriched);
   }

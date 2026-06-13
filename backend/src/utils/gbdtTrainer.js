@@ -232,7 +232,65 @@ export async function trainGBDTModels(dbQueryFn, force = false) {
               .replace(/[^a-z0-9]/g, '');
     };
 
-    const getTeamStats = (history, teamName, leagueFGA, leagueEFF) => {
+    const getOpponentBaselines = (oppName, runningHistories, leagueFGA, leagueEFF) => {
+      const oppHistory = runningHistories[oppName] || [];
+      const recentMatches = oppHistory.slice(-10).reverse();
+      let fgaSum = 0;
+      let offPointsSum = 0;
+      let defPointsSum = 0;
+      let oppFgaSum = 0;
+      let sumWeights = 0;
+      let validMatches = 0;
+
+      recentMatches.forEach((histMatch, index) => {
+        let stats = null;
+        try {
+          stats = typeof histMatch.statistics_json === 'string' ? JSON.parse(histMatch.statistics_json) : histMatch.statistics_json;
+        } catch (e) {}
+
+        let homeFGA = leagueFGA;
+        let awayFGA = leagueFGA;
+        if (stats && stats.field_goals_attempted) {
+          if (stats.field_goals_attempted.home !== undefined) homeFGA = parseFloat(stats.field_goals_attempted.home) || leagueFGA;
+          if (stats.field_goals_attempted.away !== undefined) awayFGA = parseFloat(stats.field_goals_attempted.away) || leagueFGA;
+        }
+
+        let homeScore = 0;
+        let awayScore = 0;
+        if (histMatch.score) {
+          const match = histMatch.score.match(/(\d+)\s*-\s*(\d+)/);
+          if (match) {
+            homeScore = parseFloat(match[1]) || 0;
+            awayScore = parseFloat(match[2]) || 0;
+          }
+        }
+        if (homeScore === 0 && awayScore === 0) return;
+
+        validMatches++;
+        const weight = Math.pow(0.9, index);
+
+        if (histMatch.home_team === oppName) {
+          fgaSum += homeFGA * weight;
+          offPointsSum += homeScore * weight;
+          defPointsSum += awayScore * weight;
+          oppFgaSum += awayFGA * weight;
+        } else {
+          fgaSum += awayFGA * weight;
+          offPointsSum += awayScore * weight;
+          defPointsSum += homeScore * weight;
+          oppFgaSum += homeFGA * weight;
+        }
+        sumWeights += weight;
+      });
+
+      const pace = validMatches > 0 ? (fgaSum / sumWeights) : leagueFGA;
+      const offEff = fgaSum > 0 ? (offPointsSum / fgaSum) : leagueEFF;
+      const defEff = oppFgaSum > 0 ? (defPointsSum / oppFgaSum) : leagueEFF;
+
+      return { pace, offEff, defEff };
+    };
+
+    const getTeamStats = (history, teamName, runningHistories, leagueFGA, leagueEFF) => {
       let fgaSum = 0;
       let offPointsSum = 0;
       let defPointsSum = 0;
@@ -269,16 +327,27 @@ export async function trainGBDTModels(dbQueryFn, force = false) {
         validMatches++;
         const weight = Math.pow(0.9, index);
 
+        const oppName = histMatch.home_team === teamName ? histMatch.away_team : histMatch.home_team;
+        const oppBaselines = getOpponentBaselines(oppName, runningHistories, leagueFGA, leagueEFF);
+
         if (histMatch.home_team === teamName) {
           fgaSum += homeFGA * weight;
-          offPointsSum += homeScore * weight;
-          defPointsSum += awayScore * weight;
           oppFgaSum += awayFGA * weight;
+
+          const offScale = Math.max(0.5, Math.min(2.0, oppBaselines.defEff / leagueEFF));
+          const defScale = Math.max(0.5, Math.min(2.0, oppBaselines.offEff / leagueEFF));
+
+          offPointsSum += (homeScore / offScale) * weight;
+          defPointsSum += (awayScore / defScale) * weight;
         } else {
           fgaSum += awayFGA * weight;
-          offPointsSum += awayScore * weight;
-          defPointsSum += homeScore * weight;
           oppFgaSum += homeFGA * weight;
+
+          const offScale = Math.max(0.5, Math.min(2.0, oppBaselines.defEff / leagueEFF));
+          const defScale = Math.max(0.5, Math.min(2.0, oppBaselines.offEff / leagueEFF));
+
+          offPointsSum += (awayScore / offScale) * weight;
+          defPointsSum += (homeScore / defScale) * weight;
         }
         sumWeights += weight;
       });
@@ -306,8 +375,8 @@ export async function trainGBDTModels(dbQueryFn, force = false) {
         }
       }
 
-      const homeStats = getTeamStats(homeHistory, m.home_team, leagueFGA, leagueEFF);
-      const awayStats = getTeamStats(awayHistory, m.away_team, leagueFGA, leagueEFF);
+      const homeStats = getTeamStats(homeHistory, m.home_team, teamHistories, leagueFGA, leagueEFF);
+      const awayStats = getTeamStats(awayHistory, m.away_team, teamHistories, leagueFGA, leagueEFF);
 
       const expectedPaceFull = ((homeStats.avgFGA * 1.01) + (awayStats.avgFGA * 0.99)) / 2;
       const expectedEffHome = (homeStats.avgOffEff * 1.025) * ((awayStats.avgDefEff * 1.025) / leagueEFF);

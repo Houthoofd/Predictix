@@ -9,7 +9,7 @@ import {
 /**
  * Predicts and enriches non-football match details (points, sets, goals, runs, etc.)
  */
-export function enrichNonFootballMatch(row, h2hMatches, homeMatches, awayMatches, homeLogo, awayLogo, diagnostic, enrichedHomeMatches, enrichedAwayMatches, enrichedH2HMatches, calibrationDelta = 0, basketballLeagueAverages = {}, useGbdtModels = true) {
+export function enrichNonFootballMatch(row, h2hMatches, homeMatches, awayMatches, homeLogo, awayLogo, diagnostic, enrichedHomeMatches, enrichedAwayMatches, enrichedH2HMatches, calibrationDelta = 0, basketballLeagueAverages = {}, useGbdtModels = true, allTeamMatchesMap = null) {
   const cleanHomeTeamKey = (row.home_team || '').toLowerCase().trim();
   const cleanAwayTeamKey = (row.away_team || '').toLowerCase().trim();
   const sport = (row.sport || 'football').toLowerCase().trim();
@@ -132,6 +132,45 @@ export function enrichNonFootballMatch(row, h2hMatches, homeMatches, awayMatches
       return { homeScore, awayScore };
     };
 
+    const getOpponentBaselines = (oppName, leagueFGA, leagueEFF) => {
+      const oppMatches = (allTeamMatchesMap && allTeamMatchesMap.get(oppName)) || [];
+      const recentMatches = oppMatches.slice(0, 10);
+      let fgaSum = 0;
+      let offPointsSum = 0;
+      let defPointsSum = 0;
+      let oppFgaSum = 0;
+      let sumWeights = 0;
+      let validMatches = 0;
+
+      recentMatches.forEach((m, index) => {
+        const { homeFGA, awayFGA } = parseStats(m);
+        const { homeScore, awayScore } = getMatchScores(m);
+        if (homeScore === 0 && awayScore === 0) return;
+
+        validMatches++;
+        const weight = Math.pow(0.9, index);
+
+        if (m.home_team === oppName) {
+          fgaSum += homeFGA * weight;
+          offPointsSum += homeScore * weight;
+          defPointsSum += awayScore * weight;
+          oppFgaSum += awayFGA * weight;
+        } else {
+          fgaSum += awayFGA * weight;
+          offPointsSum += awayScore * weight;
+          defPointsSum += homeScore * weight;
+          oppFgaSum += homeFGA * weight;
+        }
+        sumWeights += weight;
+      });
+
+      const pace = validMatches > 0 ? (fgaSum / sumWeights) : leagueFGA;
+      const offEff = fgaSum > 0 ? (offPointsSum / fgaSum) : leagueEFF;
+      const defEff = oppFgaSum > 0 ? (defPointsSum / oppFgaSum) : leagueEFF;
+
+      return { pace, offEff, defEff };
+    };
+
     const getTeamStats = (matches, teamName) => {
       let fgaSum = 0;
       let offPointsSum = 0;
@@ -149,16 +188,27 @@ export function enrichNonFootballMatch(row, h2hMatches, homeMatches, awayMatches
         // Exponential time decay weight (most recent match weight = 1.0, then 0.9, 0.81, ...)
         const weight = Math.pow(0.9, index);
 
+        const oppName = m.home_team === teamName ? m.away_team : m.home_team;
+        const oppBaselines = getOpponentBaselines(oppName, leagueFGA, leagueEFF);
+
         if (m.home_team === teamName) {
           fgaSum += homeFGA * weight;
-          offPointsSum += homeScore * weight;
-          defPointsSum += awayScore * weight;
           oppFgaSum += awayFGA * weight;
+
+          const offScale = Math.max(0.5, Math.min(2.0, oppBaselines.defEff / leagueEFF));
+          const defScale = Math.max(0.5, Math.min(2.0, oppBaselines.offEff / leagueEFF));
+
+          offPointsSum += (homeScore / offScale) * weight;
+          defPointsSum += (awayScore / defScale) * weight;
         } else {
           fgaSum += awayFGA * weight;
-          offPointsSum += awayScore * weight;
-          defPointsSum += homeScore * weight;
           oppFgaSum += homeFGA * weight;
+
+          const offScale = Math.max(0.5, Math.min(2.0, oppBaselines.defEff / leagueEFF));
+          const defScale = Math.max(0.5, Math.min(2.0, oppBaselines.offEff / leagueEFF));
+
+          offPointsSum += (awayScore / offScale) * weight;
+          defPointsSum += (homeScore / defScale) * weight;
         }
         sumWeights += weight;
       });
