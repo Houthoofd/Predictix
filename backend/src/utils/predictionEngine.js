@@ -24,7 +24,7 @@ export { evaluateSmartScrapingFilter } from './smartScraperFilter.js';
 /**
  * Enriches a single match predictions with regressed averages, Poisson calculations, and Value Bets edges
  */
-export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatches, awayMatches, activeCrawlHistoryMatches = new Set(), customLogosMap = {}, valueBetMinEdge = 5, footballCornerLine = 4.5, calibrationDelta = 0, basketballLeagueAverages = {}, useGbdtModels = true) {
+export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatches, awayMatches, activeCrawlHistoryMatches = new Set(), customLogosMap = {}, valueBetMinEdge = 5, footballCornerLine = 4.5, calibrationDelta = 0, basketballLeagueAverages = {}, useGbdtModels = true, allTeamMatchesMap = null) {
   const cleanHomeTeamKey = (row.home_team || '').toLowerCase().trim();
   const cleanAwayTeamKey = (row.away_team || '').toLowerCase().trim();
   const homeLogo = customLogosMap[cleanHomeTeamKey] || row.home_logo;
@@ -76,6 +76,16 @@ export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatc
     is_complete: homeMatches.length >= 5 && awayMatches.length >= 5 && h2hMatches.length >= 1 && !isHomeLogoMissing && !isAwayLogoMissing
   };
 
+  const sport = (row.sport || 'football').toLowerCase().trim();
+  
+  if (sport !== 'football') {
+    return enrichNonFootballMatch(
+      row, h2hMatches, homeMatches, awayMatches, homeLogo, awayLogo, diagnostic, 
+      enrichedHomeMatches, enrichedAwayMatches, enrichedH2HMatches, calibrationDelta,
+      basketballLeagueAverages, useGbdtModels, allTeamMatchesMap
+    );
+  }
+
   let h2hSum = 0;
   let h2hCount = 0;
   for (const m of h2hMatches) {
@@ -107,16 +117,6 @@ export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatc
     }
   }
   const awayAvg = awayCount > 0 ? parseFloat((awaySum / awayCount).toFixed(1)) : null;
-  
-  const sport = (row.sport || 'football').toLowerCase().trim();
-  
-  if (sport !== 'football') {
-    return enrichNonFootballMatch(
-      row, h2hMatches, homeMatches, awayMatches, homeLogo, awayLogo, diagnostic, 
-      enrichedHomeMatches, enrichedAwayMatches, enrichedH2HMatches, calibrationDelta,
-      basketballLeagueAverages, useGbdtModels
-    );
-  }
 
   // Football Poisson corner prediction (standard flow)
   const { homeRegressed, awayRegressed } = calculateRegressedAverages(row, leagueAverages, homeAvg, awayAvg);
