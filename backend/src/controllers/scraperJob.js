@@ -241,9 +241,12 @@ export async function runScrapeJob(options, sendEvent) {
           
           const cachedSport = cached.length > 0 ? (cached[0].sport || match.sport || sport) : (match.sport || sport);
           const isCachedFootball = cachedSport === 'football';
+          const isCachedBasketball = cachedSport === 'basketball';
           const hasNoStats = cached.length > 0 && (isCachedFootball 
             ? (cached[0].first_half_corners_home === null) 
-            : (!cached[0].statistics_json || cached[0].statistics_json === 'null' || cached[0].statistics_json === ''));
+            : (isCachedBasketball
+                ? (!cached[0].statistics_json || cached[0].statistics_json === 'null' || cached[0].statistics_json === '' || !cached[0].statistics_json.includes('first_half_points'))
+                : (!cached[0].statistics_json || cached[0].statistics_json === 'null' || cached[0].statistics_json === '')));
           
           if (cached.length === 0 || isPlaceholder || hasNoStats) {
             uncachedLinksSet.add(link);

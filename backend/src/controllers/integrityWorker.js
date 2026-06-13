@@ -15,9 +15,12 @@ export async function processQueueItem(socksPort, indexToProcess, scraperPath, a
     const isAwayLogoMissing = !match.away_logo || match.away_logo.trim() === '' || match.away_logo.toLowerCase().includes('placeholder') || match.away_logo.toLowerCase().includes('logo_default') || match.away_logo.toLowerCase().includes('logo-default');
     
     const isFootball = (match.sport || 'football') === 'football';
+    const isBasketball = (match.sport || '') === 'basketball';
     const isStatsMissing = isFootball
       ? (match.first_half_corners_home === null || match.first_half_corners_away === null)
-      : (!match.statistics_json || match.statistics_json === 'null' || match.statistics_json === '');
+      : (isBasketball
+          ? (!match.statistics_json || match.statistics_json === 'null' || match.statistics_json === '' || !match.statistics_json.includes('first_half_points'))
+          : (!match.statistics_json || match.statistics_json === 'null' || match.statistics_json === ''));
 
     const h2hMatches = await dbQuery(`
       SELECT match_id FROM scraped_predictions 
@@ -111,9 +114,12 @@ export async function processQueueItem(socksPort, indexToProcess, scraperPath, a
     // 4b. SofaScore fallback check for missing statistics / corners on main match
     const checkMatch = await dbGet('SELECT * FROM scraped_predictions WHERE match_id = ?', [matchObj.match_id]);
     const checkMatchFootball = (checkMatch?.sport || 'football') === 'football';
+    const checkMatchBasketball = (checkMatch?.sport || '') === 'basketball';
     const checkMatchStatsMissing = checkMatchFootball 
       ? (checkMatch.first_half_corners_home === null || !checkMatch.statistics_json || checkMatch.statistics_json === 'null')
-      : (!checkMatch.statistics_json || checkMatch.statistics_json === 'null' || checkMatch.statistics_json === '');
+      : (checkMatchBasketball
+          ? (!checkMatch.statistics_json || checkMatch.statistics_json === 'null' || checkMatch.statistics_json === '' || !checkMatch.statistics_json.includes('first_half_points'))
+          : (!checkMatch.statistics_json || checkMatch.statistics_json === 'null' || checkMatch.statistics_json === ''));
 
     if (checkMatch && checkMatchStatsMissing) {
       activeIntegrityBatch.logs.push(`[${new Date().toLocaleTimeString()}] [Tor Port ${socksPort}] -> Stats manquantes pour le match principal. Tentative de secours via SofaScore...`);
@@ -147,9 +153,12 @@ export async function processQueueItem(socksPort, indexToProcess, scraperPath, a
         
         const cachedSport = cached?.sport || matchSport;
         const isCachedFootball = cachedSport === 'football';
+        const isCachedBasketball = cachedSport === 'basketball';
         const hasNoStats = cached && (isCachedFootball 
           ? (cached.first_half_corners_home === null) 
-          : (!cached.statistics_json || cached.statistics_json === 'null' || cached.statistics_json === ''));
+          : (isCachedBasketball
+              ? (!cached.statistics_json || cached.statistics_json === 'null' || cached.statistics_json === '' || !cached.statistics_json.includes('first_half_points'))
+              : (!cached.statistics_json || cached.statistics_json === 'null' || cached.statistics_json === '')));
         
         if (!cached || isPlaceholder || hasNoStats) {
           uncachedLinks.push(link);

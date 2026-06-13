@@ -123,9 +123,13 @@ export async function crawlMatchHistory(req, res) {
             
             const cachedSport = cached?.sport || matchSport;
             const isCachedFootball = cachedSport === 'football';
+            const isCachedBasketball = cachedSport === 'basketball';
             const hasNoStats = cached && (isCachedFootball 
               ? (cached.first_half_corners_home === null) 
-              : (!cached.statistics_json || cached.statistics_json === 'null' || cached.statistics_json === ''));
+              : (isCachedBasketball
+                  ? (!cached.statistics_json || cached.statistics_json === 'null' || cached.statistics_json === '' || !cached.statistics_json.includes('first_half_points'))
+                  : (!cached.statistics_json || cached.statistics_json === 'null' || cached.statistics_json === '')
+                ));
 
             if (!cached || isPlaceholder || hasNoStats) {
               uncachedLinks.push(link);
