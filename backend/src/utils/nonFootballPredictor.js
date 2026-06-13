@@ -183,6 +183,20 @@ export function enrichNonFootballMatch(row, h2hMatches, homeMatches, awayMatches
     const expectedEffHome = (homeStats.avgOffEff * 1.025) * ((awayStats.avgDefEff * 1.025) / leagueEFF);
     const expectedEffAway = (awayStats.avgOffEff * 0.975) * ((homeStats.avgDefEff * 0.975) / leagueEFF);
 
+    const lastHomeMatch = homeMatches[0];
+    const lastAwayMatch = awayMatches[0];
+
+    const getRestDays = (curr, prev) => {
+      if (!prev || !prev.date || !curr.date) return 7;
+      const diff = Math.abs(new Date(curr.date) - new Date(prev.date));
+      const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+      return Math.min(14, days);
+    };
+
+    const homeRestDays = getRestDays(row, lastHomeMatch);
+    const awayRestDays = getRestDays(row, lastAwayMatch);
+    const restDifference = homeRestDays - awayRestDays;
+
     let home_proj_1mt = expectedPace1stHalf * expectedEffHome;
     let away_proj_1mt = expectedPace1stHalf * expectedEffAway;
 
@@ -190,7 +204,10 @@ export function enrichNonFootballMatch(row, h2hMatches, homeMatches, awayMatches
       const X1MT = {
         home_projected: home_proj_1mt,
         away_projected: away_proj_1mt,
-        sum_projected: home_proj_1mt + away_proj_1mt
+        sum_projected: home_proj_1mt + away_proj_1mt,
+        home_rest_days: homeRestDays,
+        away_rest_days: awayRestDays,
+        rest_difference: restDifference
       };
       const gbdt1MTExpected = modelBasket1MT.predictRow(X1MT);
       const splitRatio = home_proj_1mt / (home_proj_1mt + away_proj_1mt || 1);
@@ -211,7 +228,10 @@ export function enrichNonFootballMatch(row, h2hMatches, homeMatches, awayMatches
       const X1QT = {
         home_projected: home_proj_1qt,
         away_projected: away_proj_1qt,
-        sum_projected: home_proj_1qt + away_proj_1qt
+        sum_projected: home_proj_1qt + away_proj_1qt,
+        home_rest_days: homeRestDays,
+        away_rest_days: awayRestDays,
+        rest_difference: restDifference
       };
       const gbdt1QTExpected = modelBasket1QT.predictRow(X1QT);
       const splitRatioQT = home_proj_1qt / (home_proj_1qt + away_proj_1qt || 1);
