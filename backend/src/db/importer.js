@@ -9,6 +9,7 @@ import { autoSettleBetsForMatch } from '../services/betsService.js';
 export async function importScrapedMatches(matches, scrapedAt) {
   let importedCount = 0;
   const settledBetsList = [];
+  const matchesToCrawl = [];
 
   try {
     await dbRun('BEGIN TRANSACTION');
@@ -145,6 +146,17 @@ export async function importScrapedMatches(matches, scrapedAt) {
           scheduleMatchReScraping(matchId, match.date, match.time, sport);
         })
         .catch(err => console.error('[Predictix Import] Failed to schedule re-scrape:', err));
+
+      // Collect for automatic background H2H history crawling if none exists
+      try {
+        const h2hCheck = await dbQuery('SELECT COUNT(*) as count FROM scraped_predictions WHERE is_historical = 1 AND ((home_team = ? AND away_team = ?) OR (home_team = ? AND away_team = ?))', [homeClean, awayClean, awayClean, homeClean]);
+        const hasHistory = h2hCheck && h2hCheck[0] && h2hCheck[0].count > 0;
+        if (!hasHistory) {
+          matchesToCrawl.push({ matchId, sport });
+        }
+      } catch (e) {
+        console.error('[Predictix Import] Failed to check H2H history count:', e.message);
+      }
     }
     }
 
@@ -157,6 +169,22 @@ export async function importScrapedMatches(matches, scrapedAt) {
       console.error('[Predictix Import] Rollback failed:', rbErr.message);
     }
     throw err;
+  }
+
+  // Trigger background crawling sequentially after transaction COMMIT
+  if (matchesToCrawl.length > 0) {
+    console.log(`[Predictix Import] Found ${matchesToCrawl.length} new upcoming matches without cached H2H history. Triggering background crawls...`);
+    import('../controllers/historyCrawler.js')
+      .then(({ crawlMatchHistory }) => {
+        matchesToCrawl.forEach((m, idx) => {
+          setTimeout(() => {
+            console.log(`[Predictix Import] Auto-triggering background crawl for match ${m.matchId} (${m.sport})`);
+            crawlMatchHistory({ params: { matchId: m.matchId } }, { json: () => {}, status: () => ({ json: () => {} }), headersSent: true })
+              .catch(err => console.error(`[Predictix Import] Auto-crawl failed for ${m.matchId}:`, err.message));
+          }, idx * 5000); // 5s delay between crawls
+        });
+      })
+      .catch(err => console.error('[Predictix Import] Failed to import history crawler for auto-trigger:', err));
   }
 
   if (importedCount > 0) {
