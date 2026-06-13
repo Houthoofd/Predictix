@@ -1,6 +1,7 @@
-import { dbRun, dbQuery } from './database.js';
+import { dbRun, dbQuery, dbGet } from './database.js';
 import { parseFrenchDate } from '../utils/scraperHelpers.js';
 import { autoSettleBetsForMatch } from '../services/betsService.js';
+import { validateMatchStats, checkScoreSanity } from '../utils/integrityLinter.js';
 
 /**
  * Maps and imports all freshly scraped matches into the SQLite scraped_predictions table,
@@ -10,6 +11,19 @@ export async function importScrapedMatches(matches, scrapedAt) {
   let importedCount = 0;
   const settledBetsList = [];
   const matchesToCrawl = [];
+  const matchesToRepair = [];
+
+  // Load integrity configurations
+  let importGuardStrict = true;
+  let realtimeSelfHealing = true;
+  try {
+    const guardStrictRow = await dbGet("SELECT value FROM settings WHERE key = 'import_guard_strict'");
+    const selfHealingRow = await dbGet("SELECT value FROM settings WHERE key = 'realtime_self_healing'");
+    importGuardStrict = guardStrictRow ? guardStrictRow.value === 'true' : true;
+    realtimeSelfHealing = selfHealingRow ? selfHealingRow.value === 'true' : true;
+  } catch (err) {
+    console.warn('[Predictix Import] Failed to load settings:', err.message);
+  }
 
   try {
     await dbRun('BEGIN TRANSACTION');
@@ -129,6 +143,32 @@ export async function importScrapedMatches(matches, scrapedAt) {
 
     importedCount++;
 
+    // Perform data integrity checks on finished matches
+    if (isFinished) {
+      const dbMatchObj = {
+        is_finished: isFinished,
+        status,
+        sport,
+        score: match.score || '',
+        first_half_corners_home: match.first_half_corners_home !== undefined ? match.first_half_corners_home : null,
+        first_half_corners_away: match.first_half_corners_away !== undefined ? match.first_half_corners_away : null,
+        statistics_json: match.statistics ? JSON.stringify(normalizeStatistics(match.statistics)) : null
+      };
+
+      const statsVal = validateMatchStats(dbMatchObj);
+      const sanityVal = checkScoreSanity(dbMatchObj);
+
+      if (!statsVal.isValid || !sanityVal.isSane) {
+        console.warn(`[Predictix Import Guard] Le match ${matchId} présente des problèmes d'intégrité :`, { 
+          missingStats: statsVal.missing, 
+          sanityError: sanityVal.reason 
+        });
+        if (realtimeSelfHealing) {
+          matchesToRepair.push({ matchId, sport });
+        }
+      }
+    }
+
     // Auto-settle any pending bets for this primary match in real time
     try {
       const resolved = await autoSettleBetsForMatch(matchId);
@@ -185,6 +225,22 @@ export async function importScrapedMatches(matches, scrapedAt) {
         });
       })
       .catch(err => console.error('[Predictix Import] Failed to import history crawler for auto-trigger:', err));
+  }
+
+  // Trigger background repairs sequentially after transaction COMMIT
+  if (matchesToRepair.length > 0) {
+    console.log(`[Predictix Import] Found ${matchesToRepair.length} finished matches with integrity warnings. Triggering real-time self-healing...`);
+    import('../services/cronService.js')
+      .then(({ reScrapeMatch }) => {
+        matchesToRepair.forEach((m, idx) => {
+          setTimeout(() => {
+            console.log(`[Predictix Import] Auto-repairing match ${m.matchId} (${m.sport}) in background...`);
+            reScrapeMatch(m.matchId)
+              .catch(err => console.error(`[Predictix Import] Auto-repair failed for ${m.matchId}:`, err.message));
+          }, idx * 6000 + 3000); // 6s delay between repairs to avoid Tor load, offset by 3s from H2H crawls
+        });
+      })
+      .catch(err => console.error('[Predictix Import] Failed to import cronService for real-time repair:', err));
   }
 
   if (importedCount > 0) {
