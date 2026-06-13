@@ -15,7 +15,10 @@ export default function SettingsTab({ showToast, setShowResetBankrollModal, onSe
     cron_retry_interval_fail: '15',
     cron_max_retries: '5',
     cron_db_backup: 'true',
-    cron_db_backup_keep_days: '7'
+    cron_db_backup_keep_days: '7',
+    import_guard_strict: 'true',
+    realtime_self_healing: 'true',
+    score_date_sanity_check: 'true'
   });
 
   const [keepAwakeActive, setKeepAwakeActive] = useState(false);
@@ -110,7 +113,10 @@ export default function SettingsTab({ showToast, setShowResetBankrollModal, onSe
     cron_retry_interval_fail: "Temps d'attente (en minutes) avant de retenter de scraper un match dont la requête a échoué (limite Tor, proxy temporairement bloqué, etc.).",
     cron_max_retries: "Le nombre maximum de tentatives infructueuses de re-scraping effectuées pour un match donné avant d'abandonner.",
     cron_db_backup: "Chaque nuit à 3h55 (juste avant le nettoyage de 4h00), Predictix effectue une copie de sauvegarde de votre base de données dans le dossier 'backups/' à la racine du projet.",
-    cron_db_backup_keep_days: "Le nombre de jours de rétention pour les sauvegardes de la base de données. Les fichiers plus anciens seront automatiquement supprimés."
+    cron_db_backup_keep_days: "Le nombre de jours de rétention pour les sauvegardes de la base de données. Les fichiers plus anciens seront automatiquement supprimés.",
+    import_guard_strict: "Valide la structure des statistiques (ex: corners pour le football, points première mi-temps pour le basket) sur tous les matchs importés et marque les données incomplètes.",
+    realtime_self_healing: "Déclenche automatiquement une tâche de re-scraping via Tor en arrière-plan dès qu'un problème d'intégrité ou une statistique de match est détectée comme manquante.",
+    score_date_sanity_check: "Vérifie la cohérence logique des scores enregistrés (ex: la somme des points de première mi-temps ne doit pas dépasser le score final d'un match de basket)."
   };
 
   if (loading) {
@@ -359,6 +365,114 @@ export default function SettingsTab({ showToast, setShowResetBankrollModal, onSe
                 />
               </div>
             )}
+
+            {/* Validation Stricte à l'Import (Import Guard) */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '20px', borderBottom: '1px solid rgba(255,255,255,0.03)', borderTop: '1px solid rgba(255,255,255,0.03)', paddingTop: '14px', paddingBottom: '14px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <strong style={{ fontSize: '13.5px', color: 'var(--text-primary)' }}>Validation Stricte à l'Import (Import Guard)</strong>
+                  <button type="button" onClick={() => toggleTooltip('import_guard_strict')} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', color: 'var(--text-muted)' }}>
+                    <Info size={13} />
+                  </button>
+                </div>
+                {activeTooltip === 'import_guard_strict' && (
+                  <div style={{ background: 'rgba(15, 23, 42, 0.95)', border: '1px solid var(--border-color)', padding: '8px 12px', borderRadius: '6px', fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '4px', maxWidth: '550px' }}>
+                    {tooltips.import_guard_strict}
+                  </div>
+                )}
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Vérifie les statistiques requises à l'importation de matchs finis et flag les données manquantes.</span>
+              </div>
+              <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '40px', height: '20px' }}>
+                <input 
+                  type="checkbox" 
+                  checked={settings.import_guard_strict === 'true'} 
+                  onChange={(e) => setSettings({ ...settings, import_guard_strict: e.target.checked ? 'true' : 'false' })}
+                  style={{ opacity: 0, width: 0, height: 0 }}
+                />
+                <span style={{ 
+                  position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, 
+                  background: settings.import_guard_strict === 'true' ? 'var(--color-accent-solid)' : '#2c2c2e', 
+                  borderRadius: '20px', transition: '0.3s' 
+                }}>
+                  <span style={{ 
+                    position: 'absolute', content: '""', height: '14px', width: '14px', left: settings.import_guard_strict === 'true' ? '22px' : '3px', bottom: '3px', 
+                    background: '#white', borderRadius: '50%', transition: '0.3s', backgroundColor: '#fff' 
+                  }}></span>
+                </span>
+              </label>
+            </div>
+
+            {/* Auto-Réparation Immédiate (Self-Healing) */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '20px', borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '14px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <strong style={{ fontSize: '13.5px', color: 'var(--text-primary)' }}>Auto-Réparation Immédiate (Self-Healing)</strong>
+                  <button type="button" onClick={() => toggleTooltip('realtime_self_healing')} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', color: 'var(--text-muted)' }}>
+                    <Info size={13} />
+                  </button>
+                </div>
+                {activeTooltip === 'realtime_self_healing' && (
+                  <div style={{ background: 'rgba(15, 23, 42, 0.95)', border: '1px solid var(--border-color)', padding: '8px 12px', borderRadius: '6px', fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '4px', maxWidth: '550px' }}>
+                    {tooltips.realtime_self_healing}
+                  </div>
+                )}
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Planifie automatiquement un re-scraping Tor en tâche de fond dès qu'un problème d'intégrité est détecté.</span>
+              </div>
+              <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '40px', height: '20px' }}>
+                <input 
+                  type="checkbox" 
+                  checked={settings.realtime_self_healing === 'true'} 
+                  onChange={(e) => setSettings({ ...settings, realtime_self_healing: e.target.checked ? 'true' : 'false' })}
+                  style={{ opacity: 0, width: 0, height: 0 }}
+                />
+                <span style={{ 
+                  position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, 
+                  background: settings.realtime_self_healing === 'true' ? 'var(--color-accent-solid)' : '#2c2c2e', 
+                  borderRadius: '20px', transition: '0.3s' 
+                }}>
+                  <span style={{ 
+                    position: 'absolute', content: '""', height: '14px', width: '14px', left: settings.realtime_self_healing === 'true' ? '22px' : '3px', bottom: '3px', 
+                    background: '#white', borderRadius: '50%', transition: '0.3s', backgroundColor: '#fff' 
+                  }}></span>
+                </span>
+              </label>
+            </div>
+
+            {/* Contrôle de Cohérence des Scores */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '20px', paddingBottom: '4px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <strong style={{ fontSize: '13.5px', color: 'var(--text-primary)' }}>Contrôle de Cohérence des Scores</strong>
+                  <button type="button" onClick={() => toggleTooltip('score_date_sanity_check')} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', color: 'var(--text-muted)' }}>
+                    <Info size={13} />
+                  </button>
+                </div>
+                {activeTooltip === 'score_date_sanity_check' && (
+                  <div style={{ background: 'rgba(15, 23, 42, 0.95)', border: '1px solid var(--border-color)', padding: '8px 12px', borderRadius: '6px', fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '4px', maxWidth: '550px' }}>
+                    {tooltips.score_date_sanity_check}
+                  </div>
+                )}
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Vérifie la logique mathématique des scores (ex: somme des mi-temps / quarts-temps).</span>
+              </div>
+              <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '40px', height: '20px' }}>
+                <input 
+                  type="checkbox" 
+                  checked={settings.score_date_sanity_check === 'true'} 
+                  onChange={(e) => setSettings({ ...settings, score_date_sanity_check: e.target.checked ? 'true' : 'false' })}
+                  style={{ opacity: 0, width: 0, height: 0 }}
+                />
+                <span style={{ 
+                  position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, 
+                  background: settings.score_date_sanity_check === 'true' ? 'var(--color-accent-solid)' : '#2c2c2e', 
+                  borderRadius: '20px', transition: '0.3s' 
+                }}>
+                  <span style={{ 
+                    position: 'absolute', content: '""', height: '14px', width: '14px', left: settings.score_date_sanity_check === 'true' ? '22px' : '3px', bottom: '3px', 
+                    background: '#white', borderRadius: '50%', transition: '0.3s', backgroundColor: '#fff' 
+                  }}></span>
+                </span>
+              </label>
+            </div>
           </div>
         </div>
 
