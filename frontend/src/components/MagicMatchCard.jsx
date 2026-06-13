@@ -324,7 +324,7 @@ export default function MagicMatchCard({
               padding: '10px 12px', borderRadius: '10px', display: 'flex', flexDirection: 'column', gap: '6px'
             }} onClick={(e) => e.stopPropagation()}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '9px', fontWeight: 800, color: '#bf5af2', textTransform: 'uppercase', letterSpacing: '0.08em' }}>PRÉDICTION CONSTATÉE</span>
+                <span style={{ fontSize: '9px', fontWeight: 800, color: '#bf5af2', textTransform: 'uppercase', letterSpacing: '0.08em' }}>CONSEIL DE L'ALGORITHME</span>
               </div>
               <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 0' }}>
                 <span>{matchDetails?.best_tip || sig.best_tip} {matchDetails?.card_line || sig.card_line}</span>
