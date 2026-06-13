@@ -6,6 +6,7 @@ import IntegrityBatcherQueue from './IntegrityBatcherQueue';
 import MatchDiagnosticsList from './MatchDiagnosticsList';
 import MatchDiagnosticsDetails from './MatchDiagnosticsDetails';
 import CustomLogosManager from './CustomLogosManager';
+import TeamSynonymMerger from './TeamSynonymMerger';
 import LogoMappingModal from './LogoMappingModal';
 import ManualStatsModal from './ManualStatsModal';
 import useIntegrityBatcher from './useIntegrityBatcher';
@@ -126,6 +127,8 @@ export default function IntegrityTab({
           handleOpenStatsModal={handleOpenStatsModal}
         />
       </div>
+
+      <TeamSynonymMerger onRefreshPredictions={onRefreshPredictions} />
 
       <CustomLogosManager
         customLogos={customLogos}

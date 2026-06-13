@@ -283,6 +283,53 @@ class IntegrityController {
     }
   }
 
+  async getTeamDuplicates(req, res) {
+    try {
+      const { detectTeamDuplicates } = await import('../utils/teamDuplicateDetector.js');
+      const duplicates = await detectTeamDuplicates();
+      res.json({ success: true, data: duplicates });
+    } catch (error) {
+      console.error('[Predictix Duplicate Detection Error]', error);
+      res.status(500).json({ success: false, error: { message: error.message } });
+    }
+  }
+
+  async mergeTeams(req, res) {
+    const { sourceTeam, targetTeam } = req.body;
+    if (!sourceTeam || !targetTeam) {
+      return res.status(400).json({ success: false, error: { message: "sourceTeam et targetTeam sont requis." } });
+    }
+    try {
+      console.log(`[Predictix Merge Teams] Merging "${sourceTeam}" into "${targetTeam}"`);
+      
+      const r1 = await dbRun('UPDATE scraped_predictions SET home_team = ? WHERE home_team = ?', [targetTeam, sourceTeam]);
+      const r2 = await dbRun('UPDATE scraped_predictions SET away_team = ? WHERE away_team = ?', [targetTeam, sourceTeam]);
+      const r3 = await dbRun('UPDATE bets SET home_team = ? WHERE home_team = ?', [targetTeam, sourceTeam]);
+      const r4 = await dbRun('UPDATE bets SET away_team = ? WHERE away_team = ?', [targetTeam, sourceTeam]);
+      const r5 = await dbRun('UPDATE cron_history SET home_team = ? WHERE home_team = ?', [targetTeam, sourceTeam]);
+      const r6 = await dbRun('UPDATE cron_history SET away_team = ? WHERE away_team = ?', [targetTeam, sourceTeam]);
+
+      // Check if there is a custom logo for the source team and migrate it to target team if target has none
+      const sourceLogo = await dbGet('SELECT logo_url FROM custom_logos WHERE team_name = ?', [sourceTeam]);
+      if (sourceLogo) {
+        const targetLogo = await dbGet('SELECT logo_url FROM custom_logos WHERE team_name = ?', [targetTeam]);
+        if (!targetLogo) {
+          await dbRun('INSERT INTO custom_logos (team_name, logo_url) VALUES (?, ?)', [targetTeam, sourceLogo.logo_url]);
+        }
+        await dbRun('DELETE FROM custom_logos WHERE team_name = ?', [sourceTeam]);
+      }
+
+      const totalChanges = r1.changes + r2.changes + r3.changes + r4.changes + r5.changes + r6.changes;
+      res.json({ 
+        success: true, 
+        message: `Fusion réussie. "${sourceTeam}" a été fusionnée avec "${targetTeam}". (${totalChanges} lignes modifiées).` 
+      });
+    } catch (error) {
+      console.error('[Predictix Merge Teams Error]', error);
+      res.status(500).json({ success: false, error: { message: error.message } });
+    }
+  }
+
   async crawlMatchHistory(req, res) {
     return crawlMatchHistoryFn(req, res);
   }

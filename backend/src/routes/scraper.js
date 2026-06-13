@@ -146,4 +146,8 @@ router.get('/integrity/history', async (req, res) => {
   }
 });
 
+// Synonym merger endpoints
+router.get('/integrity/team-duplicates', integrityController.getTeamDuplicates);
+router.post('/integrity/merge-teams', integrityController.mergeTeams);
+
 export default router;
