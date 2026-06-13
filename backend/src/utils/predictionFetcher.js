@@ -1,4 +1,4 @@
-import { computeLeagueAverages } from './predictionAverages.js';
+import { computeLeagueAverages, getLeagueKey } from './predictionAverages.js';
 import { enrichMatchPredictions } from './predictionEngine.js';
 
 /**
@@ -215,6 +215,83 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
     console.warn("[Prediction Engine] Custom logos table might not exist yet or failed to query:", err.message);
   }
   
+  // Fetch settings from settings table
+  let valueBetMinEdge = 5;
+  let footballCornerLine = 4.5;
+  let useGbdtModels = true;
+  try {
+    const settingsRows = await dbQueryFn("SELECT * FROM settings WHERE key IN ('value_bet_min_edge', 'football_corner_line', 'use_gbdt_models')");
+    if (settingsRows && Array.isArray(settingsRows)) {
+      for (const r of settingsRows) {
+        if (r.key === 'value_bet_min_edge') valueBetMinEdge = parseFloat(r.value) || 5;
+        if (r.key === 'football_corner_line') footballCornerLine = parseFloat(r.value) || 4.5;
+        if (r.key === 'use_gbdt_models') useGbdtModels = r.value === 'true';
+      }
+    }
+  } catch (err) {
+    console.warn("[Prediction Fetcher] Could not query settings:", err.message);
+  }
+
+  // Calculate basketball league averages dynamically
+  const basketballLeagueAverages = {};
+  try {
+    const basketHistorical = await dbQueryFn(`
+      SELECT tournament, score, statistics_json 
+      FROM scraped_predictions 
+      WHERE sport = 'basketball' AND is_finished = 1 AND statistics_json IS NOT NULL
+    `);
+    
+    const groups = {};
+    for (const m of basketHistorical) {
+      let rawTour = m.tournament || '';
+      if (m.home_team && rawTour.includes(m.home_team)) {
+        const idx = rawTour.indexOf(m.home_team);
+        rawTour = rawTour.substring(0, idx);
+      }
+      const key = getLeagueKey(rawTour);
+      if (!key) continue;
+
+      let stats = null;
+      try {
+        stats = typeof m.statistics_json === 'string' ? JSON.parse(m.statistics_json) : m.statistics_json;
+      } catch (e) {}
+
+      if (stats && stats.field_goals_attempted && stats.field_goals_attempted.home !== undefined && stats.field_goals_attempted.away !== undefined) {
+        const homeFGA = parseFloat(stats.field_goals_attempted.home) || 0;
+        const awayFGA = parseFloat(stats.field_goals_attempted.away) || 0;
+        if (homeFGA > 0 && awayFGA > 0) {
+          if (!groups[key]) {
+            groups[key] = { fgaSum: 0, pointsSum: 0, count: 0 };
+          }
+          let homeScore = 0;
+          let awayScore = 0;
+          if (m.score) {
+            const match = m.score.match(/(\d+)\s*-\s*(\d+)/);
+            if (match) {
+              homeScore = parseFloat(match[1]) || 0;
+              awayScore = parseFloat(match[2]) || 0;
+            }
+          }
+          groups[key].fgaSum += (homeFGA + awayFGA);
+          groups[key].pointsSum += (homeScore + awayScore);
+          groups[key].count += 2;
+        }
+      }
+    }
+
+    for (const key in groups) {
+      const g = groups[key];
+      if (g.count >= 6) {
+        basketballLeagueAverages[key] = {
+          avgFGA: parseFloat((g.fgaSum / g.count).toFixed(2)),
+          avgEFF: parseFloat((g.pointsSum / g.fgaSum).toFixed(4))
+        };
+      }
+    }
+  } catch (err) {
+    console.warn("[Prediction Fetcher] Could not calculate basketball league averages:", err.message);
+  }
+  
   for (const row of rows) {
     const teams = [row.home_team, row.away_team].sort();
     const h2hKey = `${teams[0]} vs ${teams[1]}`;
@@ -237,7 +314,20 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
     const normalizedHome = rawHome.map(normalizeMatchRow);
     const normalizedAway = rawAway.map(normalizeMatchRow);
     
-    const enriched = enrichMatchPredictions(row, leagueAverages, normalizedH2H, normalizedHome, normalizedAway, activeCrawlHistoryMatches, customLogosMap, undefined, undefined, calibrationDelta);
+    const enriched = enrichMatchPredictions(
+      row, 
+      leagueAverages, 
+      normalizedH2H, 
+      normalizedHome, 
+      normalizedAway, 
+      activeCrawlHistoryMatches, 
+      customLogosMap, 
+      valueBetMinEdge, 
+      footballCornerLine, 
+      calibrationDelta,
+      basketballLeagueAverages,
+      useGbdtModels
+    );
     enrichedRows.push(enriched);
   }
 
