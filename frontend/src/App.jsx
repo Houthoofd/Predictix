@@ -276,6 +276,7 @@ export default function App() {
                   onSaveCustomHistoricalMatch={predictions.handleSaveCustomHistoricalMatch}
                   onCrawlMatchHistory={predictions.handleCrawlHistory}
                   onRefreshPredictions={predictions.fetchPredictions}
+                  showToast={notify.showToast}
                 />
               )}
 
