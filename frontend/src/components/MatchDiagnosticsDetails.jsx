@@ -120,6 +120,54 @@ export default function MatchDiagnosticsDetails({
               {selectedMatch.diagnostic?.away_matches_count || 0}/5 recommandés
             </span>
           </div>
+
+          {/* Checkpoint 6: Statistiques du Match */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12.5px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {selectedMatch.diagnostic?.missing_match_stats ? (
+                <X size={14} style={{ color: '#e74c3c' }} />
+              ) : (
+                <Check size={14} style={{ color: '#2ecc71' }} />
+              )}
+              <span>Statistiques Clés du Sport</span>
+            </div>
+            <span style={{ fontSize: '11px', color: selectedMatch.diagnostic?.missing_match_stats ? '#e74c3c' : 'var(--text-muted)' }}>
+              {selectedMatch.diagnostic?.missing_match_stats ? 'Incomplètes' : 'Complètes'}
+            </span>
+          </div>
+
+          {/* Checkpoint 7: Cohérence Logique */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12.5px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {selectedMatch.diagnostic?.score_sanity_mismatch ? (
+                <X size={14} style={{ color: '#e74c3c' }} />
+              ) : (
+                <Check size={14} style={{ color: '#2ecc71' }} />
+              )}
+              <span>Cohérence Logique du Score</span>
+            </div>
+            <span style={{ fontSize: '11px', color: selectedMatch.diagnostic?.score_sanity_mismatch ? '#e74c3c' : 'var(--text-muted)' }}>
+              {selectedMatch.diagnostic?.score_sanity_mismatch ? 'Anomalie Détectée' : 'Valide'}
+            </span>
+          </div>
+
+          {selectedMatch.diagnostic?.score_sanity_mismatch && (
+            <div style={{ 
+              marginTop: '12px', 
+              padding: '10px 14px', 
+              background: 'rgba(231, 76, 60, 0.08)', 
+              border: '1px solid rgba(231, 76, 60, 0.2)', 
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '8px'
+            }}>
+              <AlertTriangle size={16} style={{ color: '#e74c3c', flexShrink: 0, marginTop: '2px' }} />
+              <div style={{ fontSize: '12px', color: '#e74c3c', lineHeight: 1.4 }}>
+                <strong>Erreur d'intégrité :</strong> {selectedMatch.diagnostic.sanity_error_message || "La répartition des scores est incohérente."}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

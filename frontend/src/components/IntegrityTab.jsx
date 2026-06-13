@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import IntegrityDiagnostics from './IntegrityDiagnostics';
+import IntegrityTasksStatus from './IntegrityTasksStatus';
 import IntegrityBatcherControls from './IntegrityBatcherControls';
 import IntegrityBatcherQueue from './IntegrityBatcherQueue';
 import MatchDiagnosticsList from './MatchDiagnosticsList';
@@ -16,9 +17,46 @@ export default function IntegrityTab({
   onDeleteCustomLogo,
   onSaveCustomHistoricalMatch,
   onCrawlMatchHistory,
-  onRefreshPredictions
+  onRefreshPredictions,
+  showToast
 }) {
   const [selectedMatchId, setSelectedMatchId] = useState(null);
+  const [settings, setSettings] = useState(null);
+
+  const fetchSettings = async () => {
+    try {
+      const res = await fetch('/api/settings');
+      const json = await res.json();
+      if (json.success) {
+        setSettings(json.data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch settings:', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchSettings();
+  }, []);
+
+  const handleUpdateSetting = async (key, value) => {
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [key]: value })
+      });
+      const json = await res.json();
+      if (json.success) {
+        setSettings(json.data);
+        if (showToast) showToast('Paramètre mis à jour !', 'success');
+      } else {
+        if (showToast) showToast('Erreur lors de la mise à jour', 'error');
+      }
+    } catch (err) {
+      if (showToast) showToast('Erreur réseau', 'error');
+    }
+  };
   const selectedMatch = predictions?.find(p => p.match_id === selectedMatchId) || null;
 
   const [showLogoModal, setShowLogoModal] = useState(false);
@@ -78,6 +116,8 @@ export default function IntegrityTab({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '25px' }}>
       <IntegrityDiagnostics predictions={predictions} />
+
+      <IntegrityTasksStatus settings={settings} onUpdateSetting={handleUpdateSetting} />
 
       <div className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '25px', marginTop: '5px' }}>
