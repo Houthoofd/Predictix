@@ -349,12 +349,29 @@ export async function trainGBDTModels(dbQueryFn, force = false) {
         actual1QTAway = actual1MTAway * 0.506;
       }
 
+      const lastHomeMatch = homeHistory[homeHistory.length - 1];
+      const lastAwayMatch = awayHistory[awayHistory.length - 1];
+
+      const getRestDays = (curr, prev) => {
+        if (!prev || !prev.date || !curr.date) return 7;
+        const diff = Math.abs(new Date(curr.date) - new Date(prev.date));
+        const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+        return Math.min(14, days);
+      };
+
+      const homeRestDays = getRestDays(m, lastHomeMatch);
+      const awayRestDays = getRestDays(m, lastAwayMatch);
+      const restDifference = homeRestDays - awayRestDays;
+
       if (actual1MTHome !== null && actual1MTAway !== null) {
         trainingInput.samples_basket_1mt.push({
           features: {
             home_projected: home_proj_1mt,
             away_projected: away_proj_1mt,
-            sum_projected: home_proj_1mt + away_proj_1mt
+            sum_projected: home_proj_1mt + away_proj_1mt,
+            home_rest_days: homeRestDays,
+            away_rest_days: awayRestDays,
+            rest_difference: restDifference
           },
           target: actual1MTHome + actual1MTAway
         });
@@ -367,7 +384,10 @@ export async function trainGBDTModels(dbQueryFn, force = false) {
           features: {
             home_projected: home_proj_1qt,
             away_projected: away_proj_1qt,
-            sum_projected: home_proj_1qt + away_proj_1qt
+            sum_projected: home_proj_1qt + away_proj_1qt,
+            home_rest_days: homeRestDays,
+            away_rest_days: awayRestDays,
+            rest_difference: restDifference
           },
           target: actual1QTHome + actual1QTAway
         });
