@@ -198,6 +198,9 @@ export async function initReScraper() {
     await loadCronSettings();
     await reevaluateKeepAwake();
     scheduleNightlyTasks();
+    setTimeout(() => {
+      recordDailyIntegrityScore().catch(err => logCron(`Staggered integrity score run failed: ${err.message}`, 'error'));
+    }, 30000);
     try {
       const { default: ic } = await import('../controllers/integrityController.js');
       await ic.restoreIntegrityBatch();
@@ -279,6 +282,47 @@ async function runNightlyCleanup() {
   } catch (err) { logCron(`Error in nightly cleanup: ${err.message}`, 'error'); }
 }
 
+export async function recordDailyIntegrityScore() {
+  try {
+    logCron('Recording daily database integrity score...');
+    const { getEnrichedPredictions } = await import('../utils/predictionFetcher.js');
+    const predictions = await getEnrichedPredictions({ dateRange: 'all' }, dbQuery, new Set());
+    
+    let total = predictions.length;
+    let healthy = 0;
+    let sumScore = 0;
+    
+    for (const p of predictions) {
+      if (p.diagnostic) {
+        sumScore += p.diagnostic.score ?? 100;
+        if (p.diagnostic.is_complete) {
+          healthy++;
+        }
+      } else {
+        sumScore += 100;
+        healthy++;
+      }
+    }
+    
+    const avgScore = total > 0 ? (sumScore / total) : 100.0;
+    const todayStr = new Date().toISOString().substring(0, 10);
+    
+    await dbRun(`
+      INSERT INTO integrity_history (date, score, total_matches, healthy_matches)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(date) DO UPDATE SET
+        score = excluded.score,
+        total_matches = excluded.total_matches,
+        healthy_matches = excluded.healthy_matches,
+        updated_at = CURRENT_TIMESTAMP
+    `, [todayStr, avgScore, total, healthy]);
+    
+    logCron(`Daily integrity score recorded: ${avgScore.toFixed(2)}% (${healthy}/${total} healthy matches)`);
+  } catch (err) {
+    logCron(`Error recording daily integrity score: ${err.message}`, 'error');
+  }
+}
+
 function scheduleNightlyTasks() {
   const getNextTime = (hours, minutes = 0) => {
     const target = new Date();
@@ -292,5 +336,7 @@ function scheduleNightlyTasks() {
   setTimeout(() => { runNightlyBackup(); setInterval(runNightlyBackup, 24 * 3600000); }, delayBackup);
   const delayCleanup = getNextTime(4);
   setTimeout(() => { runNightlyCleanup(); setInterval(runNightlyCleanup, 24 * 3600000); }, delayCleanup);
-  logCron(`Nightly tasks scheduled: Repair at 3:00 AM (in ${Math.round(delayRepair/60000)}m), Backup at 3:55 AM (in ${Math.round(delayBackup/60000)}m), Cleanup at 4:00 AM (in ${Math.round(delayCleanup/60000)}m)`);
+  const delayIntegrityHistory = getNextTime(4, 5);
+  setTimeout(() => { recordDailyIntegrityScore(); setInterval(recordDailyIntegrityScore, 24 * 3600000); }, delayIntegrityHistory);
+  logCron(`Nightly tasks scheduled: Repair at 3:00 AM (in ${Math.round(delayRepair/60000)}m), Backup at 3:55 AM (in ${Math.round(delayBackup/60000)}m), Cleanup at 4:00 AM (in ${Math.round(delayCleanup/60000)}m), Integrity History at 4:05 AM (in ${Math.round(delayIntegrityHistory/60000)}m)`);
 }

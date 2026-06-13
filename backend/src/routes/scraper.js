@@ -136,4 +136,14 @@ router.post('/predictions/integrity-batch/prioritize', integrityController.prior
 router.post('/predictions/integrity-batch/inject', integrityController.injectIntegrityMatch);
 router.post('/predictions/integrity-batch/cleanup', customDataController.cleanupDatabaseIntegrity);
 
+// Integrity History Route
+router.get('/integrity/history', async (req, res) => {
+  try {
+    const history = await dbQuery('SELECT * FROM integrity_history ORDER BY date DESC LIMIT 30');
+    res.json({ success: true, data: history.reverse() });
+  } catch (error) {
+    res.status(500).json({ success: false, error: { message: error.message } });
+  }
+});
+
 export default router;

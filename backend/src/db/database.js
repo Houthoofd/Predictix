@@ -222,6 +222,17 @@ function initDb() {
       )
     `);
  
+    // 11. Table integrity_history (historical data quality trend scores)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS integrity_history (
+        date TEXT PRIMARY KEY,
+        score REAL NOT NULL,
+        total_matches INTEGER NOT NULL,
+        healthy_matches INTEGER NOT NULL,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // 10. Table integrity_batch_state (persistence of the active integrity batcher state)
     db.run(`
       CREATE TABLE IF NOT EXISTS integrity_batch_state (

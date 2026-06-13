@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import IntegrityDiagnostics from './IntegrityDiagnostics';
+import IntegrityTrendChart from './IntegrityTrendChart';
 import IntegrityBatcherControls from './IntegrityBatcherControls';
 import IntegrityBatcherQueue from './IntegrityBatcherQueue';
 import MatchDiagnosticsList from './MatchDiagnosticsList';
@@ -78,6 +79,7 @@ export default function IntegrityTab({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '25px' }}>
       <IntegrityDiagnostics predictions={predictions} />
+      <IntegrityTrendChart />
 
       <div className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '25px', marginTop: '5px' }}>
