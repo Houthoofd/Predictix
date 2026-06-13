@@ -282,6 +282,27 @@ export default function MagicMatchCard({
                 <div style={{ fontSize: '13px', fontWeight: 800, color: '#bf5af2', marginTop: '2px' }}>{h2hAvg ? h2hAvg.toFixed(1) : 'N/A'}</div>
               </div>
             </div>
+
+            {matchDetails.best_tip && (
+              <div style={{ 
+                borderTop: '1px solid rgba(255, 255, 255, 0.06)', 
+                paddingTop: '10px', 
+                marginTop: '4px',
+                display: 'flex', 
+                flexDirection: 'column', 
+                gap: '6px' 
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '9.5px', fontWeight: 800, color: '#bf5af2', textTransform: 'uppercase', letterSpacing: '0.08em' }}>CONSEIL DE L'ALGORITHME</span>
+                </div>
+                <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>{matchDetails.best_tip} {matchDetails.card_line}</span>
+                  <span style={{ color: 'var(--color-success)', fontSize: '11px', background: 'rgba(16, 185, 129, 0.08)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(16, 185, 129, 0.12)' }}>
+                    {matchDetails.probability || 'N/A'}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         ) : valueBets.length > 0 && currentBet ? (
           <MatchCardValueBetSelector

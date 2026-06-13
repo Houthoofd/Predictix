@@ -1,5 +1,5 @@
 import { computeLeagueAverages, getLeagueKey } from './predictionAverages.js';
-import { enrichMatchPredictions } from './predictionEngine.js';
+import { enrichMatchPredictions, getSportsCalibrationDeltas } from './predictionEngine.js';
 
 /**
  * Fetch and enrich predictions using optimized in-memory historical match maps.
@@ -183,25 +183,7 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
   const leagueAverages = computeLeagueAverages(allHistoricalMatches);
   const enrichedRows = [];
 
-  let calibrationDelta = 0;
-  try {
-    const completedBets = await dbQueryFn(`
-      SELECT probability, status 
-      FROM bets 
-      WHERE status IN ('WON', 'LOST') AND probability IS NOT NULL
-    `);
-    
-    if (completedBets && completedBets.length > 0) {
-      const totalBets = completedBets.length;
-      const totalWon = completedBets.filter(b => b.status === 'WON').length;
-      const sumPredictedProb = completedBets.reduce((sum, b) => sum + (b.probability / 100), 0);
-      
-      const k = 20; // Bayesian smoothing constant
-      calibrationDelta = (totalWon - sumPredictedProb) / (totalBets + k);
-    }
-  } catch (err) {
-    console.warn("[Prediction Fetcher] Could not calculate calibration delta:", err.message);
-  }
+  const deltas = await getSportsCalibrationDeltas(dbQueryFn);
 
   let customLogosMap = {};
   try {
@@ -314,6 +296,11 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
     const normalizedHome = rawHome.map(normalizeMatchRow);
     const normalizedAway = rawAway.map(normalizeMatchRow);
     
+    const sport = (row.sport || 'football').toLowerCase().trim();
+    const currentCalibrationDelta = sport === 'football' 
+      ? deltas.football 
+      : (sport === 'basketball' ? deltas.basketball : deltas.other);
+
     const enriched = enrichMatchPredictions(
       row, 
       leagueAverages, 
@@ -324,7 +311,7 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
       customLogosMap, 
       valueBetMinEdge, 
       footballCornerLine, 
-      calibrationDelta,
+      currentCalibrationDelta,
       basketballLeagueAverages,
       useGbdtModels
     );

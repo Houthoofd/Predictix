@@ -448,25 +448,7 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
     console.warn("[Prediction Engine] Could not calculate basketball league averages:", err.message);
   }
 
-  let calibrationDelta = 0;
-  try {
-    const completedBets = await dbQueryFn(`
-      SELECT probability, status 
-      FROM bets 
-      WHERE status IN ('WON', 'LOST') AND probability IS NOT NULL
-    `);
-    
-    if (completedBets && completedBets.length > 0) {
-      const totalBets = completedBets.length;
-      const totalWon = completedBets.filter(b => b.status === 'WON').length;
-      const sumPredictedProb = completedBets.reduce((sum, b) => sum + (b.probability / 100), 0);
-      
-      const k = 20; // Bayesian smoothing constant
-      calibrationDelta = (totalWon - sumPredictedProb) / (totalBets + k);
-    }
-  } catch (err) {
-    console.warn("[Prediction Engine] Could not calculate calibration delta:", err.message);
-  }
+  const deltas = await getSportsCalibrationDeltas(dbQueryFn);
 
   let valueBetMinEdge = 5;
   let footballCornerLine = 4.5;
@@ -537,9 +519,128 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
 
     const normalizeAway = awayMatches.map(normalizeMatchRow);
     
-    const enriched = enrichMatchPredictions(row, leagueAverages, normalizedH2H, normalizeHome, normalizeAway, activeCrawlHistoryMatches, customLogosMap, valueBetMinEdge, footballCornerLine, calibrationDelta, basketballLeagueAverages, useGbdtModels);
+    const sport = (row.sport || 'football').toLowerCase().trim();
+    const currentCalibrationDelta = sport === 'football' 
+      ? deltas.football 
+      : (sport === 'basketball' ? deltas.basketball : deltas.other);
+
+    const enriched = enrichMatchPredictions(
+      row, 
+      leagueAverages, 
+      normalizedH2H, 
+      normalizeHome, 
+      normalizeAway, 
+      activeCrawlHistoryMatches, 
+      customLogosMap, 
+      valueBetMinEdge, 
+      footballCornerLine, 
+      currentCalibrationDelta, 
+      basketballLeagueAverages, 
+      useGbdtModels
+    );
     enrichedRows.push(enriched);
   }
 
   return enrichedRows;
+}
+
+export async function getSportsCalibrationDeltas(dbQueryFn) {
+  const deltas = {
+    football: 0,
+    basketball: 0,
+    other: 0
+  };
+  try {
+    const rows = await dbQueryFn(`
+      SELECT sport, best_tip, card_line, probability, score, first_half_corners_home, first_half_corners_away, statistics_json
+      FROM scraped_predictions 
+      WHERE is_finished = 1 
+        AND best_tip IS NOT NULL 
+        AND card_line IS NOT NULL 
+        AND probability IS NOT NULL
+    `);
+    
+    const stats = {
+      football: { total: 0, won: 0, sumProb: 0 },
+      basketball: { total: 0, won: 0, sumProb: 0 },
+      other: { total: 0, won: 0, sumProb: 0 }
+    };
+
+    for (const m of rows) {
+      const sport = (m.sport || 'football').toLowerCase().trim();
+      const groupKey = sport === 'football' ? 'football' : (sport === 'basketball' ? 'basketball' : 'other');
+
+      const lineMatch = m.card_line.match(/^(\d+(?:\.\d+)?)/);
+      if (!lineMatch) continue;
+      const lineVal = parseFloat(lineMatch[1]);
+
+      let actualTotal = null;
+
+      if (sport === 'football') {
+        if (m.first_half_corners_home !== null && m.first_half_corners_away !== null) {
+          actualTotal = m.first_half_corners_home + m.first_half_corners_away;
+        }
+      } else if (sport === 'basketball') {
+        if (lineVal < 120) {
+          try {
+            const s = typeof m.statistics_json === 'string' ? JSON.parse(m.statistics_json) : m.statistics_json;
+            if (s && s.first_half_points && s.first_half_points.home !== undefined) {
+              actualTotal = parseFloat(s.first_half_points.home) + parseFloat(s.first_half_points.away);
+            }
+          } catch (e) {}
+          if (actualTotal === null && m.score) {
+            const match = m.score.match(/(\d+)\s*-\s*(\d+)/);
+            if (match) {
+              actualTotal = (parseFloat(match[1]) + parseFloat(match[2])) * 0.49;
+            }
+          }
+        } else {
+          if (m.score) {
+            const match = m.score.match(/(\d+)\s*-\s*(\d+)/);
+            if (match) {
+              actualTotal = parseFloat(match[1]) + parseFloat(match[2]);
+            }
+          }
+        }
+      } else {
+        if (m.score) {
+          const match = m.score.match(/(\d+)\s*-\s*(\d+)/);
+          if (match) {
+            actualTotal = parseFloat(match[1]) + parseFloat(match[2]);
+          }
+        }
+      }
+
+      if (actualTotal === null) continue;
+
+      const cleanTip = m.best_tip.toLowerCase().trim();
+      const isOver = cleanTip.includes('plus') || cleanTip.includes('over');
+      let won = false;
+
+      if (isOver) {
+        won = actualTotal > lineVal;
+      } else {
+        won = actualTotal < lineVal;
+      }
+
+      const probVal = parseFloat(m.probability.replace('%', '')) / 100;
+
+      stats[groupKey].total++;
+      stats[groupKey].sumProb += probVal;
+      if (won) {
+        stats[groupKey].won++;
+      }
+    }
+
+    const k = 20; // Bayesian smoothing constant
+    for (const key of ['football', 'basketball', 'other']) {
+      const s = stats[key];
+      if (s.total > 0) {
+        deltas[key] = (s.won - s.sumProb) / (s.total + k);
+      }
+    }
+  } catch (err) {
+    console.warn("[Calibration Engine] Error calculating sports calibration deltas:", err.message);
+  }
+  return deltas;
 }
