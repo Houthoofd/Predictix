@@ -4,7 +4,7 @@ import {
   getMetricPeriodRatio,
   getAverage
 } from '../utils/poissonUtils';
-import { getMetricLabel } from '../utils/labels';
+import { getMetricLabel, getConfidenceBadge } from '../utils/labels';
 import MatchCardHeader from './MatchCardHeader';
 import MatchCardTeams from './MatchCardTeams';
 import MatchCardKebabMenu from './MatchCardKebabMenu';
@@ -283,26 +283,32 @@ export default function MagicMatchCard({
               </div>
             </div>
 
-            {(matchDetails?.best_tip || sig.best_tip) && (
-              <div style={{ 
-                borderTop: '1px solid rgba(255, 255, 255, 0.06)', 
-                paddingTop: '10px', 
-                marginTop: '4px',
-                display: 'flex', 
-                flexDirection: 'column', 
-                gap: '6px' 
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '9.5px', fontWeight: 800, color: '#bf5af2', textTransform: 'uppercase', letterSpacing: '0.08em' }}>CONSEIL DE L'ALGORITHME</span>
+            {(matchDetails?.best_tip || sig.best_tip) && (() => {
+              const conf = getConfidenceBadge(matchDetails?.probability || sig.probability);
+              return (
+                <div style={{ 
+                  borderTop: '1px solid rgba(255, 255, 255, 0.06)', 
+                  paddingTop: '10px', 
+                  marginTop: '4px',
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  gap: '6px' 
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '9.5px', fontWeight: 800, color: '#bf5af2', textTransform: 'uppercase', letterSpacing: '0.08em' }}>CONSEIL DE L'ALGORITHME</span>
+                    <span style={{ color: conf.color, fontSize: '9px', fontWeight: 800, background: conf.bg, padding: '2px 6px', borderRadius: '4px', border: conf.border, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                      {conf.label}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>{matchDetails?.best_tip || sig.best_tip} {matchDetails?.card_line || sig.card_line}</span>
+                    <span style={{ color: 'var(--color-success)', fontSize: '11px', background: 'rgba(16, 185, 129, 0.08)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(16, 185, 129, 0.12)' }}>
+                      {matchDetails?.probability || sig.probability || 'N/A'}
+                    </span>
+                  </div>
                 </div>
-                <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>{matchDetails?.best_tip || sig.best_tip} {matchDetails?.card_line || sig.card_line}</span>
-                  <span style={{ color: 'var(--color-success)', fontSize: '11px', background: 'rgba(16, 185, 129, 0.08)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(16, 185, 129, 0.12)' }}>
-                    {matchDetails?.probability || sig.probability || 'N/A'}
-                  </span>
-                </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
         ) : valueBets.length > 0 && currentBet ? (
           <MatchCardValueBetSelector
@@ -318,25 +324,31 @@ export default function MagicMatchCard({
             onPlaceGbdtBet={handlePlaceGbdtBet}
           />
         ) : (
-          (matchDetails?.best_tip || sig.best_tip) && (
-            <div style={{ 
-              background: 'rgba(191, 90, 242, 0.05)', border: '1px solid rgba(191, 90, 242, 0.22)',
-              padding: '10px 12px', borderRadius: '10px', display: 'flex', flexDirection: 'column', gap: '6px'
-            }} onClick={(e) => e.stopPropagation()}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '9px', fontWeight: 800, color: '#bf5af2', textTransform: 'uppercase', letterSpacing: '0.08em' }}>CONSEIL DE L'ALGORITHME</span>
+          (matchDetails?.best_tip || sig.best_tip) && (() => {
+            const conf = getConfidenceBadge(matchDetails?.probability || sig.probability);
+            return (
+              <div style={{ 
+                background: 'rgba(191, 90, 242, 0.05)', border: '1px solid rgba(191, 90, 242, 0.22)',
+                padding: '10px 12px', borderRadius: '10px', display: 'flex', flexDirection: 'column', gap: '6px'
+              }} onClick={(e) => e.stopPropagation()}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '9px', fontWeight: 800, color: '#bf5af2', textTransform: 'uppercase', letterSpacing: '0.08em' }}>CONSEIL DE L'ALGORITHME</span>
+                  <span style={{ color: conf.color, fontSize: '8px', fontWeight: 800, background: conf.bg, padding: '2px 5px', borderRadius: '4px', border: conf.border, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                    {conf.label}
+                  </span>
+                </div>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 0' }}>
+                  <span>{matchDetails?.best_tip || sig.best_tip} {matchDetails?.card_line || sig.card_line}</span>
+                  <span style={{ color: 'var(--color-success)', fontSize: '11px', background: 'rgba(16, 185, 129, 0.08)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(16, 185, 129, 0.12)' }}>
+                    {matchDetails?.probability || sig.probability || 'N/A'}
+                  </span>
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', background: 'rgba(0, 0, 0, 0.2)', border: '1px solid rgba(255, 255, 255, 0.04)', borderRadius: '6px', padding: '8px 10px', marginTop: '4px', lineHeight: '1.45' }}>
+                  L'algorithme estime <strong style={{ color: 'var(--color-success)' }}>{matchDetails?.probability || sig.probability || 'N/A'}</strong> de probabilité de voir {(matchDetails?.best_tip || sig.best_tip || '').toLowerCase()} {(matchDetails?.card_line || sig.card_line || '').toLowerCase()}.
+                </div>
               </div>
-              <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 0' }}>
-                <span>{matchDetails?.best_tip || sig.best_tip} {matchDetails?.card_line || sig.card_line}</span>
-                <span style={{ color: 'var(--color-success)', fontSize: '11px', background: 'rgba(16, 185, 129, 0.08)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(16, 185, 129, 0.12)' }}>
-                  {matchDetails?.probability || sig.probability || 'N/A'}
-                </span>
-              </div>
-              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', background: 'rgba(0, 0, 0, 0.2)', border: '1px solid rgba(255, 255, 255, 0.04)', borderRadius: '6px', padding: '8px 10px', marginTop: '4px', lineHeight: '1.45' }}>
-                L'algorithme estime <strong style={{ color: 'var(--color-success)' }}>{matchDetails?.probability || sig.probability || 'N/A'}</strong> de probabilité de voir {(matchDetails?.best_tip || sig.best_tip || '').toLowerCase()} {(matchDetails?.card_line || sig.card_line || '').toLowerCase()}.
-              </div>
-            </div>
-          )
+            );
+          })()
         )}
 
         <div style={{ display: 'flex', justifyContent: 'space-between', background: 'var(--bg-tertiary)', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '12.5px', alignItems: 'center' }}>

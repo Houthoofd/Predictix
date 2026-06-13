@@ -186,4 +186,39 @@ export const formatTipLabel = (tip, line, sport, notes = '') => {
   return `${tip} ${line}`;
 };
 
+export function getConfidenceBadge(prob) {
+  if (prob === undefined || prob === null) {
+    return {
+      label: 'N/A',
+      color: '#9ca3af',
+      bg: 'rgba(156, 163, 175, 0.08)',
+      border: '1px solid rgba(156, 163, 175, 0.15)'
+    };
+  }
+  const probVal = typeof prob === 'string' ? (parseInt(prob) || 50) : prob;
+  if (probVal >= 63) {
+    return {
+      label: 'Confiance Forte',
+      color: '#10b981',
+      bg: 'rgba(16, 185, 129, 0.08)',
+      border: '1px solid rgba(16, 185, 129, 0.15)'
+    };
+  } else if (probVal >= 56) {
+    return {
+      label: 'Confiance Moyenne',
+      color: '#f59e0b',
+      bg: 'rgba(245, 158, 11, 0.08)',
+      border: '1px solid rgba(245, 158, 11, 0.15)'
+    };
+  } else {
+    return {
+      label: 'Confiance Faible',
+      color: '#a8a29e',
+      bg: 'rgba(156, 163, 175, 0.05)',
+      border: '1px solid rgba(255, 255, 255, 0.06)'
+    };
+  }
+}
+
+
 

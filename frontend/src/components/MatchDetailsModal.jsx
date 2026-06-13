@@ -12,6 +12,7 @@ import MatchDetailsDashboard from './MatchDetailsDashboard';
 import MatchDetailsStatsTab from './MatchDetailsStatsTab';
 import MatchDetailsPoissonSimulator from './MatchDetailsPoissonSimulator';
 import MatchDetailsHistoryList from './MatchDetailsHistoryList';
+import { getConfidenceBadge } from '../utils/labels';
 
 export default function MatchDetailsModal({
   selectedMatchDetails,
@@ -172,32 +173,40 @@ export default function MatchDetailsModal({
           </button>
         </div>
 
-        {selectedMatchDetails?.best_tip && (
-          <div style={{ 
-            background: 'rgba(191, 90, 242, 0.05)', 
-            border: '1px solid rgba(191, 90, 242, 0.22)',
-            padding: '14px 18px', 
-            borderRadius: '12px', 
-            marginBottom: '20px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px',
-            boxShadow: '0 4px 20px rgba(191, 90, 242, 0.05)'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '10px', fontWeight: 800, color: '#bf5af2', textTransform: 'uppercase', letterSpacing: '0.08em' }}>CONSEIL DE L'ALGORITHME</span>
-              <span style={{ color: 'var(--color-success)', fontSize: '11px', fontWeight: 800, background: 'rgba(16, 185, 129, 0.08)', padding: '2px 8px', borderRadius: '6px', border: '1px solid rgba(16, 185, 129, 0.15)' }}>
-                {selectedMatchDetails.probability || 'N/A'}
-              </span>
+        {selectedMatchDetails?.best_tip && (() => {
+          const conf = getConfidenceBadge(selectedMatchDetails.probability);
+          return (
+            <div style={{ 
+              background: 'rgba(191, 90, 242, 0.05)', 
+              border: '1px solid rgba(191, 90, 242, 0.22)',
+              padding: '14px 18px', 
+              borderRadius: '12px', 
+              marginBottom: '20px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+              boxShadow: '0 4px 20px rgba(191, 90, 242, 0.05)'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '10px', fontWeight: 800, color: '#bf5af2', textTransform: 'uppercase', letterSpacing: '0.08em' }}>CONSEIL DE L'ALGORITHME</span>
+                  <span style={{ color: conf.color, fontSize: '8px', fontWeight: 800, background: conf.bg, padding: '2px 5px', borderRadius: '4px', border: conf.border, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                    {conf.label}
+                  </span>
+                </div>
+                <span style={{ color: 'var(--color-success)', fontSize: '11px', fontWeight: 800, background: 'rgba(16, 185, 129, 0.08)', padding: '2px 8px', borderRadius: '6px', border: '1px solid rgba(16, 185, 129, 0.15)' }}>
+                  {selectedMatchDetails.probability || 'N/A'}
+                </span>
+              </div>
+              <div style={{ fontSize: '15px', fontWeight: 800, color: '#fff' }}>
+                {selectedMatchDetails.best_tip} {selectedMatchDetails.card_line}
+              </div>
+              <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: '1.45' }}>
+                L'algorithme Predictix estime une probabilité de <strong style={{ color: 'var(--color-success)' }}>{selectedMatchDetails.probability || 'N/A'}</strong> de voir <strong style={{ color: '#bf5af2' }}>{selectedMatchDetails.best_tip.toLowerCase()} {selectedMatchDetails.card_line}</strong>.
+              </div>
             </div>
-            <div style={{ fontSize: '15px', fontWeight: 800, color: '#fff' }}>
-              {selectedMatchDetails.best_tip} {selectedMatchDetails.card_line}
-            </div>
-            <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', lineHeight: '1.45' }}>
-              L'algorithme Predictix estime une probabilité de <strong style={{ color: 'var(--color-success)' }}>{selectedMatchDetails.probability || 'N/A'}</strong> de voir <strong style={{ color: '#bf5af2' }}>{selectedMatchDetails.best_tip.toLowerCase()} {selectedMatchDetails.card_line}</strong>.
-            </div>
-          </div>
-        )}
+          );
+        })()}
 
         {valueBetsList.length > 0 && (
           <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '16px' }}>

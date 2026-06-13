@@ -41,6 +41,7 @@ export default function MagicPredictionsTab({
   setMinCoverage
 }) {
   const [filterMetric, setFilterMetric] = useState('all');
+  const [filterConfidence, setFilterConfidence] = useState('all');
   const [collapsedLeagues, setCollapsedLeagues] = useState({});
   const [sortBy, setSortBy] = useState('date');
   const [viewMode, setViewMode] = useState('today');
@@ -86,7 +87,16 @@ export default function MagicPredictionsTab({
     // If basketball is selected, ignore custom strategy signals to avoid duplicates and show all matches directly
     const matchStrategy = selectedMagicSport !== 'basketball' || s.strategy_id === 0;
     
-    return matchMetric && matchSport && matchDateMode && matchStrategy;
+    // Filter by confidence rating
+    const probVal = parseInt(s.probability || '50') || 50;
+    let matchConfidence = true;
+    if (filterConfidence === 'high_medium') {
+      matchConfidence = probVal >= 56;
+    } else if (filterConfidence === 'high') {
+      matchConfidence = probVal >= 63;
+    }
+    
+    return matchMetric && matchSport && matchDateMode && matchStrategy && matchConfidence;
   });
 
   const availableMetrics = ['all', ...new Set(signals.map(s => s.metric))];
@@ -205,6 +215,15 @@ export default function MagicPredictionsTab({
                 <option value="50" style={{ background: '#1c1c1e', color: '#fff' }}>50%</option>
                 <option value="70" style={{ background: '#1c1c1e', color: '#fff' }}>70%</option>
                 <option value="90" style={{ background: '#1c1c1e', color: '#fff' }}>90%</option>
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>Confiance :</span>
+              <select value={filterConfidence} onChange={(e) => setFilterConfidence(e.target.value)} style={{ background: 'rgba(0, 0, 0, 0.25)', border: '1px solid rgba(255, 255, 255, 0.08)', color: 'var(--text-primary)', borderRadius: '8px', padding: '6px 12px', fontSize: '12.5px', fontFamily: 'Outfit', fontWeight: 600, cursor: 'pointer', outline: 'none' }}>
+                <option value="all" style={{ background: '#1c1c1e', color: '#fff' }}>Toutes</option>
+                <option value="high_medium" style={{ background: '#1c1c1e', color: '#fff' }}>Moyenne &amp; Forte (&ge; 56%)</option>
+                <option value="high" style={{ background: '#1c1c1e', color: '#fff' }}>Forte uniquement (&ge; 63%)</option>
               </select>
             </div>
 

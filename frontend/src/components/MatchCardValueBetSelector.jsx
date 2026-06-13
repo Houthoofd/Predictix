@@ -1,6 +1,6 @@
 import React from 'react';
 import { Sparkles } from 'lucide-react';
-import { getMetricLabel } from '../utils/labels';
+import { getMetricLabel, getConfidenceBadge } from '../utils/labels';
 
 export default function MatchCardValueBetSelector({
   valueBets,
@@ -21,7 +21,14 @@ export default function MatchCardValueBetSelector({
     }} onClick={(e) => e.stopPropagation()}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ fontSize: '9px', fontWeight: 800, color: '#bf5af2', textTransform: 'uppercase', letterSpacing: '0.08em' }}>CONSEIL DE L'ALGORITHME</span>
-        <span style={{ fontSize: '9px', color: 'var(--text-muted)', fontWeight: 600 }}>{valueBets.length} opportunités</span>
+        {currentBet && (() => {
+          const conf = getConfidenceBadge(currentBet.probability);
+          return (
+            <span style={{ color: conf.color, fontSize: '8px', fontWeight: 800, background: conf.bg, padding: '2px 5px', borderRadius: '4px', border: conf.border, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+              {conf.label}
+            </span>
+          );
+        })()}
       </div>
       
       {valueBets.length > 1 ? (
