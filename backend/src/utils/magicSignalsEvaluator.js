@@ -241,7 +241,10 @@ export async function evaluateMagicSignals(minCoverage = 50.0) {
       rationale: rationaleText,
       sport: match.sport || 'football',
       is_finished: match.is_finished || 0,
-      scraped_at: match.scraped_at
+      scraped_at: match.scraped_at,
+      best_tip: match.best_tip,
+      card_line: match.card_line,
+      probability: match.probability
     });
 
     // Evaluate active custom strategies
@@ -343,7 +346,10 @@ export async function evaluateMagicSignals(minCoverage = 50.0) {
           rationale: rationaleText,
           sport: match.sport || 'football',
           is_finished: match.is_finished || 0,
-          scraped_at: match.scraped_at
+          scraped_at: match.scraped_at,
+          best_tip: match.best_tip,
+          card_line: match.card_line,
+          probability: match.probability
         });
       }
     }
