@@ -17,6 +17,7 @@ import {
 } from './predictionAverages.js';
 import { enrichNonFootballMatch } from './nonFootballPredictor.js';
 import { projectFirstHalfOdds } from './oddsProjector.js';
+import { validateMatchStats, checkScoreSanity } from './integrityLinter.js';
 
 // Re-export smart scraping filter for consumers of predictionEngine
 export { evaluateSmartScrapingFilter } from './smartScraperFilter.js';
@@ -49,6 +50,9 @@ export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatc
   const isHomeLogoMissing = !homeLogo || homeLogo.trim() === '' || homeLogo.toLowerCase().includes('placeholder') || homeLogo.toLowerCase().includes('logo_default') || homeLogo.toLowerCase().includes('logo-default');
   const isAwayLogoMissing = !awayLogo || awayLogo.trim() === '' || awayLogo.toLowerCase().includes('placeholder') || awayLogo.toLowerCase().includes('logo_default') || awayLogo.toLowerCase().includes('logo-default');
   
+  const statsValidation = validateMatchStats(row);
+  const sanityCheck = checkScoreSanity(row);
+
   let diagnosticScore = 100;
   if (homeMatches.length === 0) diagnosticScore -= 25;
   else if (homeMatches.length < 5) diagnosticScore -= 10;
@@ -61,6 +65,13 @@ export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatc
   if (isHomeLogoMissing) diagnosticScore -= 10;
   if (isAwayLogoMissing) diagnosticScore -= 10;
   
+  if (!statsValidation.isValid) {
+    diagnosticScore -= 20;
+  }
+  if (!sanityCheck.isSane) {
+    diagnosticScore -= 30;
+  }
+  
   diagnosticScore = Math.max(0, diagnosticScore);
 
   const diagnostic = {
@@ -69,11 +80,20 @@ export function enrichMatchPredictions(row, leagueAverages, h2hMatches, homeMatc
     missing_h2h: h2hMatches.length === 0,
     missing_home_logo: isHomeLogoMissing,
     missing_away_logo: isAwayLogoMissing,
+    missing_match_stats: !statsValidation.isValid,
+    score_sanity_mismatch: !sanityCheck.isSane,
+    sanity_error_message: sanityCheck.reason,
     home_matches_count: homeMatches.length,
     away_matches_count: awayMatches.length,
     h2h_matches_count: h2hMatches.length,
     score: diagnosticScore,
-    is_complete: homeMatches.length >= 5 && awayMatches.length >= 5 && h2hMatches.length >= 1 && !isHomeLogoMissing && !isAwayLogoMissing
+    is_complete: homeMatches.length >= 5 && 
+                 awayMatches.length >= 5 && 
+                 h2hMatches.length >= 1 && 
+                 !isHomeLogoMissing && 
+                 !isAwayLogoMissing && 
+                 statsValidation.isValid && 
+                 sanityCheck.isSane
   };
 
   const sport = (row.sport || 'football').toLowerCase().trim();
