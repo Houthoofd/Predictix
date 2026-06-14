@@ -572,7 +572,7 @@ export async function getSportsCalibrationDeltas(dbQueryFn) {
   };
   try {
     const rows = await dbQueryFn(`
-      SELECT sport, best_tip, card_line, probability, score, first_half_corners_home, first_half_corners_away, statistics_json
+      SELECT sport, best_tip, card_line, probability, score, first_half_corners_home, first_half_corners_away, statistics_json, scraped_at
       FROM scraped_predictions 
       WHERE is_finished = 1 
         AND best_tip IS NOT NULL 
@@ -588,6 +588,12 @@ export async function getSportsCalibrationDeltas(dbQueryFn) {
 
     for (const m of rows) {
       const sport = (m.sport || 'football').toLowerCase().trim();
+      
+      // Filter out old basketball matches that used the empirical frequency model
+      if (sport === 'basketball' && m.scraped_at && m.scraped_at < '2026-06-14 14:15:00') {
+        continue;
+      }
+
       const groupKey = sport === 'football' ? 'football' : (sport === 'basketball' ? 'basketball' : 'other');
 
       const lineMatch = m.card_line.match(/^(\d+(?:\.\d+)?)/);
