@@ -123,7 +123,16 @@ export default function MatchDetailsPoissonSimulator({
     let standardLine = Math.round(lambda);
     if (standardLine <= 0) standardLine = 1;
     standardLine = standardLine - 0.5;
-    defaultLines = [standardLine - 2, standardLine - 1, standardLine, standardLine + 1, standardLine + 2].filter(v => v >= 0.5);
+    if (isBasket) {
+      defaultLines = [
+        standardLine - 5, standardLine - 4, standardLine - 3,
+        standardLine - 2, standardLine - 1, standardLine,
+        standardLine + 1, standardLine + 2, standardLine + 3,
+        standardLine + 4, standardLine + 5
+      ].filter(v => v >= 0.5);
+    } else {
+      defaultLines = [standardLine - 2, standardLine - 1, standardLine, standardLine + 1, standardLine + 2].filter(v => v >= 0.5);
+    }
   }
   const allLinesForPeriod = [...defaultLines, ...customLines.filter(l => !defaultLines.includes(l))].sort((a, b) => a - b);
 
