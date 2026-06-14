@@ -5,6 +5,7 @@ import {
   covarianceBasket1QT,
   basketballLeagueAveragesCache
 } from './gbdtTrainer.js';
+import { bivariatePoissonOver, bivariatePoissonUnder } from './gradientBoosting.js';
 
 /**
  * Predicts and enriches non-football match details (points, sets, goals, runs, etc.)
@@ -343,22 +344,45 @@ export function enrichNonFootballMatch(row, h2hMatches, homeMatches, awayMatches
   
   let probVal = 50;
   let bestTip = "Plus de";
-  if (validCount > 0) {
-    const pctOver = (overCount / validCount) * 100;
-    if (pctOver >= 50) {
-      probVal = Math.round(pctOver);
+  let rawEmpiricalRate = 50;
+
+  if (sport === 'basketball' && home_avg_first_half_points !== null && away_avg_first_half_points !== null) {
+    const bpOver = bivariatePoissonOver(home_avg_first_half_points, away_avg_first_half_points, covarianceBasket1MT || 0, calculatedLine);
+    const bpUnder = 1 - bpOver;
+
+    if (bpOver >= bpUnder) {
+      probVal = Math.round(bpOver * 100);
       bestTip = "Plus de";
     } else {
-      probVal = Math.round(100 - pctOver);
+      probVal = Math.round(bpUnder * 100);
       bestTip = "Moins de";
     }
+
+    if (validCount > 0) {
+      const pctOver = (overCount / validCount) * 100;
+      rawEmpiricalRate = Math.round(bestTip === "Plus de" ? pctOver : 100 - pctOver);
+    } else {
+      rawEmpiricalRate = probVal - 5;
+    }
   } else {
-    // Seed fallback probability dynamically based on team name sum
-    const hashSeed = cleanHomeTeamKey + cleanAwayTeamKey;
-    let charSum = 0;
-    for (let i = 0; i < hashSeed.length; i++) charSum += hashSeed.charCodeAt(i);
-    probVal = 52 + (charSum % 15);
-    bestTip = probVal % 2 === 0 ? "Plus de" : "Moins de";
+    if (validCount > 0) {
+      const pctOver = (overCount / validCount) * 100;
+      if (pctOver >= 50) {
+        probVal = Math.round(pctOver);
+        bestTip = "Plus de";
+      } else {
+        probVal = Math.round(100 - pctOver);
+        bestTip = "Moins de";
+      }
+    } else {
+      // Seed fallback probability dynamically based on team name sum
+      const hashSeed = cleanHomeTeamKey + cleanAwayTeamKey;
+      let charSum = 0;
+      for (let i = 0; i < hashSeed.length; i++) charSum += hashSeed.charCodeAt(i);
+      probVal = 52 + (charSum % 15);
+      bestTip = probVal % 2 === 0 ? "Plus de" : "Moins de";
+    }
+    rawEmpiricalRate = probVal - 5;
   }
   
   // Ensure probability is in a realistic range (e.g. 50% - 85%) before calibration
@@ -402,7 +426,7 @@ export function enrichNonFootballMatch(row, h2hMatches, homeMatches, awayMatches
     card_line: calculatedLine,
     best_tip: bestTip,
     probability: `${probVal}%`,
-    win_rate: `${probVal - 5}%`,
+    win_rate: sport === 'basketball' ? `${rawEmpiricalRate}%` : `${probVal - 5}%`,
     home_avg_first_half_corners: null,
     away_avg_first_half_corners: null,
     h2h_avg_first_half_corners: null,

@@ -153,4 +153,31 @@ describe('Basketball Predictions & Pace/Ratings Model', () => {
     expect(result.away_avg_first_half_points).toBeCloseTo(51.54, 1);
     expect(result.card_line).toBe('108.5 Points 1ère MT');
   });
+
+  it('should calculate card probability and best tip using Bivariate Poisson model', () => {
+    const row = {
+      home_team: 'Spurs',
+      away_team: 'Lakers',
+      sport: 'basketball'
+    };
+
+    const result = enrichNonFootballMatch(
+      row,
+      [],
+      [],
+      [],
+      'logo_home',
+      'logo_away',
+      {},
+      [],
+      [],
+      [],
+      0
+    );
+
+    expect(result.best_tip).toBe('Plus de');
+    expect(result.probability).toBe('51%');
+    expect(result.win_rate).toBe('46%');
+  });
 });
+
