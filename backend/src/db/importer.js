@@ -44,7 +44,13 @@ export async function importScrapedMatches(matches, scrapedAt) {
 
     const isLive = match.is_live === true || status === 'Live' ? 1 : 0;
     const isFinished = match.is_finished === true || status === 'Finished' ? 1 : 0;
-    const matchId = match.match_id || `${match.home_team}_${match.away_team}_${match.date || new Date().toISOString().slice(0,10)}`;
+    let matchId = match.match_id || `${match.home_team}_${match.away_team}_${match.date || new Date().toISOString().slice(0,10)}`;
+    if (typeof matchId === 'string' && matchId.startsWith('/match/')) {
+      const parts = matchId.split('/');
+      if (parts[2]) {
+        matchId = parts[2];
+      }
+    }
 
     const hashSeed = match.home_team + match.away_team;
     let charSum = 0;
