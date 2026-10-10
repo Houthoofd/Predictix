@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle, Search, FileText, Layers, Database, RefreshCcw } from 'lucide-react';
+import { CheckCircle, Search, FileText, Layers, Database, RefreshCcw, Users, TrendingUp } from 'lucide-react';
 
 export default function ScraperStepper({
   scrapePhase,
@@ -15,7 +15,18 @@ export default function ScraperStepper({
   handleStartDetailedScraping
 }) {
   const getStepStatus = (stepName) => {
-    const phases = ['idle', 'discovering', 'discovered_waiting', 'scraping_primary', 'scraping_history', 'importing', 'completed'];
+    const phases = [
+      'idle', 
+      'discovering', 
+      'discovered_waiting', 
+      'scraping_primary', 
+      'scraping_absences', 
+      'scraping_odds', 
+      'scraping_betfair', 
+      'importing', 
+      'scraping_history', 
+      'completed'
+    ];
     const currentIdx = phases.indexOf(scrapePhase);
     
     if (scrapePhase === 'stopped') return 'pending';
@@ -30,14 +41,24 @@ export default function ScraperStepper({
       if (scrapePhase === 'scraping_primary') return 'active';
       return 'pending';
     }
-    if (stepName === 'h2h') {
+    if (stepName === 'absences') {
       if (currentIdx > 4) return 'completed';
-      if (scrapePhase === 'scraping_history') return 'active';
+      if (scrapePhase === 'scraping_absences') return 'active';
+      return 'pending';
+    }
+    if (stepName === 'odds_betfair') {
+      if (currentIdx > 6) return 'completed';
+      if (scrapePhase === 'scraping_odds' || scrapePhase === 'scraping_betfair') return 'active';
       return 'pending';
     }
     if (stepName === 'import') {
-      if (scrapePhase === 'completed') return 'completed';
+      if (currentIdx > 7) return 'completed';
       if (scrapePhase === 'importing') return 'active';
+      return 'pending';
+    }
+    if (stepName === 'h2h') {
+      if (scrapePhase === 'completed') return 'completed';
+      if (scrapePhase === 'scraping_history') return 'active';
       return 'pending';
     }
     return 'pending';
@@ -51,8 +72,11 @@ export default function ScraperStepper({
           {scrapePhase === 'discovering' && 'Découverte des matchs en cours...'}
           {scrapePhase === 'discovered_waiting' && 'En attente de configuration...'}
           {scrapePhase === 'scraping_primary' && 'Analyse des détails des matchs...'}
+          {scrapePhase === 'scraping_absences' && 'Récupération des effectifs et absences (SofaScore)...'}
+          {scrapePhase === 'scraping_odds' && 'Récupération des cotes par période (1XBet)...'}
+          {scrapePhase === 'scraping_betfair' && 'Récupération des volumes Betfair Exchange (Moneyway)...'}
+          {scrapePhase === 'importing' && 'Enregistrement en base de données...'}
           {scrapePhase === 'scraping_history' && 'Crawl profond des historiques H2H (Tor)...'}
-          {scrapePhase === 'importing' && 'Calcul de Poisson & Importation...'}
           {scrapePhase === 'stopped' && 'Scraper arrêté'}
           {scrapePhase === 'completed' && 'Scraping terminé avec succès !'}
         </span>
@@ -65,13 +89,13 @@ export default function ScraperStepper({
         <div style={{ width: `${scrapeProgress}%`, height: '100%', background: 'var(--grad-accent)', borderRadius: '4px', transition: 'width 0.4s ease' }} />
       </div>
       
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px', padding: '16px 20px', background: 'rgba(255,255,255,0.01)', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.03)', position: 'relative' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px', padding: '16px 12px', background: 'rgba(255,255,255,0.01)', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.03)', position: 'relative' }}>
         {/* Step 1 */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', zIndex: 2, flex: 1 }}>
           <div className={`step-circle ${getStepStatus('discovery') === 'completed' ? 'step-completed' : getStepStatus('discovery') === 'active' ? 'step-active' : 'step-pending'}`} style={{ width: '34px', height: '34px', borderRadius: '50%', border: '2px solid', display: 'flex', justifyContent: 'center', alignItems: 'center', transition: 'all 0.3s ease', background: 'var(--bg-secondary)' }}>
             {getStepStatus('discovery') === 'completed' ? <CheckCircle size={15} /> : <Search size={14} />}
           </div>
-          <span style={{ fontSize: '11px', fontWeight: getStepStatus('discovery') === 'active' ? 700 : 500, color: getStepStatus('discovery') === 'active' ? '#0082ff' : 'var(--text-muted)' }}>
+          <span style={{ fontSize: '11px', textAlign: 'center', fontWeight: getStepStatus('discovery') === 'active' ? 700 : 500, color: getStepStatus('discovery') === 'active' ? '#0082ff' : 'var(--text-muted)' }}>
             Découverte
           </span>
         </div>
@@ -83,32 +107,56 @@ export default function ScraperStepper({
           <div className={`step-circle ${getStepStatus('details') === 'completed' ? 'step-completed' : getStepStatus('details') === 'active' ? 'step-active' : 'step-pending'}`} style={{ width: '34px', height: '34px', borderRadius: '50%', border: '2px solid', display: 'flex', justifyContent: 'center', alignItems: 'center', transition: 'all 0.3s ease', background: 'var(--bg-secondary)' }}>
             {getStepStatus('details') === 'completed' ? <CheckCircle size={15} /> : <FileText size={14} />}
           </div>
-          <span style={{ fontSize: '11px', fontWeight: getStepStatus('details') === 'active' ? 700 : 500, color: getStepStatus('details') === 'active' ? '#0082ff' : 'var(--text-muted)' }}>
-            Détails Matchs
+          <span style={{ fontSize: '11px', textAlign: 'center', fontWeight: getStepStatus('details') === 'active' ? 700 : 500, color: getStepStatus('details') === 'active' ? '#0082ff' : 'var(--text-muted)' }}>
+            Détails
           </span>
         </div>
 
-        <div className={getStepStatus('h2h') === 'completed' ? 'connector-completed' : getStepStatus('h2h') === 'active' ? 'connector-active' : 'connector-pending'} style={{ height: '2px', flex: 1, margin: '0 -15px', marginTop: '-20px', transition: 'all 0.3s ease' }} />
+        <div className={getStepStatus('absences') === 'completed' ? 'connector-completed' : getStepStatus('absences') === 'active' ? 'connector-active' : 'connector-pending'} style={{ height: '2px', flex: 1, margin: '0 -15px', marginTop: '-20px', transition: 'all 0.3s ease' }} />
 
         {/* Step 3 */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', zIndex: 2, flex: 1 }}>
-          <div className={`step-circle ${getStepStatus('h2h') === 'completed' ? 'step-completed' : getStepStatus('h2h') === 'active' ? 'step-active' : 'step-pending'}`} style={{ width: '34px', height: '34px', borderRadius: '50%', border: '2px solid', display: 'flex', justifyContent: 'center', alignItems: 'center', transition: 'all 0.3s ease', background: 'var(--bg-secondary)' }}>
-            {getStepStatus('h2h') === 'completed' ? <CheckCircle size={15} /> : <Layers size={14} />}
+          <div className={`step-circle ${getStepStatus('absences') === 'completed' ? 'step-completed' : getStepStatus('absences') === 'active' ? 'step-active' : 'step-pending'}`} style={{ width: '34px', height: '34px', borderRadius: '50%', border: '2px solid', display: 'flex', justifyContent: 'center', alignItems: 'center', transition: 'all 0.3s ease', background: 'var(--bg-secondary)' }}>
+            {getStepStatus('absences') === 'completed' ? <CheckCircle size={15} /> : <Users size={14} />}
           </div>
-          <span style={{ fontSize: '11px', fontWeight: getStepStatus('h2h') === 'active' ? 700 : 500, color: getStepStatus('h2h') === 'active' ? '#0082ff' : 'var(--text-muted)' }}>
-            Historique H2H
+          <span style={{ fontSize: '11px', textAlign: 'center', fontWeight: getStepStatus('absences') === 'active' ? 700 : 500, color: getStepStatus('absences') === 'active' ? '#0082ff' : 'var(--text-muted)' }}>
+            Absences
+          </span>
+        </div>
+
+        <div className={getStepStatus('odds_betfair') === 'completed' ? 'connector-completed' : getStepStatus('odds_betfair') === 'active' ? 'connector-active' : 'connector-pending'} style={{ height: '2px', flex: 1, margin: '0 -15px', marginTop: '-20px', transition: 'all 0.3s ease' }} />
+
+        {/* Step 4 */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', zIndex: 2, flex: 1 }}>
+          <div className={`step-circle ${getStepStatus('odds_betfair') === 'completed' ? 'step-completed' : getStepStatus('odds_betfair') === 'active' ? 'step-active' : 'step-pending'}`} style={{ width: '34px', height: '34px', borderRadius: '50%', border: '2px solid', display: 'flex', justifyContent: 'center', alignItems: 'center', transition: 'all 0.3s ease', background: 'var(--bg-secondary)' }}>
+            {getStepStatus('odds_betfair') === 'completed' ? <CheckCircle size={15} /> : <TrendingUp size={14} />}
+          </div>
+          <span style={{ fontSize: '11px', textAlign: 'center', fontWeight: getStepStatus('odds_betfair') === 'active' ? 700 : 500, color: getStepStatus('odds_betfair') === 'active' ? '#0082ff' : 'var(--text-muted)' }}>
+            Cotes/Volumes
           </span>
         </div>
 
         <div className={getStepStatus('import') === 'completed' ? 'connector-completed' : getStepStatus('import') === 'active' ? 'connector-active' : 'connector-pending'} style={{ height: '2px', flex: 1, margin: '0 -15px', marginTop: '-20px', transition: 'all 0.3s ease' }} />
 
-        {/* Step 4 */}
+        {/* Step 5 */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', zIndex: 2, flex: 1 }}>
           <div className={`step-circle ${getStepStatus('import') === 'completed' ? 'step-completed' : getStepStatus('import') === 'active' ? 'step-active' : 'step-pending'}`} style={{ width: '34px', height: '34px', borderRadius: '50%', border: '2px solid', display: 'flex', justifyContent: 'center', alignItems: 'center', transition: 'all 0.3s ease', background: 'var(--bg-secondary)' }}>
             {getStepStatus('import') === 'completed' ? <CheckCircle size={15} /> : <Database size={14} />}
           </div>
-          <span style={{ fontSize: '11px', fontWeight: getStepStatus('import') === 'active' ? 700 : 500, color: getStepStatus('import') === 'active' ? '#0082ff' : 'var(--text-muted)' }}>
-            Calcul & Import
+          <span style={{ fontSize: '11px', textAlign: 'center', fontWeight: getStepStatus('import') === 'active' ? 700 : 500, color: getStepStatus('import') === 'active' ? '#0082ff' : 'var(--text-muted)' }}>
+            Enregistrement
+          </span>
+        </div>
+
+        <div className={getStepStatus('h2h') === 'completed' ? 'connector-completed' : getStepStatus('h2h') === 'active' ? 'connector-active' : 'connector-pending'} style={{ height: '2px', flex: 1, margin: '0 -15px', marginTop: '-20px', transition: 'all 0.3s ease' }} />
+
+        {/* Step 6 */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', zIndex: 2, flex: 1 }}>
+          <div className={`step-circle ${getStepStatus('h2h') === 'completed' ? 'step-completed' : getStepStatus('h2h') === 'active' ? 'step-active' : 'step-pending'}`} style={{ width: '34px', height: '34px', borderRadius: '50%', border: '2px solid', display: 'flex', justifyContent: 'center', alignItems: 'center', transition: 'all 0.3s ease', background: 'var(--bg-secondary)' }}>
+            {getStepStatus('h2h') === 'completed' ? <CheckCircle size={15} /> : <Layers size={14} />}
+          </div>
+          <span style={{ fontSize: '11px', textAlign: 'center', fontWeight: getStepStatus('h2h') === 'active' ? 700 : 500, color: getStepStatus('h2h') === 'active' ? '#0082ff' : 'var(--text-muted)' }}>
+            Historique H2H
           </span>
         </div>
       </div>

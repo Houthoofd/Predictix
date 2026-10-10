@@ -29,6 +29,7 @@ export {
 export { 
   cleanTeamName, 
   fuzzyMatch, 
+  findBestMatch,
   prioritizeDirectH2H, 
   fetchWikipediaLogoFallback 
 } from './textMatcher.js';
@@ -38,7 +39,12 @@ export {
   ensureScraperCompiled,
   scrapeSingleMatch,
   runDiscoveryProcess,
-  crawlH2HLinksBatch
+  crawlH2HLinksBatch,
+  scrapeHistoricalMatches,
+  scrape1XBetOdds,
+  scrapeArbworldMoneyway,
+  scrapeSofaScoreAbsences,
+  scrapeSofaScoreSquad
 } from './scraperRunner.js';
 
 /**

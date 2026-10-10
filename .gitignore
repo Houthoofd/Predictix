@@ -34,3 +34,13 @@ yarn-error.log*
 Thumbs.db
 *.swp
 *.swo
+
+# Scratch, debug and test artifacts
+scratch/
+scratch-*
+backend/scratch/
+backend/scratch-*
+backend/scratch_*
+backend/absences_test.json
+backend/src/list-db-matches.js
+db/

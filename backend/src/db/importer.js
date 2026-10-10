@@ -1,11 +1,63 @@
-import { dbRun, dbQuery, dbGet } from './database.js';
-import { parseFrenchDate } from '../utils/scraperHelpers.js';
+import { dbRun, dbQuery } from './database.js';
 import { autoSettleBetsForMatch } from '../services/betsService.js';
-import { validateMatchStats, checkScoreSanity } from '../utils/integrityLinter.js';
+import { normalizeMatchStatus } from '../utils/statusNormalizer.js';
+import {
+  validateMatchesEnvelope,
+  isMatchEligibleForImport,
+  resolveMatchDate,
+  resolveHistoricalDateAndTime,
+  resolveMatchId,
+  computeMatchOddsAndLines,
+  checkFinishedMatchIntegrity
+} from './importerValidation.js';
+import {
+  triggerBackgroundCrawls,
+  triggerBackgroundRepairs,
+  scheduleMatchReScrape,
+  triggerGBDTRetraining,
+  checkMatchNeedsHistoryCrawl,
+  enrichPrimaryMatch,
+  importTeamSquadStats
+} from './importerEnrichment.js';
+import {
+  upsertScrapedMatch,
+  upsertHistoricalMatch,
+  recordSkippedMatch,
+  findExistingMatchSameDay,
+  countHistoricalMatches,
+  getImportSetting,
+  updatePrimaryMatchEnrichment,
+  deletePlayerStatsByTeam,
+  insertPlayerStat,
+  normalizeStatistics,
+  getMatchSource
+} from './importerQueries.js';
+
+export {
+  normalizeMatchStatus,
+  isMatchEligibleForImport,
+  upsertScrapedMatch,
+  upsertHistoricalMatch,
+  recordSkippedMatch,
+  findExistingMatchSameDay,
+  countHistoricalMatches,
+  getImportSetting,
+  updatePrimaryMatchEnrichment,
+  deletePlayerStatsByTeam,
+  insertPlayerStat,
+  normalizeStatistics,
+  getMatchSource,
+  enrichPrimaryMatch,
+  importTeamSquadStats
+};
+
+export const importMatchDetails = enrichPrimaryMatch;
 
 /**
- * Maps and imports all freshly scraped matches into the SQLite scraped_predictions table,
- * and triggers real-time bet auto-settling if applicable.
+ * Maps and imports all freshly scraped matches into SQLite scraped_predictions table.
+ * @param {Array<object>|object} matches
+ * @param {string} [scrapedAt]
+ * @returns {Promise<{importedCount: number, settledBetsList: Array}>}
  */
 export async function importScrapedMatches(matches, scrapedAt) {
   let importedCount = 0;
@@ -13,14 +65,16 @@ export async function importScrapedMatches(matches, scrapedAt) {
   const matchesToCrawl = [];
   const matchesToRepair = [];
 
-  // Load integrity configurations
-  let importGuardStrict = true;
+  const envelope = validateMatchesEnvelope(matches);
+  if (!envelope.isValid) {
+    console.warn(`[Importer] Document envelope rejected: ${envelope.reason}`);
+    return { importedCount: 0, settledBetsList: [] };
+  }
+
   let realtimeSelfHealing = true;
   try {
-    const guardStrictRow = await dbGet("SELECT value FROM settings WHERE key = 'import_guard_strict'");
-    const selfHealingRow = await dbGet("SELECT value FROM settings WHERE key = 'realtime_self_healing'");
-    importGuardStrict = guardStrictRow ? guardStrictRow.value === 'true' : true;
-    realtimeSelfHealing = selfHealingRow ? selfHealingRow.value === 'true' : true;
+    const selfHealingVal = await getImportSetting(null, 'realtime_self_healing');
+    realtimeSelfHealing = selfHealingVal !== null ? selfHealingVal === 'true' : true;
   } catch (err) {
     console.warn('[Predictix Import] Failed to load settings:', err.message);
   }
@@ -28,404 +82,164 @@ export async function importScrapedMatches(matches, scrapedAt) {
   try {
     await dbRun('BEGIN TRANSACTION');
 
-    for (const match of matches) {
-    if (!match.home_team || !match.away_team) {
-      continue;
-    }
-
-    let status = match.status || 'Planned';
-    const matchTime = String(match.time || '');
-    const lowerTime = matchTime.toLowerCase().trim();
-    if (matchTime.includes("'") || lowerTime.includes('mi-temps') || lowerTime.includes('mt') || lowerTime.includes('prol.')) {
-      status = 'Live';
-    } else if (lowerTime.includes('fin') || lowerTime.includes('terminé') || lowerTime.includes('ft') || lowerTime === 'ter' || lowerTime === 'ter.') {
-      status = 'Finished';
-    }
-
-    const isLive = match.is_live === true || status === 'Live' ? 1 : 0;
-    const isFinished = match.is_finished === true || status === 'Finished' ? 1 : 0;
-    let matchId = match.match_id || `${match.home_team}_${match.away_team}_${match.date || new Date().toISOString().slice(0,10)}`;
-    if (typeof matchId === 'string' && matchId.startsWith('/match/')) {
-      const parts = matchId.split('/');
-      if (parts[2]) {
-        matchId = parts[2];
+    for (const match of envelope.matches) {
+      const eligibility = isMatchEligibleForImport(match);
+      if (!eligibility.eligible) {
+        console.warn(`[Importer] [Ignoré] Match rejeté (${eligibility.reason}): ${match?.home_team || 'unknown'} vs ${match?.away_team || 'unknown'}`);
+        continue;
       }
-    }
 
-    const hashSeed = match.home_team + match.away_team;
-    let charSum = 0;
-    for (let i = 0; i < hashSeed.length; i++) {
-      charSum += hashSeed.charCodeAt(i);
-    }
-    
-    const sport = (match.sport || 'football').toLowerCase().trim();
-    const stableProb = 55 + (charSum % 25);
-    
-    let defaultLine = charSum % 2 === 0 ? '4.5' : '5.5';
-    if (sport !== 'football') {
-      if (sport === 'basketball') defaultLine = '165.5';
-      else if (sport === 'tennis') defaultLine = '2.5';
-      else if (sport.includes('rugby')) defaultLine = '42.5';
-      else if (sport === 'handball') defaultLine = '52.5';
-      else if (sport === 'volleyball') defaultLine = '3.5';
-      else if (sport === 'hockey' || sport === 'ice-hockey' || sport === 'futsal') defaultLine = '5.5';
-      else if (sport === 'baseball') defaultLine = '8.5';
-      else if (sport === 'american-football') defaultLine = '45.5';
-      else if (sport === 'table-tennis' || sport === 'badminton') defaultLine = '2.5';
-      else if (sport === 'snooker') defaultLine = '9.5';
-      else defaultLine = '2.5';
-    }
+      const { status, isLive, isFinished } = normalizeMatchStatus(match);
+      const homeClean = (match.home_team || '').replace(/[▲▼]/g, '').trim();
+      const awayClean = (match.away_team || '').replace(/[▲▼]/g, '').trim();
+      const sport = (match.sport || 'football').toLowerCase().trim();
+      const source = getMatchSource(match);
+      const matchDate = resolveMatchDate(match.date);
 
-    const cardLine = match.card_line || defaultLine;
-    const bestTip = match.best_tip || (stableProb >= 66 ? 'Plus de' : 'Moins de');
-    const probability = match.probability || `${stableProb}%`;
-    const overOdds = match.over_odds || (bestTip === 'Plus de' ? '1.85' : '2.05');
-    const underOdds = match.under_odds || (bestTip === 'Moins de' ? '1.90' : '1.75');
-    const winRate = match.win_rate || `${45 + (charSum % 35)}%`;
+      let matchId = resolveMatchId(match.match_id, { source, sport, homeClean, awayClean, matchDate });
+      const sourceMatchId = match.source_match_id || (typeof match.match_id === 'string' ? match.match_id : null);
 
-    const homeClean = (match.home_team || '').replace(/[▲▼]/g, '').trim();
-    const awayClean = (match.away_team || '').replace(/[▲▼]/g, '').trim();
-
-    const sql = `
-      INSERT INTO scraped_predictions (
-        match_id, time, date, tournament, home_team, away_team, score,
-        over_odds, under_odds, card_line, probability, best_tip, win_rate, status,
-        is_live, is_finished, first_half_corners_home, first_half_corners_away, odds_corners,
-        home_logo, away_logo, historical_links, match_url, statistics_json, sport, scraped_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      ON CONFLICT(match_id) DO UPDATE SET
-        time = excluded.time,
-        date = excluded.date,
-        tournament = excluded.tournament,
-        score = excluded.score,
-        status = excluded.status,
-        is_live = excluded.is_live,
-        is_finished = excluded.is_finished,
-        first_half_corners_home = COALESCE(excluded.first_half_corners_home, scraped_predictions.first_half_corners_home),
-        first_half_corners_away = COALESCE(excluded.first_half_corners_away, scraped_predictions.first_half_corners_away),
-        odds_corners = COALESCE(excluded.odds_corners, scraped_predictions.odds_corners),
-        home_logo = COALESCE(excluded.home_logo, scraped_predictions.home_logo),
-        away_logo = COALESCE(excluded.away_logo, scraped_predictions.away_logo),
-        historical_links = COALESCE(excluded.historical_links, scraped_predictions.historical_links),
-        match_url = COALESCE(excluded.match_url, scraped_predictions.match_url),
-        statistics_json = COALESCE(excluded.statistics_json, scraped_predictions.statistics_json),
-        sport = COALESCE(excluded.sport, scraped_predictions.sport),
-        card_line = COALESCE(excluded.card_line, scraped_predictions.card_line),
-        best_tip = COALESCE(excluded.best_tip, scraped_predictions.best_tip),
-        probability = COALESCE(excluded.probability, scraped_predictions.probability),
-        win_rate = COALESCE(excluded.win_rate, scraped_predictions.win_rate),
-        over_odds = COALESCE(excluded.over_odds, scraped_predictions.over_odds),
-        under_odds = COALESCE(excluded.under_odds, scraped_predictions.under_odds),
-        scraped_at = CURRENT_TIMESTAMP
-    `;
-
-    await dbRun(sql, [
-      matchId,
-      match.time || '',
-      parseFrenchDate(match.date) || match.date || scrapedAt?.substring(0, 10) || new Date().toISOString().substring(0, 10),
-      match.tournament || match.league || 'Football',
-      homeClean,
-      awayClean,
-      match.score || '',
-      overOdds,
-      underOdds,
-      cardLine,
-      probability,
-      bestTip,
-      winRate,
-      status,
-      isLive,
-      isFinished,
-      match.first_half_corners_home !== undefined ? match.first_half_corners_home : null,
-      match.first_half_corners_away !== undefined ? match.first_half_corners_away : null,
-      match.odds_corners ? JSON.stringify(match.odds_corners) : null,
-      match.home_logo || null,
-      match.away_logo || null,
-      match.historical_links ? JSON.stringify(match.historical_links) : null,
-      match.match_url || null,
-      match.statistics ? JSON.stringify(normalizeStatistics(match.statistics)) : null,
-      match.sport || 'football'
-    ]);
-
-    importedCount++;
-
-    // Perform data integrity checks on finished matches
-    if (isFinished) {
-      const dbMatchObj = {
-        is_finished: isFinished,
-        status,
-        sport,
-        score: match.score || '',
-        first_half_corners_home: match.first_half_corners_home !== undefined ? match.first_half_corners_home : null,
-        first_half_corners_away: match.first_half_corners_away !== undefined ? match.first_half_corners_away : null,
-        statistics_json: match.statistics ? JSON.stringify(normalizeStatistics(match.statistics)) : null
-      };
-
-      const statsVal = validateMatchStats(dbMatchObj);
-      const sanityVal = checkScoreSanity(dbMatchObj);
-
-      if (!statsVal.isValid || !sanityVal.isSane) {
-        console.warn(`[Predictix Import Guard] Le match ${matchId} présente des problèmes d'intégrité :`, { 
-          missingStats: statsVal.missing, 
-          sanityError: sanityVal.reason 
+      if (matchDate) {
+        const existingSameDay = await findExistingMatchSameDay(null, homeClean, awayClean, matchDate, sport, source, {
+          tournament: match.tournament || match.league,
+          allowReversed: false
         });
-        if (realtimeSelfHealing) {
-          matchesToRepair.push({ matchId, sport });
+        if (existingSameDay && existingSameDay.length === 1) {
+          matchId = existingSameDay[0].match_id;
         }
       }
-    }
 
-    // Auto-settle any pending bets for this primary match in real time
-    try {
-      const resolved = await autoSettleBetsForMatch(matchId);
-      if (resolved && resolved.length > 0) {
-        settledBetsList.push(...resolved);
+      const oddsLines = computeMatchOddsAndLines(sport, homeClean, awayClean, match);
+
+      await upsertScrapedMatch(null, match, {
+        matchId,
+        sourceMatchId,
+        matchDate,
+        source,
+        sport,
+        homeClean,
+        awayClean,
+        status,
+        isLive,
+        isFinished,
+        ...oddsLines
+      });
+
+      importedCount++;
+
+      if (isFinished) {
+        const integrity = checkFinishedMatchIntegrity(match, {
+          isFinished,
+          status,
+          sport,
+          normalizedStats: match.statistics ? normalizeStatistics(match.statistics) : null
+        });
+
+        if (!integrity.isValid || !integrity.isSane) {
+          console.warn(`[Predictix Import Guard] Le match ${matchId} présente des problèmes d'intégrité :`, {
+            missingStats: integrity.missingStats,
+            sanityError: integrity.sanityError
+          });
+          if (realtimeSelfHealing) {
+            matchesToRepair.push({ matchId, sport });
+          }
+        }
       }
-    } catch (err) {
-      console.error('[Predictix Import] Failed to auto-settle bet:', err.message);
-    }
 
-    // Schedule background re-scraping if match is not finished
-    if (!isFinished) {
-      import('../services/cronService.js')
-        .then(({ scheduleMatchReScraping }) => {
-          scheduleMatchReScraping(matchId, match.date, match.time, sport);
-        })
-        .catch(err => console.error('[Predictix Import] Failed to schedule re-scrape:', err));
-
-      // Collect for automatic background H2H history crawling if none exists
       try {
-        const h2hCheck = await dbQuery('SELECT COUNT(*) as count FROM scraped_predictions WHERE is_historical = 1 AND ((home_team = ? AND away_team = ?) OR (home_team = ? AND away_team = ?))', [homeClean, awayClean, awayClean, homeClean]);
-        const hasHistory = h2hCheck && h2hCheck[0] && h2hCheck[0].count > 0;
-        if (!hasHistory) {
-          matchesToCrawl.push({ matchId, sport });
-        }
-      } catch (e) {
-        console.error('[Predictix Import] Failed to check H2H history count:', e.message);
+        const resolved = await autoSettleBetsForMatch(matchId);
+        if (resolved && resolved.length > 0) settledBetsList.push(...resolved);
+      } catch (err) {
+        console.error('[Predictix Import] Failed to auto-settle bet:', err.message);
       }
-    }
+
+      if (!isFinished) {
+        scheduleMatchReScrape(matchId, match.date, match.time, sport);
+        const needsCrawl = await checkMatchNeedsHistoryCrawl(homeClean, awayClean);
+        if (needsCrawl) matchesToCrawl.push({ matchId, sport });
+      }
     }
 
     await dbRun('COMMIT');
   } catch (err) {
     console.error('[Predictix Import] Error during match import, rolling back:', err.message);
-    try {
-      await dbRun('ROLLBACK');
-    } catch (rbErr) {
-      console.error('[Predictix Import] Rollback failed:', rbErr.message);
-    }
+    try { await dbRun('ROLLBACK'); } catch (rbErr) { console.error('[Predictix Import] Rollback failed:', rbErr.message); }
     throw err;
   }
 
-  // Trigger background crawling sequentially after transaction COMMIT
-  if (matchesToCrawl.length > 0) {
-    console.log(`[Predictix Import] Found ${matchesToCrawl.length} new upcoming matches without cached H2H history. Triggering background crawls...`);
-    import('../controllers/historyCrawler.js')
-      .then(({ crawlMatchHistory }) => {
-        matchesToCrawl.forEach((m, idx) => {
-          setTimeout(() => {
-            console.log(`[Predictix Import] Auto-triggering background crawl for match ${m.matchId} (${m.sport})`);
-            crawlMatchHistory({ params: { matchId: m.matchId } }, { json: () => {}, status: () => ({ json: () => {} }), headersSent: true })
-              .catch(err => console.error(`[Predictix Import] Auto-crawl failed for ${m.matchId}:`, err.message));
-          }, idx * 5000); // 5s delay between crawls
-        });
-      })
-      .catch(err => console.error('[Predictix Import] Failed to import history crawler for auto-trigger:', err));
-  }
-
-  // Trigger background repairs sequentially after transaction COMMIT
-  if (matchesToRepair.length > 0) {
-    console.log(`[Predictix Import] Found ${matchesToRepair.length} finished matches with integrity warnings. Triggering real-time self-healing...`);
-    import('../services/cronService.js')
-      .then(({ reScrapeMatch }) => {
-        matchesToRepair.forEach((m, idx) => {
-          setTimeout(() => {
-            console.log(`[Predictix Import] Auto-repairing match ${m.matchId} (${m.sport}) in background...`);
-            reScrapeMatch(m.matchId)
-              .catch(err => console.error(`[Predictix Import] Auto-repair failed for ${m.matchId}:`, err.message));
-          }, idx * 6000 + 3000); // 6s delay between repairs to avoid Tor load, offset by 3s from H2H crawls
-        });
-      })
-      .catch(err => console.error('[Predictix Import] Failed to import cronService for real-time repair:', err));
-  }
-
-  if (importedCount > 0) {
-    import('../utils/gbdtTrainer.js')
-      .then(({ trainGBDTModels }) => {
-        trainGBDTModels(dbQuery).catch(err => console.error('[Predictix Import] GBDT retraining failed:', err));
-      })
-      .catch(err => console.error('[Predictix Import] Failed to import GBDT trainer:', err));
-  }
+  triggerBackgroundCrawls(matchesToCrawl);
+  triggerBackgroundRepairs(matchesToRepair);
+  triggerGBDTRetraining(importedCount, dbQuery);
 
   return { importedCount, settledBetsList };
 }
 
 /**
- * Imports a crawled historical/H2H match into SQLite
+ * Imports a single historical (H2H) match confrontation.
+ * @param {string} link
+ * @param {object} histMatch
+ * @returns {Promise<boolean>}
  */
 export async function importHistoricalMatch(link, histMatch) {
+  if (!histMatch) return false;
+
+  const eligibility = isMatchEligibleForImport(histMatch);
+  if (!eligibility.eligible) {
+    console.warn(`[Importer] [Ignoré] Match historique rejeté (${eligibility.reason}): ${histMatch.home_team || 'unknown'} vs ${histMatch.away_team || 'unknown'}`);
+    return false;
+  }
+
   const homeClean = histMatch.home_team.replace(/[▲▼]/g, '').trim();
   const awayClean = histMatch.away_team.replace(/[▲▼]/g, '').trim();
-
-  const sqlHist = `
-    INSERT OR REPLACE INTO scraped_predictions (
-      match_id, time, date, tournament, home_team, away_team, score,
-      over_odds, under_odds, card_line, probability, best_tip, win_rate, status,
-      is_live, is_finished, first_half_corners_home, first_half_corners_away, odds_corners,
-      home_logo, away_logo, is_historical, match_url, statistics_json, sport, scraped_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-  `;
-
-  const hashSeed = homeClean + awayClean;
-  let charSum = 0;
-  for (let k = 0; k < hashSeed.length; k++) charSum += hashSeed.charCodeAt(k);
   const sport = (histMatch.sport || 'football').toLowerCase().trim();
-  const stableProb = 55 + (charSum % 25);
-  
-  let defaultLine = charSum % 2 === 0 ? '4.5' : '5.5';
-  if (sport !== 'football') {
-    if (sport === 'basketball') defaultLine = '165.5';
-    else if (sport === 'tennis') defaultLine = '2.5';
-    else if (sport.includes('rugby')) defaultLine = '42.5';
-    else if (sport === 'handball') defaultLine = '52.5';
-    else if (sport === 'volleyball') defaultLine = '3.5';
-    else if (sport === 'hockey' || sport === 'ice-hockey' || sport === 'futsal') defaultLine = '5.5';
-    else if (sport === 'baseball') defaultLine = '8.5';
-    else if (sport === 'american-football') defaultLine = '45.5';
-    else if (sport === 'table-tennis' || sport === 'badminton') defaultLine = '2.5';
-    else if (sport === 'snooker') defaultLine = '9.5';
-    else defaultLine = '2.5';
+  const source = getMatchSource(histMatch, link);
+  const { histDate, histTime } = resolveHistoricalDateAndTime(histMatch.date, histMatch.time);
+
+  let cleanMatchId = resolveMatchId(histMatch.match_id || link, { source, sport, homeClean, awayClean, matchDate: histDate });
+  const sourceMatchId = histMatch.source_match_id || histMatch.match_id || link || null;
+
+  if (histDate) {
+    const existingSameDay = await findExistingMatchSameDay(null, homeClean, awayClean, histDate, sport, source, {
+      tournament: histMatch.tournament,
+      allowReversed: false
+    });
+    if (existingSameDay && existingSameDay.length === 1) {
+      cleanMatchId = existingSameDay[0].match_id;
+    }
   }
 
-  const cardLine = histMatch.card_line || defaultLine;
-  const bestTip = histMatch.best_tip || (stableProb >= 66 ? 'Plus de' : 'Moins de');
+  const oddsLines = computeMatchOddsAndLines(sport, homeClean, awayClean, histMatch);
+  const { status, isFinished, isLive } = normalizeMatchStatus({
+    status: histMatch.status,
+    time: histMatch.time || histTime,
+    score: histMatch.score
+  });
 
-  let parsedDate = parseFrenchDate(histMatch.date);
-  let histDate = parsedDate || histMatch.date || new Date().toISOString().substring(0, 10);
-  let histTime = histMatch.time || 'Finished';
-  if (histDate.includes(':')) {
-    histTime = histDate;
-    histDate = new Date().toISOString().substring(0, 10);
-  }
-
-  await dbRun(sqlHist, [
-    link,
-    histTime,
-    histDate,
-    histMatch.tournament || 'Football',
+  await upsertHistoricalMatch(null, {
+    ...histMatch,
+    cleanMatchId,
+    sourceMatchId,
     homeClean,
     awayClean,
-    histMatch.score || '',
-    '1.85', '1.90', cardLine, `${stableProb}%`, bestTip, '60%', 'Finished',
-    0, 1,
-    histMatch.first_half_corners_home,
-    histMatch.first_half_corners_away,
-    null,
-    histMatch.home_logo || null,
-    histMatch.away_logo || null,
-    1, // is_historical = 1
-    histMatch.match_url || link,
-    histMatch.statistics ? JSON.stringify(normalizeStatistics(histMatch.statistics)) : null,
-    histMatch.sport || 'football'
-  ]);
+    histDate,
+    histTime,
+    status,
+    isLive,
+    isFinished,
+    link,
+    sport,
+    source,
+    ...oddsLines
+  });
+
+  return true;
 }
 
 /**
- * Imports a skipped match confrontation (failed Tor crawl) to cache skips and prevent endless crawl attempts
+ * Imports a skipped match confrontation (failed Tor crawl).
+ * @param {string|object} link
+ * @returns {Promise<object>}
  */
 export async function importSkippedMatch(link) {
-  const sqlHistSkipped = `
-    INSERT OR REPLACE INTO scraped_predictions (
-      match_id, time, date, tournament, home_team, away_team, score,
-      over_odds, under_odds, card_line, probability, best_tip, win_rate, status,
-      is_live, is_finished, is_historical, scraped_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-  `;
-  await dbRun(sqlHistSkipped, [
-    link,
-    'Finished',
-    new Date().toISOString().substring(0, 10),
-    'Football',
-    'Skipped Match',
-    'Skipped Match',
-    '-',
-    '1.85', '1.90', '4.5', '50%', 'Plus de', '50%', 'Finished',
-    0, 1,
-    1
-  ]);
-}
-
-/**
- * Enriches the primary match predictions with detailed H2H/advanced statistics retrieved on demand
- */
-export async function enrichPrimaryMatch(matchId, primaryDetails, targetLink, match) {
-  const homeClean = primaryDetails.home_team.replace(/[▲▼]/g, '').trim();
-  const awayClean = primaryDetails.away_team.replace(/[▲▼]/g, '').trim();
-  const hashSeed = homeClean + awayClean;
-  let charSum = 0;
-  for (let k = 0; k < hashSeed.length; k++) charSum += hashSeed.charCodeAt(k);
-  const stableProb = 55 + (charSum % 25);
-  const cardLine = primaryDetails.card_line || (charSum % 2 === 0 ? '4.5' : '5.5');
-  const bestTip = primaryDetails.best_tip || (stableProb >= 66 ? 'Plus de' : 'Moins de');
-
-  let parsedPrimaryDate = parseFrenchDate(primaryDetails.date);
-  let pDate = parsedPrimaryDate || match.date || new Date().toISOString().substring(0, 10);
-  let pTime = primaryDetails.time || match.time;
-  if (primaryDetails.date && primaryDetails.date.includes(':')) {
-    pTime = primaryDetails.date;
-    pDate = match.date || new Date().toISOString().substring(0, 10);
-  }
-
-  await dbRun(`
-    UPDATE scraped_predictions SET
-      first_half_corners_home = ?,
-      first_half_corners_away = ?,
-      home_logo = ?,
-      away_logo = ?,
-      historical_links = ?,
-      odds_corners = ?,
-      card_line = ?,
-      best_tip = ?,
-      probability = ?,
-      date = ?,
-      time = ?,
-      match_url = ?,
-      statistics_json = ?,
-      sport = ?
-    WHERE match_id = ?
-  `, [
-    primaryDetails.first_half_corners_home,
-    primaryDetails.first_half_corners_away,
-    primaryDetails.home_logo || null,
-    primaryDetails.away_logo || null,
-    primaryDetails.historical_links ? JSON.stringify(primaryDetails.historical_links) : null,
-    primaryDetails.odds_corners ? JSON.stringify(primaryDetails.odds_corners) : null,
-    cardLine,
-    bestTip,
-    `${stableProb}%`,
-    pDate,
-    pTime,
-    primaryDetails.match_url || targetLink,
-    primaryDetails.statistics ? JSON.stringify(normalizeStatistics(primaryDetails.statistics)) : null,
-    primaryDetails.sport || match.sport || 'football',
-    matchId
-  ]);
-
-  // Auto-settle any pending bets for this primary match in real time
-  try {
-    await autoSettleBetsForMatch(matchId);
-  } catch (err) {
-    console.error('[Predictix On-Demand Background] Failed to auto-settle bet:', err.message);
-  }
-}
-
-function normalizeStatistics(stats) {
-  if (!stats) return null;
-  const normalized = { ...stats };
-  // Conservé pour compatibilité ascendante avec les anciennes données JSON scrapées (contenant la coquille 'cartons_janues')
-  if (normalized.cartons_janues !== undefined) {
-    normalized.yellow_cards = normalized.cartons_janues;
-    delete normalized.cartons_janues;
-  }
-  return normalized;
+  return recordSkippedMatch(null, link);
 }

@@ -149,7 +149,7 @@ export default function useScraperManager({ showToast, refreshAllDataSilent }) {
                   setCurrentPrimary(currentPrimary);
                   setTotalPrimary(totalPrimary);
                   setScrapePhase('scraping_primary');
-                  setScrapeProgress(Math.round((currentPrimary / totalPrimary) * 75));
+                  setScrapeProgress(25 + Math.round((currentPrimary / totalPrimary) * 35));
                   const remaining = totalPrimary - currentPrimary;
                   setMatchesRemaining(remaining);
 
@@ -158,6 +158,40 @@ export default function useScraperManager({ showToast, refreshAllDataSilent }) {
                   const secs = remainingSec % 60;
                   setScrapeTimeRemaining(mins > 0 ? `${mins} min ${secs}s` : `${secs}s`);
                 }
+
+                 const absenceMatch = msg.match(/\[SofaScore Absences\] \[(\d+)\/(\d+)\]/);
+                 if (absenceMatch) {
+                   const curr = parseInt(absenceMatch[1], 10);
+                   const tot = parseInt(absenceMatch[2], 10);
+                   setScrapePhase('scraping_absences');
+                   setScrapeProgress(60 + Math.round((curr / tot) * 10));
+                   setMatchesRemaining(tot - curr);
+                   setScrapeTimeRemaining(`Absences : ${curr}/${tot}`);
+                 } else if (msg.includes("Phase 2b/4") || msg.includes("[SofaScore Absences]") || msg.includes("[SofaScore Squad]")) {
+                   setScrapePhase('scraping_absences');
+                   setScrapeProgress(65);
+                   setScrapeTimeRemaining("Récupération des absences SofaScore...");
+                 }
+ 
+                 if (msg.includes("Phase 2c/4") || msg.includes("[1XBet Odds]")) {
+                   setScrapePhase('scraping_odds');
+                   setScrapeProgress(72);
+                   setScrapeTimeRemaining("Récupération des cotes 1XBet...");
+                 }
+ 
+                 const betfairMatch = msg.match(/\[Arbworld\] \[(\d+)\/(\d+)\]/);
+                 if (betfairMatch) {
+                   const curr = parseInt(betfairMatch[1], 10);
+                   const tot = parseInt(betfairMatch[2], 10);
+                   setScrapePhase('scraping_betfair');
+                   setScrapeProgress(75 + Math.round((curr / tot) * 5));
+                   setMatchesRemaining(tot - curr);
+                   setScrapeTimeRemaining(`Volumes Betfair : ${curr}/${tot}`);
+                 } else if (msg.includes("Phase 2d/4") || msg.includes("[Arbworld]")) {
+                   setScrapePhase('scraping_betfair');
+                   setScrapeProgress(78);
+                   setScrapeTimeRemaining("Récupération des volumes Betfair...");
+                 }
 
                 if (msg.includes("nouveaux à scrapper")) {
                   const deepMatch = msg.match(/(\d+) nouveaux à scrapper/);
@@ -171,10 +205,10 @@ export default function useScraperManager({ showToast, refreshAllDataSilent }) {
                   }
                 }
 
-                if ((msg.includes("✓ Confrontation") || msg.includes("Deep crawling over Tor") || msg.includes("Scraping de l'historique sur Tor")) && inDeepCrawl) {
+                if ((msg.includes("✓ H2H importé") || msg.includes("✓ Confrontation") || msg.includes("Deep crawling over Tor") || msg.includes("Scraping de l'historique sur Tor")) && inDeepCrawl) {
                   currentDeep++;
                   setCurrentDeep(currentDeep);
-                  setScrapeProgress(Math.round(75 + (Math.min(currentDeep, totalDeep) / totalDeep) * 20));
+                  setScrapeProgress(85 + Math.round((Math.min(currentDeep, totalDeep) / totalDeep) * 14));
                   const remaining = Math.max(0, totalDeep - currentDeep);
                   setMatchesRemaining(remaining);
 
@@ -186,9 +220,9 @@ export default function useScraperManager({ showToast, refreshAllDataSilent }) {
 
                 if (msg.includes("Analyse et importation") || msg.includes("Enregistrement dans SQLite")) {
                   setScrapePhase('importing');
-                  setScrapeProgress(96);
+                  setScrapeProgress(84);
                   setMatchesRemaining(0);
-                  setScrapeTimeRemaining("Importation en cours...");
+                  setScrapeTimeRemaining("Enregistrement des prédictions...");
                 }
 
                 if (msg.includes("Scraping annulé par l'utilisateur")) {
@@ -286,6 +320,88 @@ export default function useScraperManager({ showToast, refreshAllDataSilent }) {
     setScrapeResultStats(null);
   };
 
+  const handleTriggerBetfairUpdate = async () => {
+    if (scraping) return;
+    setScraping(true);
+    setScrapeProgress(5);
+    setScrapePhase('scraping_primary');
+    setScrapeTimeRemaining('Mise à jour Betfair...');
+    setMatchesRemaining(0);
+    setCurrentPrimary(0);
+    setTotalPrimary(0);
+    setCurrentDeep(0);
+    setTotalDeep(0);
+    setLiveScrapedMatches([]);
+    setScraperLogs([{ message: "[Predictix] Lancement de la mise à jour rapide des volumes Betfair...", type: 'system' }]);
+    showToast("Mise à jour rapide Betfair lancée...", "info");
+
+    try {
+      const response = await fetch('/api/predictions/betfair/update');
+      if (!response.body) {
+        throw new Error("Le serveur n'a pas renvoyé de flux de données.");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let finished = false;
+      let buffer = '';
+
+      while (!finished) {
+        const { done, value } = await reader.read();
+        if (done) {
+          finished = true;
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (let line of lines) {
+          line = line.trim();
+          if (line.startsWith('data: ')) {
+            try {
+              const eventData = JSON.parse(line.substring(6));
+
+              if (eventData.type === 'log') {
+                let logType = 'info';
+                const msg = eventData.message;
+
+                if (msg.includes('✓') || msg.includes('SUCCES') || msg.includes('réussie')) logType = 'success';
+                else if (msg.includes('[ERREUR]') || msg.includes('[Erreur]') || msg.includes('Echec')) logType = 'error';
+                else if (msg.includes('[INFO]') || msg.includes('Verification')) logType = 'system';
+                else if (msg.includes('Attente') || msg.includes('Recherche') || msg.includes('[Warning]')) logType = 'warn';
+
+                setScraperLogs(prev => [...prev, { message: msg, type: logType }]);
+              } else if (eventData.type === 'error') {
+                setScraperLogs(prev => [...prev, { message: `[ERREUR] ${eventData.message}`, type: 'error' }]);
+                showToast(`Erreur: ${eventData.message}`, "error");
+              } else if (eventData.type === 'complete') {
+                setScraperLogs(prev => [
+                  ...prev, 
+                  { message: `[Predictix] Mise à jour terminée ! ${eventData.updatedCount} match(es) mis à jour.`, type: 'success' }
+                ]);
+                setScrapePhase('complete');
+                setScrapeProgress(100);
+                setMatchesRemaining(0);
+                setScrapeTimeRemaining("Terminé");
+                showToast(`Mise à jour terminée : ${eventData.updatedCount} match(es) mis à jour !`, "success");
+                refreshAllDataSilent();
+              }
+            } catch (err) {
+              // Ignore partial JSON
+            }
+          }
+        }
+      }
+    } catch (error) {
+      setScraperLogs(prev => [...prev, { message: `[ERREUR CONTEXTE] ${error.message}`, type: 'error' }]);
+      showToast("Erreur de communication : " + error.message, "error");
+    } finally {
+      setScraping(false);
+    }
+  };
+
   return {
     scraping,
     scraperLogs,
@@ -315,6 +431,7 @@ export default function useScraperManager({ showToast, refreshAllDataSilent }) {
     handleTriggerScraping,
     handleStartDetailedScraping,
     handleStopScraping,
-    handleResetScraper
+    handleResetScraper,
+    handleTriggerBetfairUpdate
   };
 }

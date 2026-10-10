@@ -72,15 +72,33 @@ export async function bootstrapTorInstances(neededWorkers, scraperPath, log = co
     const tempDir = path.join(process.cwd(), `temp_tor_data_${port}`);
     try {
       if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
-      const child = spawn(torExe, ['--SocksPort', String(port), '--ControlPort', String(port + 1), '--CookieAuthentication', '0', '--DataDirectory', tempDir], { windowsHide: true });
+      const geoipPath = path.join(scraperPath, 'tor', 'data', 'geoip');
+      const geoip6Path = path.join(scraperPath, 'tor', 'data', 'geoip6');
+      const child = spawn(torExe, [
+        '--SocksPort', String(port),
+        '--ControlPort', String(port + 1),
+        '--CookieAuthentication', '0',
+        '--DataDirectory', tempDir,
+        '--GeoIPFile', geoipPath,
+        '--GeoIPv6File', geoip6Path,
+        '--ExitNodes', '{ua},{lu},{ro},{ca},{md},{br},{co},{tr},{in},{jp},{is},{cy}',
+        '--StrictNodes', '1'
+      ], { windowsHide: true });
       spawnedTorProcesses.set(port, child);
       let bootstrapSuccessful = false;
       for (let poll = 0; poll < 40; poll++) {
         await new Promise(r => setTimeout(r, 250));
         if (await isTorActive(port)) { bootstrapSuccessful = true; break; }
       }
-      if (bootstrapSuccessful) log(`[Tor Bootstrap] Port ${port} : ✓ Instance Tor lancée (Contrôle: ${port + 1}).`);
-      else {
+      if (bootstrapSuccessful) {
+        log(`[Tor Bootstrap] Port ${port} : Instance Tor démarrée. Attente de l'établissement des circuits...`);
+        const established = await waitTorCircuitEstablished(port + 1);
+        if (established) {
+          log(`[Tor Bootstrap] Port ${port} : ✓ Circuits Tor établis avec succès.`);
+        } else {
+          log(`[Tor Bootstrap] Port ${port} : ⚠ Timeout circuits Tor, continuation.`);
+        }
+      } else {
         log(`[Tor Bootstrap] Port ${port} : [Erreur] Échec de l'initialisation. Fermeture.`);
         try {
           if (process.platform === 'win32') execSync(`taskkill /pid ${child.pid} /T /F`);
@@ -191,11 +209,43 @@ export async function healTorPool() {
   return allHealthy;
 }
 
-process.on('exit', () => cleanupSpawnedTorSync());
-process.on('SIGINT', () => { cleanupSpawnedTorSync(); process.exit(); });
-process.on('SIGTERM', () => { cleanupSpawnedTorSync(); process.exit(); });
-process.on('uncaughtException', (err) => {
-  cleanupSpawnedTorSync();
-  console.error('[Uncaught Exception Tor Cleanup]', err);
-  process.exit(1);
-});
+if (process.env.NODE_ENV !== 'test' && !process.env.VITEST && !process.argv.some(a => a.includes('vitest'))) {
+  process.on('exit', () => cleanupSpawnedTorSync());
+  process.on('SIGINT', () => { cleanupSpawnedTorSync(); process.exit(); });
+  process.on('SIGTERM', () => { cleanupSpawnedTorSync(); process.exit(); });
+  process.on('uncaughtException', (err) => {
+    cleanupSpawnedTorSync();
+    console.error('[Uncaught Exception Tor Cleanup]', err);
+    process.exit(1);
+  });
+}
+
+function waitTorCircuitEstablished(controlPort, timeoutMs = 45000) {
+  return new Promise((resolve) => {
+    const startTime = Date.now();
+    const check = () => {
+      if (Date.now() - startTime > timeoutMs) {
+        resolve(false);
+        return;
+      }
+      const client = net.connect({ port: controlPort, host: '127.0.0.1' }, () => {
+        client.write('AUTHENTICATE ""\r\nGETINFO status/circuit-established\r\nQUIT\r\n');
+      });
+      let response = '';
+      client.on('data', (data) => {
+        response += data.toString();
+      });
+      client.on('end', () => {
+        if (response.includes('status/circuit-established=enough')) {
+          resolve(true);
+        } else {
+          setTimeout(check, 1000);
+        }
+      });
+      client.on('error', () => {
+        setTimeout(check, 1000);
+      });
+    };
+    check();
+  });
+}

@@ -134,7 +134,11 @@ export default function useModalManager({ showToast, showConfirm, predictions, b
     const probNum = parseInt(rawProb.replace('%', ''));
     const lineNum = parseFloat(pred.card_line);
     
-    const isOver = pred.best_tip && (pred.best_tip.toLowerCase() === 'over' || pred.best_tip.toLowerCase() === 'plus de');
+    let cleanTip = pred.best_tip || 'Over';
+    if (cleanTip === 'Plus de') cleanTip = 'Over';
+    if (cleanTip === 'Moins de') cleanTip = 'Under';
+
+    const isOver = cleanTip.toLowerCase() === 'over';
     const oddsNum = isOver ? parseFloat(pred.over_odds) : parseFloat(pred.under_odds);
 
     const defaultStakePct = globalSettings ? parseFloat(globalSettings.default_stake_pct) : 5;
@@ -150,7 +154,7 @@ export default function useModalManager({ showToast, showConfirm, predictions, b
       league: pred.tournament || 'Football',
       home_team: pred.home_team,
       away_team: pred.away_team,
-      best_tip: pred.best_tip || 'Over',
+      best_tip: cleanTip,
       card_line: isNaN(lineNum) ? 4.5 : lineNum,
       odds: isNaN(oddsNum) ? 1.85 : oddsNum,
       stake: stakeNum,
@@ -165,7 +169,11 @@ export default function useModalManager({ showToast, showConfirm, predictions, b
   };
 
   const handleAddToBasket = (pred, balance) => {
-    if (basketBets.some(b => b.match_id === pred.match_id && b.best_tip === pred.best_tip && b.card_line === pred.card_line)) {
+    let cleanTip = pred.best_tip || 'Over';
+    if (cleanTip === 'Plus de') cleanTip = 'Over';
+    if (cleanTip === 'Moins de') cleanTip = 'Under';
+
+    if (basketBets.some(b => b.match_id === pred.match_id && b.best_tip === cleanTip && b.card_line === pred.card_line)) {
       showToast("Cette sélection est déjà dans votre panier.", "warning");
       return;
     }
@@ -174,7 +182,7 @@ export default function useModalManager({ showToast, showConfirm, predictions, b
     const probNum = parseInt(rawProb.replace('%', ''));
     const lineNum = parseFloat(pred.card_line);
 
-    const isOver = pred.best_tip && (pred.best_tip.toLowerCase() === 'over' || pred.best_tip.toLowerCase() === 'plus de');
+    const isOver = cleanTip.toLowerCase() === 'over';
     const oddsNum = isOver ? parseFloat(pred.over_odds) : parseFloat(pred.under_odds);
 
     const defaultStakePct = globalSettings ? parseFloat(globalSettings.default_stake_pct) : 5;
@@ -185,14 +193,14 @@ export default function useModalManager({ showToast, showConfirm, predictions, b
     const now = new Date();
 
     const newBasketBet = {
-      id: `${pred.match_id}_${pred.best_tip}_${pred.card_line}`,
+      id: `${pred.match_id}_${cleanTip}_${pred.card_line}`,
       match_id: pred.match_id,
       date: pred.date || now.toISOString().substring(0, 10),
       time: pred.time || '20:00',
       league: pred.tournament || 'Football',
       home_team: pred.home_team,
       away_team: pred.away_team,
-      best_tip: pred.best_tip || 'Over',
+      best_tip: cleanTip,
       card_line: isNaN(lineNum) ? 4.5 : lineNum,
       odds: isNaN(oddsNum) ? 1.85 : oddsNum,
       stake: stakeNum,
@@ -209,11 +217,15 @@ export default function useModalManager({ showToast, showConfirm, predictions, b
   };
 
   const handleInstantPlaceBet = async (pred, balance, fetchAllData) => {
+    let cleanTip = pred.best_tip || 'Over';
+    if (cleanTip === 'Plus de') cleanTip = 'Over';
+    if (cleanTip === 'Moins de') cleanTip = 'Under';
+
     const rawProb = pred.probability ? String(pred.probability) : '';
     const probNum = parseInt(rawProb.replace('%', ''));
     const lineNum = parseFloat(pred.card_line);
 
-    const isOver = pred.best_tip && (pred.best_tip.toLowerCase() === 'over' || pred.best_tip.toLowerCase() === 'plus de');
+    const isOver = cleanTip.toLowerCase() === 'over';
     const oddsNum = isOver ? parseFloat(pred.over_odds) : parseFloat(pred.under_odds);
 
     const defaultStakePct = globalSettings ? parseFloat(globalSettings.default_stake_pct) : 5;
@@ -230,7 +242,7 @@ export default function useModalManager({ showToast, showConfirm, predictions, b
       league: pred.tournament || 'Football',
       home_team: pred.home_team,
       away_team: pred.away_team,
-      best_tip: pred.best_tip || 'Over',
+      best_tip: cleanTip,
       card_line: isNaN(lineNum) ? 4.5 : lineNum,
       odds: isNaN(oddsNum) ? 1.85 : oddsNum,
       stake: stakeNum,

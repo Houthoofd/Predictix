@@ -74,17 +74,13 @@ describe('Basketball Predictions & Pace/Ratings Model', () => {
     );
 
     // Math Validation (detailed in walkthrough.md / test logs):
-    // Expected Pace = ((79.7368 * 1.01) + (75.2632 * 0.99)) / 2 = 77.52. 1st Half Pace = 38.915
-    // Expected Eff Home = (1.4389 * 1.025) * ((1.4436 * 1.025) / 1.15) = 1.8978
-    // Expected Eff Away = (1.4266 * 0.975) * ((1.2657 * 0.975) / 1.15) = 1.4926
-    // Expected Home Score = 38.915 * 1.8978 = 73.85
-    // Expected Away Score = 38.915 * 1.4926 = 58.08
-    // Expected Total = 73.85 + 58.08 = 131.93. Line = 131.5
+    // Expected Pace and efficiencies are regressed with K = 8.
+    // HCA is adjusted to +/- 1% on offensive/defensive multipliers.
 
-    expect(result.home_avg_first_half_points).toBeCloseTo(73.86, 1);
-    expect(result.away_avg_first_half_points).toBeCloseTo(58.09, 1);
+    expect(result.home_avg_first_half_points).toBeCloseTo(46.48, 1);
+    expect(result.away_avg_first_half_points).toBeCloseTo(43.26, 1);
     expect(result.h2h_avg_first_half_points).toBe(97); // 52 + 45 = 97
-    expect(result.card_line).toBe('131.5 Points 1ère MT');
+    expect(result.card_line).toBe('89.5 Points 1ère MT');
   });
 
   it('should use fallback values and apply HCA if recent match lists are empty', () => {
@@ -108,12 +104,12 @@ describe('Basketball Predictions & Pace/Ratings Model', () => {
     );
 
     // Fallbacks: FGA = 70 (1st half pace = 35.14), EFF = 1.15
-    // expectedHome = 35.14 * (1.15 * 1.025 * 1.025) = 42.46
-    // expectedAway = 35.14 * (1.15 * 0.975 * 0.975) = 38.41
-    // expectedTotal = 80.87. Line = 80.5
-    expect(result.home_avg_first_half_points).toBeCloseTo(42.46, 2);
-    expect(result.away_avg_first_half_points).toBeCloseTo(38.42, 2);
-    expect(result.h2h_avg_first_half_points).toBeCloseTo(80.87, 2);
+    // expectedHome = 35.14 * (1.15 * 1.01 * 1.01) = 41.22
+    // expectedAway = 35.14 * (1.15 * 0.99 * 0.99) = 39.61
+    // expectedTotal = 80.83. Line = 80.5
+    expect(result.home_avg_first_half_points).toBeCloseTo(41.22, 2);
+    expect(result.away_avg_first_half_points).toBeCloseTo(39.61, 2);
+    expect(result.h2h_avg_first_half_points).toBeCloseTo(80.83, 2);
     expect(result.card_line).toBe('80.5 Points 1ère MT');
   });
 
@@ -146,11 +142,11 @@ describe('Basketball Predictions & Pace/Ratings Model', () => {
 
     // Dynamic NBA Baselines: FGA = 90, EFF = 1.20
     // Expected 1st Half Pace = 45.18
-    // expectedHome = 45.18 * (1.20 * 1.025 * 1.025) = 56.96
-    // expectedAway = 45.18 * (1.20 * 0.975 * 0.975) = 51.54
-    // expectedTotal = 108.5. Line = 108.5
-    expect(result.home_avg_first_half_points).toBeCloseTo(56.96, 1);
-    expect(result.away_avg_first_half_points).toBeCloseTo(51.54, 1);
+    // expectedHome = 45.18 * (1.20 * 1.01 * 1.01) = 55.31
+    // expectedAway = 45.18 * (1.20 * 0.99 * 0.99) = 53.13
+    // expectedTotal = 108.44. Line = 108.5
+    expect(result.home_avg_first_half_points).toBeCloseTo(55.31, 1);
+    expect(result.away_avg_first_half_points).toBeCloseTo(53.13, 1);
     expect(result.card_line).toBe('108.5 Points 1ère MT');
   });
 

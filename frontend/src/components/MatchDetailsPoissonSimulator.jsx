@@ -4,9 +4,36 @@ import {
   poissonUnder,
   poissonOver,
   bivariatePoissonOver,
-  getMetricPeriodRatio
+  getMetricPeriodRatio,
+  bivariatePoissonPMF
 } from '../utils/poissonUtils';
 import PoissonSimulatorTable from './PoissonSimulatorTable';
+
+const lnFactCache = [0, 0];
+const lnFactorial = (n) => {
+  if (n <= 1) return 0;
+  if (lnFactCache[n] !== undefined) return lnFactCache[n];
+  let res = lnFactCache[lnFactCache.length - 1];
+  for (let i = lnFactCache.length; i <= n; i++) {
+    res += Math.log(i);
+    lnFactCache[i] = res;
+  }
+  return res;
+};
+
+const stablePoissonPMF = (x, lambda) => {
+  if (lambda <= 0) return x === 0 ? 1 : 0;
+  if (x < 0) return 0;
+  const lnFact = lnFactorial(x);
+  return Math.exp(x * Math.log(lambda) - lambda - lnFact);
+};
+
+const getBivariateProb = (x, y, meanHome, meanAway, cov) => {
+  if (cov <= 0) {
+    return stablePoissonPMF(x, meanHome) * stablePoissonPMF(y, meanAway);
+  }
+  return bivariatePoissonPMF(x, y, meanHome, meanAway, cov);
+};
 
 export default function MatchDetailsPoissonSimulator({
   selectedMatchDetails,
@@ -29,9 +56,48 @@ export default function MatchDetailsPoissonSimulator({
 
   const [payoutRatio, setPayoutRatio] = useState(0.93);
   const [userOdds, setUserOdds] = useState({});
+  const [winnerUserOdds, setWinnerUserOdds] = useState({ home: '', draw: '', away: '' });
+  const [hoveredRowKey, setHoveredRowKey] = useState(null);
+  const [hoveredWinnerKey, setHoveredWinnerKey] = useState(null);
   const [customLineInput, setCustomLineInput] = useState('');
   const [customLines, setCustomLines] = useState([]);
-  const [hoveredRowKey, setHoveredRowKey] = useState(null);
+
+  React.useEffect(() => {
+    let initialWinnerOdds = { home: '', draw: '', away: '' };
+    let initialUserOdds = {};
+    
+    if (selectedMatchDetails?.odds_corners) {
+      try {
+        const oddsList = typeof selectedMatchDetails.odds_corners === 'string'
+          ? JSON.parse(selectedMatchDetails.odds_corners)
+          : selectedMatchDetails.odds_corners;
+        if (Array.isArray(oddsList)) {
+          const matchWinnerOdds = oddsList.find(o => o.market_type === 'winner' || o.market_type === 'full_time');
+          if (matchWinnerOdds) {
+            initialWinnerOdds = {
+              home: matchWinnerOdds.home_odds ? String(matchWinnerOdds.home_odds) : '',
+              draw: matchWinnerOdds.draw_odds ? String(matchWinnerOdds.draw_odds) : '',
+              away: matchWinnerOdds.away_odds ? String(matchWinnerOdds.away_odds) : ''
+            };
+          }
+          
+          oddsList.forEach(o => {
+            if (o.market_type === 'totals' && o.period && o.line !== undefined) {
+              const overKey = `${o.period}-${o.line}-over`;
+              const underKey = `${o.period}-${o.line}-under`;
+              if (o.over_odds) initialUserOdds[overKey] = String(o.over_odds);
+              if (o.under_odds) initialUserOdds[underKey] = String(o.under_odds);
+            }
+          });
+        }
+      } catch (e) {
+        console.error("Failed to parse odds_corners:", e);
+      }
+    }
+    
+    setWinnerUserOdds(initialWinnerOdds);
+    setUserOdds(initialUserOdds);
+  }, [selectedMatchDetails?.match_id, selectedMatchDetails?.odds_corners]);
 
   let meanHome = 0;
   let meanAway = 0;
@@ -193,6 +259,292 @@ export default function MatchDetailsPoissonSimulator({
     setSelectedMatchDetails(null);
   };
 
+  const handlePlaceWinnerBet = (outcome, prob, fairOdds, bookieOdds, customOddsInputVal) => {
+    if (!handleQuickPlaceBet) return;
+    
+    const oddsVal = parseFloat(customOddsInputVal);
+    const selectedOdds = !isNaN(oddsVal) && oddsVal > 0 ? oddsVal : parseFloat(bookieOdds);
+
+    const outcomeLabels = {
+      '1': selectedMatchDetails?.home_team || 'Domicile',
+      'N': 'Match Nul',
+      '2': selectedMatchDetails?.away_team || 'Extérieur'
+    };
+
+    const pred = {
+      match_id: selectedMatchDetails.match_id,
+      date: selectedMatchDetails.date,
+      time: selectedMatchDetails.time,
+      tournament: selectedMatchDetails.tournament,
+      home_team: selectedMatchDetails.home_team,
+      away_team: selectedMatchDetails.away_team,
+      best_tip: outcome,
+      card_line: 0,
+      probability: `${Math.round(prob * 100)}%`,
+      win_rate: 'N/A',
+      over_odds: selectedOdds,
+      under_odds: selectedOdds,
+      match_url: selectedMatchDetails.match_url || '',
+      notes: `Simulation Vainqueur - ${outcomeLabels[outcome]} [${periodNote}] (Probabilité: ${Math.round(prob * 100)}%, Cote Estimée: ${bookieOdds.toFixed(2)}, Cote Juste: ${fairOdds.toFixed(2)})`,
+      sport: selectedMatchDetails.sport || 'football'
+    };
+
+    handleQuickPlaceBet(pred);
+    setSelectedMatchDetails(null);
+  };
+
+  const calculateEdge = (userVal, fairVal) => {
+    if (!userVal || isNaN(userVal)) return null;
+    const probImplied = 1 / userVal;
+    const probFair = 1 / fairVal;
+    return (probFair / probImplied - 1) * 100;
+  };
+
+  // Scraped 1XBet winner odds for display
+  let scrapedHomeOdds = '';
+  let scrapedAwayOdds = '';
+  let scrapedDrawOdds = '';
+  if (selectedMatchDetails?.odds_corners) {
+    try {
+      const oddsList = typeof selectedMatchDetails.odds_corners === 'string'
+        ? JSON.parse(selectedMatchDetails.odds_corners)
+        : selectedMatchDetails.odds_corners;
+      if (Array.isArray(oddsList)) {
+        const winner = oddsList.find(o => o.market_type === 'winner' || o.market_type === 'full_time');
+        if (winner) {
+          scrapedHomeOdds = winner.home_odds ? String(winner.home_odds) : '';
+          scrapedAwayOdds = winner.away_odds ? String(winner.away_odds) : '';
+          scrapedDrawOdds = winner.draw_odds ? String(winner.draw_odds) : '';
+        }
+      }
+    } catch (e) {}
+  }
+
+  // Winner Projections (1N2 / Moneyline) logic
+  const isScoreMetric = activeMetric === 'goals' || activeMetric === 'first_half_points';
+  
+  let probHome = 0;
+  let probDraw = 0;
+  let probAway = 0;
+  
+  if (isScoreMetric) {
+    const stdHome = Math.sqrt(meanHome);
+    const stdAway = Math.sqrt(meanAway);
+    
+    const xMin = Math.max(0, Math.floor(meanHome - 4 * stdHome - 5));
+    const xMax = Math.min(200, Math.ceil(meanHome + 4 * stdHome + 5));
+    const yMin = Math.max(0, Math.floor(meanAway - 4 * stdAway - 5));
+    const yMax = Math.min(200, Math.ceil(meanAway + 4 * stdAway + 5));
+    
+    for (let x = xMin; x <= xMax; x++) {
+      for (let y = yMin; y <= yMax; y++) {
+        const p = getBivariateProb(x, y, meanHome, meanAway, cov);
+        if (x > y) {
+          probHome += p;
+        } else if (x < y) {
+          probAway += p;
+        } else {
+          probDraw += p;
+        }
+      }
+    }
+    
+    const total = probHome + probAway + probDraw;
+    if (total > 0) {
+      probHome /= total;
+      probAway /= total;
+      probDraw /= total;
+    }
+
+    // Blend with bookmaker implied probabilities if they are available
+    // Use user-entered winner odds if available, otherwise fallback to database scraped odds
+    let oddH = parseFloat(winnerUserOdds.home);
+    let oddA = parseFloat(winnerUserOdds.away);
+    let oddD = parseFloat(winnerUserOdds.draw);
+
+    if (isNaN(oddH) || isNaN(oddA) || oddH <= 1.0 || oddA <= 1.0) {
+      // Fallback to scraped odds in DB if user hasn't typed anything
+      let bookieWinnerOdds = null;
+      if (selectedMatchDetails?.odds_corners) {
+        try {
+          const oddsList = typeof selectedMatchDetails.odds_corners === 'string'
+            ? JSON.parse(selectedMatchDetails.odds_corners)
+            : selectedMatchDetails.odds_corners;
+          if (Array.isArray(oddsList)) {
+            bookieWinnerOdds = oddsList.find(o => o.market_type === 'winner' || o.market_type === 'full_time');
+          }
+        } catch (e) {}
+      }
+      if (bookieWinnerOdds) {
+        oddH = parseFloat(bookieWinnerOdds.home_odds || bookieWinnerOdds.home);
+        oddA = parseFloat(bookieWinnerOdds.away_odds || bookieWinnerOdds.away);
+        oddD = parseFloat(bookieWinnerOdds.draw_odds || bookieWinnerOdds.draw || 0);
+      }
+    }
+
+    if (!isNaN(oddH) && !isNaN(oddA) && oddH > 1.0 && oddA > 1.0) {
+      const ipH = 1 / oddH;
+      const ipA = 1 / oddA;
+      const ipD = (!isNaN(oddD) && oddD > 1.0 && !isBasket) ? (1 / oddD) : 0;
+      const ipSum = ipH + ipA + ipD;
+      
+      const bookieProbHome = ipH / ipSum;
+      const bookieProbAway = ipA / ipSum;
+      
+      // Blend Poisson with Bookie odds. We trust the bookmaker odds as a very strong prior.
+      // 30% weight to Poisson, 70% to bookmaker consensus
+      const alpha = 0.3; 
+      probHome = alpha * probHome + (1 - alpha) * bookieProbHome;
+      probAway = alpha * probAway + (1 - alpha) * bookieProbAway;
+      probDraw = alpha * probDraw;
+
+      const sumProbs = probHome + probAway + probDraw;
+      if (sumProbs > 0) {
+        probHome /= sumProbs;
+        probAway /= sumProbs;
+        probDraw /= sumProbs;
+      }
+    }
+
+    // Split draw probability for basketball (overtime wins are distributed)
+    if (isBasket) {
+      const halfDraw = probDraw / 2;
+      probHome += halfDraw;
+      probAway += halfDraw;
+      probDraw = 0;
+    }
+  }
+
+  const fairHome = probHome > 0 ? 1 / probHome : 999;
+  const fairDraw = probDraw > 0 ? 1 / probDraw : 999;
+  const fairAway = probAway > 0 ? 1 / probAway : 999;
+
+  const estHome = probHome > 0 ? payoutRatio / probHome : 999;
+  const estDraw = probDraw > 0 ? payoutRatio / probDraw : 999;
+  const estAway = probAway > 0 ? payoutRatio / probAway : 999;
+
+  const edgeHome = calculateEdge(parseFloat(winnerUserOdds.home || ''), fairHome);
+  const edgeDraw = calculateEdge(parseFloat(winnerUserOdds.draw || ''), fairDraw);
+  const edgeAway = calculateEdge(parseFloat(winnerUserOdds.away || ''), fairAway);
+
+  const renderWinnerValueCell = (edge) => {
+    if (edge === null) {
+      return <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '10px' }}>Saisir cote</span>;
+    }
+    if (edge > 0) {
+      return (
+        <span style={{
+          color: '#10b981',
+          background: 'rgba(16, 185, 129, 0.08)',
+          border: '1px solid rgba(16, 185, 129, 0.15)',
+          padding: '2px 6px',
+          borderRadius: '4px',
+          fontSize: '9.5px',
+          fontWeight: 800,
+          textTransform: 'uppercase',
+          letterSpacing: '0.04em'
+        }}>
+          VALUE +{edge.toFixed(1)}%
+        </span>
+      );
+    } else {
+      return (
+        <span style={{
+          color: 'var(--text-muted)',
+          background: 'rgba(255,255,255,0.02)',
+          border: '1px solid rgba(255,255,255,0.03)',
+          padding: '2px 6px',
+          borderRadius: '4px',
+          fontSize: '9.5px',
+          fontWeight: 600
+        }}>
+          Perte {edge.toFixed(1)}%
+        </span>
+      );
+    }
+  };
+
+  const renderWinnerCard = (label, valueKey, prob, fairOdds, bookieOdds, userOddsVal, edge, bestTipValue, scrapedOddsVal) => {
+    const isHovered = hoveredWinnerKey === bestTipValue;
+    return (
+      <div
+        onMouseEnter={() => setHoveredWinnerKey(bestTipValue)}
+        onMouseLeave={() => setHoveredWinnerKey(null)}
+        onClick={() => {
+          handlePlaceWinnerBet(bestTipValue, prob, fairOdds, bookieOdds, userOddsVal);
+        }}
+        style={{
+          background: isHovered ? 'rgba(255, 255, 255, 0.03)' : 'rgba(255, 255, 255, 0.01)',
+          border: isHovered ? '1px solid rgba(191, 90, 242, 0.4)' : '1px solid rgba(255, 255, 255, 0.04)',
+          borderRadius: '10px',
+          padding: '12px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+          cursor: 'pointer',
+          transition: 'all 0.2s ease',
+          boxShadow: isHovered ? '0 4px 12px rgba(191, 90, 242, 0.05)' : 'none',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '75%' }} title={label}>
+            {label}
+          </span>
+          <span style={{ fontSize: '11px', fontWeight: 900, color: '#bf5af2', background: 'rgba(191, 90, 242, 0.1)', padding: '1px 5px', borderRadius: '4px' }}>
+            {bestTipValue}
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: '2px' }}>
+          <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Probabilité :</span>
+          <strong style={{ fontSize: '13px', fontWeight: 800, color: '#fff' }}>{Math.round(prob * 100)}%</strong>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', borderTop: '1px solid rgba(255, 255, 255, 0.03)', paddingTop: '6px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px' }}>
+            <span style={{ color: 'var(--text-muted)' }}>Cote Juste :</span>
+            <strong style={{ color: 'var(--text-secondary)' }}>{fairOdds > 99 ? '99+' : fairOdds.toFixed(2)}</strong>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px' }}>
+            <span style={{ color: 'var(--text-muted)' }}>Cote Estimée :</span>
+            <strong style={{ color: '#fff' }}>{bookieOdds > 99 ? '99+' : bookieOdds.toFixed(2)}</strong>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px' }}>
+            <span style={{ color: 'var(--text-muted)' }}>Cote 1XBet :</span>
+            <strong style={{ color: 'var(--color-success)' }}>{scrapedOddsVal || '-'}</strong>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginTop: '4px' }}>
+          <input
+            type="text"
+            placeholder="Ex: 1.85"
+            value={userOddsVal}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => {
+              setWinnerUserOdds(prev => ({ ...prev, [valueKey]: e.target.value }));
+            }}
+            style={{
+              width: '100%',
+              background: 'rgba(0,0,0,0.25)',
+              border: '1px solid rgba(255,255,255,0.06)',
+              borderRadius: '4px',
+              color: '#fff',
+              padding: '4px 6px',
+              fontSize: '10.5px',
+              textAlign: 'center',
+              outline: 'none'
+            }}
+          />
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'center', minHeight: '18px', marginTop: '2px' }} onClick={(e) => e.stopPropagation()}>
+          {renderWinnerValueCell(edge)}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div style={{
       background: 'rgba(255, 255, 255, 0.015)',
@@ -302,6 +654,19 @@ export default function MatchDetailsPoissonSimulator({
         <div><strong style={{ color: 'var(--text-secondary)' }}>Cote Estimée Bookie</strong> : Avec marge.</div>
         <div><strong style={{ color: 'var(--text-secondary)' }}>Value Edge</strong> : Avantage attendu.</div>
       </div>
+
+      {isScoreMetric && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '4px', marginBottom: '8px' }}>
+          <h5 style={{ fontSize: '11px', fontFamily: 'Outfit', fontWeight: 800, color: 'var(--text-secondary)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            {isBasket ? 'Projections Vainqueur (Moneyline)' : 'Projections Vainqueur (1N2 / Moneyline)'}
+          </h5>
+          <div style={{ display: 'grid', gridTemplateColumns: isBasket ? '1fr 1fr' : '1fr 1fr 1fr', gap: '12px' }}>
+            {renderWinnerCard(`Victoire ${selectedMatchDetails?.home_team || 'Domicile'}`, 'home', probHome, fairHome, estHome, winnerUserOdds.home, edgeHome, '1', scrapedHomeOdds)}
+            {!isBasket && renderWinnerCard('Match Nul', 'draw', probDraw, fairDraw, estDraw, winnerUserOdds.draw, edgeDraw, 'N', scrapedDrawOdds)}
+            {renderWinnerCard(`Victoire ${selectedMatchDetails?.away_team || 'Extérieur'}`, 'away', probAway, fairAway, estAway, winnerUserOdds.away, edgeAway, '2', scrapedAwayOdds)}
+          </div>
+        </div>
+      )}
 
       <PoissonSimulatorTable
         allLinesForPeriod={allLinesForPeriod}

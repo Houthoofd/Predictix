@@ -40,7 +40,9 @@ export default function MagicMatchCard({
     let odds = 1.85;
     try {
       if (matchDetails.odds_corners) {
-        const oddsList = JSON.parse(matchDetails.odds_corners);
+        const oddsList = typeof matchDetails.odds_corners === 'string'
+          ? JSON.parse(matchDetails.odds_corners)
+          : matchDetails.odds_corners;
         const matchMarket = period === 'full_time' ? 'full_time' : '1st_half';
         const foundOdds = oddsList.find(o => o.line === line && o.market_type === matchMarket);
         if (foundOdds && foundOdds.over_decimal) {
@@ -101,7 +103,9 @@ export default function MagicMatchCard({
     under_odds: simulatedOddsStr,
     notes: `Placé depuis les Pronostics Magiques. Marché: ${currentBet.metricTitle} (${currentBet.tip} ${currentBet.line})`,
     match_url: sig.match_url || '',
-    sport: matchDetails?.sport || sig.sport || 'football'
+    sport: matchDetails?.sport || sig.sport || 'football',
+    metric: currentBet.metric || sig.metric,
+    odds_corners: matchDetails?.odds_corners || []
   } : {
     match_id: sig.match_id,
     date: sig.date,
@@ -111,14 +115,15 @@ export default function MagicMatchCard({
     away_team: sig.away_team,
     best_tip: matchDetails?.best_tip || (isPossession ? 'Possession' : 'Over'),
     card_line: matchDetails?.card_line !== undefined ? String(matchDetails.card_line) : (isPossession ? `${sig.threshold}%` : `${sig.threshold}`),
-    odds_corners: [],
+    odds_corners: matchDetails?.odds_corners || [],
     probability: matchDetails?.probability || '75%',
     win_rate: matchDetails?.win_rate || '65%',
     over_odds: matchDetails?.over_odds || (isPossession ? '1.85' : '1.90'),
     under_odds: matchDetails?.under_odds || '1.80',
     notes: `Placé depuis les Pronostics Magiques. Règle: ${sig.strategy_name}`,
     match_url: sig.match_url || '',
-    sport: matchDetails?.sport || sig.sport || 'football'
+    sport: matchDetails?.sport || sig.sport || 'football',
+    metric: sig.metric
   };
 
   const getMetricParameters = (mDetails, metric, period) => {
@@ -197,7 +202,7 @@ export default function MagicMatchCard({
       className="glass-card magic-signal-card"
       onClick={() => {
         if (typeof setSelectedMatchDetails === 'function') {
-          setSelectedMatchDetails(matchDetails || mappedPred);
+          setSelectedMatchDetails(matchDetails ? { ...matchDetails, metric: sig.metric } : mappedPred);
         }
       }}
       style={{ 
@@ -369,7 +374,7 @@ export default function MagicMatchCard({
             onClick={(e) => {
               e.stopPropagation();
               if (typeof setSelectedMatchDetails === 'function') {
-                setSelectedMatchDetails(matchDetails || mappedPred);
+                setSelectedMatchDetails(matchDetails ? { ...matchDetails, metric: sig.metric } : mappedPred);
               }
             }}
           >

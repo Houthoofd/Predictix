@@ -30,7 +30,8 @@ export default function ScraperTab({
   selectedScraperSource,
   setSelectedScraperSource,
   selectedScraperSport,
-  setSelectedScraperSport
+  setSelectedScraperSport,
+  handleTriggerBetfairUpdate
 }) {
   const [strategies, setStrategies] = useState([]);
   const [expandedMatches, setExpandedMatches] = useState({});
@@ -124,6 +125,7 @@ export default function ScraperTab({
         currentPrimary={currentPrimary}
         totalDeep={totalDeep}
         currentDeep={currentDeep}
+        handleTriggerBetfairUpdate={handleTriggerBetfairUpdate}
       />
 
       {liveScrapedMatches && liveScrapedMatches.length > 0 && (

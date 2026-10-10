@@ -19,9 +19,9 @@ router.get('/models/status', (req, res) => {
 router.post('/models/train', async (req, res) => {
   try {
     console.log('[API Models] Triggering manual GBDT re-training (forced)...');
-    await trainGBDTModels(dbQuery, true); // Force = true
+    const result = await trainGBDTModels(dbQuery, true); // Force = true
     const status = getGBDTModelsStatus();
-    res.json({ success: true, data: status, message: 'Modèles réentraînés avec succès via Go.' });
+    res.json({ success: true, data: status, diagnostic: result, message: result?.message || 'Entraînement des modèles exécuté.' });
   } catch (error) {
     res.status(500).json({ success: false, error: { message: error.message } });
   }

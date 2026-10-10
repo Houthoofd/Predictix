@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar, Sparkles, RefreshCcw, Info, CheckCircle, Search, FileText, Layers, Database } from 'lucide-react';
+import { Calendar, Sparkles, RefreshCcw, Info, CheckCircle, Search, FileText, Layers, Database, TrendingUp } from 'lucide-react';
 import ScraperStepper from './ScraperStepper';
 
 export default function ScraperConsoleCard({
@@ -26,7 +26,8 @@ export default function ScraperConsoleCard({
   matchesRemaining,
   currentPrimary,
   totalDeep,
-  currentDeep
+  currentDeep,
+  handleTriggerBetfairUpdate
 }) {
   return (
     <div className="glass-card accent-right" style={{ padding: '24px 30px' }}>
@@ -125,6 +126,17 @@ export default function ScraperConsoleCard({
             </div>
           )}
           
+          {!scraping && (
+            <button 
+              className="btn" 
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '36px', background: 'linear-gradient(135deg, #ff9500 0%, #ffcc00 100%)', border: 'none', color: '#121212', boxShadow: '0 4px 15px rgba(255, 149, 0, 0.15)', fontWeight: 700 }}
+              onClick={handleTriggerBetfairUpdate}
+            >
+              <TrendingUp size={14} />
+              <span>Mettre à jour Betfair</span>
+            </button>
+          )}
+
           {scrapePhase === 'idle' ? (
             <button 
               className="btn btn-primary" 

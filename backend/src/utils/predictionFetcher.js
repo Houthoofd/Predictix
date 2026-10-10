@@ -141,7 +141,14 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
   const h2hMatchesMap = new Map();
   const allTeamMatchesMap = new Map();
 
+  const seenMatches = new Set();
+
   for (const m of allFinished) {
+    if (!m.home_team || !m.away_team || !m.date) continue;
+    const matchKey = `${m.home_team.toLowerCase().trim()} vs ${m.away_team.toLowerCase().trim()} on ${m.date}`;
+    if (seenMatches.has(matchKey)) continue;
+    seenMatches.add(matchKey);
+
     const home = m.home_team;
     const away = m.away_team;
 
@@ -292,20 +299,57 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
     console.warn("[Prediction Fetcher] Could not calculate basketball league averages:", err.message);
   }
   
+  // Get all unique team names from rows
+  const teamNames = new Set();
+  for (const row of rows) {
+    if (row.home_team) teamNames.add(row.home_team);
+    if (row.away_team) teamNames.add(row.away_team);
+  }
+  
+  // Query player stats for these teams
+  const playerStatsMap = new Map();
+  if (teamNames.size > 0) {
+    try {
+      const placeholders = Array.from(teamNames).map(() => '?').join(',');
+      const playerStatsRows = await dbQueryFn(
+        `SELECT * FROM player_stats WHERE team_name IN (${placeholders})`,
+        Array.from(teamNames)
+      );
+      if (playerStatsRows && Array.isArray(playerStatsRows)) {
+        for (const ps of playerStatsRows) {
+          const key = ps.team_name.toLowerCase().trim();
+          if (!playerStatsMap.has(key)) {
+            playerStatsMap.set(key, []);
+          }
+          playerStatsMap.get(key).push(ps);
+        }
+      }
+    } catch (err) {
+      console.warn("[Prediction Fetcher] player_stats table might not exist yet or failed to query:", err.message);
+    }
+  }
+
   for (const row of rows) {
     const teams = [row.home_team, row.away_team].sort();
     const h2hKey = `${teams[0]} vs ${teams[1]}`;
 
+    const sport = (row.sport || 'football').toLowerCase().trim();
+    const isBasketball = sport === 'basketball';
+
     const rawH2H = h2hMatchesMap.get(h2hKey) || [];
-    const rawHome = homeMatchesMap.get(row.home_team) || [];
-    const rawAway = awayMatchesMap.get(row.away_team) || [];
+    const rawHome = isBasketball
+      ? (allTeamMatchesMap.get(row.home_team) || [])
+      : (homeMatchesMap.get(row.home_team) || []);
+    const rawAway = isBasketball
+      ? (allTeamMatchesMap.get(row.away_team) || [])
+      : (awayMatchesMap.get(row.away_team) || []);
     
     const normalizeMatchRow = (m) => {
       let date = m.date || '';
       let time = m.time || '';
       if (date.includes(':')) {
         time = date;
-        date = row.date || new Date().toISOString().substring(0, 10);
+        date = row.date || null;
       }
       return { ...m, date, time };
     };
@@ -314,7 +358,6 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
     const normalizedHome = rawHome.map(normalizeMatchRow);
     const normalizedAway = rawAway.map(normalizeMatchRow);
     
-    const sport = (row.sport || 'football').toLowerCase().trim();
     const currentCalibrationDelta = sport === 'football' 
       ? deltas.football 
       : (sport === 'basketball' ? deltas.basketball : deltas.other);
@@ -332,7 +375,8 @@ export async function getEnrichedPredictions(query, dbQueryFn, activeCrawlHistor
       currentCalibrationDelta,
       basketballLeagueAverages,
       useGbdtModels,
-      allTeamMatchesMap
+      allTeamMatchesMap,
+      playerStatsMap
     );
     enrichedRows.push(enriched);
   }

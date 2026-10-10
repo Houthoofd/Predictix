@@ -13,6 +13,7 @@ router.post('/predictions/scrape/discover', discoveryController.discoverMatches)
 router.post('/predictions/scrape', scraperController.startScraping);
 router.post('/predictions/scrape/stop', scraperController.stopScraping);
 router.post('/predictions/:matchId/crawl-history', integrityController.crawlMatchHistory);
+router.get('/predictions/betfair/update', scraperController.updateBetfairVolumes);
 
 // Cron/scheduler endpoints
 router.get('/scraper/crons', async (req, res) => {
