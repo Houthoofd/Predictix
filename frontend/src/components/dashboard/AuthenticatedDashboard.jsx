@@ -169,9 +169,27 @@ export function AuthenticatedDashboard() {
   const [matchSearchTeam, setMatchSearchTeam] = useState('');
   const [backtestResult, setBacktestResult] = useState(null);
 
+  // 35 Disciplines & Place Bet States
+  const [trackedBets, setTrackedBets] = useState(betsTrackerData);
+  const [showPlaceBetModal, setShowPlaceBetModal] = useState(false);
+  const [selectedDisciplineForBet, setSelectedDisciplineForBet] = useState(null);
+  const [betBankrollId, setBetBankrollId] = useState('main');
+  const [betMatch, setBetMatch] = useState('');
+  const [betCompetition, setBetCompetition] = useState('');
+  const [betSelection, setBetSelection] = useState('Victoire Domicile (1)');
+  const [betOdds, setBetOdds] = useState('1.85');
+  const [betStake, setBetStake] = useState('50');
+  const [betToastMessage, setBetToastMessage] = useState(null);
+  const [disciplineFilterCategory, setDisciplineFilterCategory] = useState('all');
+  const [disciplineSearch, setDisciplineSearch] = useState('');
+
   const accountMenuRef = useRef(null);
 
   // tRPC queries to predictix-api
+  const disciplinesQuery = trpc.sports.getDisciplines.useQuery(undefined, {
+    staleTime: 60000,
+  });
+
   const aggregatesQuery = trpc.sports.getAggregates.useQuery(
     { sport: matchFilterSport },
     { staleTime: 60000 }
@@ -191,6 +209,84 @@ export function AuthenticatedDashboard() {
       setBacktestResult(data);
     },
   });
+
+  const placeBetMutation = trpc.sports.placeBet.useMutation({
+    onSuccess: () => {
+      // Handled in handleConfirmPlaceBet
+    },
+  });
+
+  const handleOpenPlaceBet = (disc, preselectedOdds = null) => {
+    setSelectedDisciplineForBet(disc);
+    setBetMatch(disc.sampleMatch || `${disc.name} - Match officiel`);
+    setBetCompetition(disc.competition || 'Compétition officielle');
+    setBetOdds(preselectedOdds ? String(preselectedOdds) : String(disc.defaultOdds?.[0] || '1.85'));
+    setBetSelection(disc.category === 'Sports Collectifs' ? 'Victoire Domicile (1)' : 'Vainqueur du match');
+    setBetStake('50');
+    const matchingBk = bankrolls.find((b) => b.sport.toLowerCase().includes(disc.name.toLowerCase()));
+    if (matchingBk) {
+      setBetBankrollId(matchingBk.id);
+    } else {
+      setBetBankrollId('main');
+    }
+    setShowPlaceBetModal(true);
+  };
+
+  const handleConfirmPlaceBet = (e) => {
+    e.preventDefault();
+    if (!selectedDisciplineForBet) return;
+    const stakeNum = parseFloat(betStake) || 50;
+    const oddsNum = parseFloat(betOdds) || 1.85;
+    const potentialGain = (stakeNum * oddsNum).toFixed(2);
+    const bkName = bankrolls.find((b) => b.id === betBankrollId)?.name || 'Bankroll Principale';
+
+    placeBetMutation.mutate({
+      sport: selectedDisciplineForBet.name,
+      sportId: selectedDisciplineForBet.id,
+      bankrollId: betBankrollId,
+      match: betMatch,
+      competition: betCompetition,
+      selection: betSelection,
+      odds: oddsNum,
+      stake: stakeNum,
+      bookmaker: 'Bwin',
+    });
+
+    const newBetItem = {
+      id: Date.now(),
+      date: new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }),
+      match: betMatch,
+      sport: selectedDisciplineForBet.name,
+      bet: betSelection,
+      odds: oddsNum,
+      stake: stakeNum,
+      status: 'pending',
+      profit: `Gain pot. +${(stakeNum * (oddsNum - 1)).toFixed(2)} €`,
+      bankroll: bkName,
+    };
+
+    setTrackedBets([newBetItem, ...trackedBets]);
+
+    // Deduct stake from the chosen bankroll
+    setBankrolls((prev) =>
+      prev.map((b) => {
+        if (b.id === betBankrollId) {
+          return {
+            ...b,
+            current: Math.max(0, +(b.current - stakeNum).toFixed(2)),
+          };
+        }
+        return b;
+      })
+    );
+
+    setShowPlaceBetModal(false);
+    setBetToastMessage({
+      title: 'Pari placé avec succès !',
+      desc: `${stakeNum} € engagés sur ${selectedDisciplineForBet.name} à une cote de ${oddsNum.toFixed(2)} (Gain potentiel : ${potentialGain} €).`,
+    });
+    setTimeout(() => setBetToastMessage(null), 5000);
+  };
 
   // Close account menu on click outside
   useEffect(() => {
@@ -275,8 +371,21 @@ export function AuthenticatedDashboard() {
     setNewStratRules('');
   };
 
+  const disciplines = disciplinesQuery.data?.disciplines || [];
+  const filteredDisciplines = disciplines.filter((disc) => {
+    const matchesCat =
+      disciplineFilterCategory === 'all' || disc.category === disciplineFilterCategory;
+    const matchesSearch =
+      !disciplineSearch.trim() ||
+      disc.name.toLowerCase().includes(disciplineSearch.toLowerCase()) ||
+      disc.competition.toLowerCase().includes(disciplineSearch.toLowerCase()) ||
+      disc.sampleMatch.toLowerCase().includes(disciplineSearch.toLowerCase());
+    return matchesCat && matchesSearch;
+  });
+
   const navItems = [
     { id: 'overview', label: "Vue d'ensemble", icon: Folder, hasSub: false },
+    { id: 'disciplines', label: '35 Disciplines & Cotes', icon: Trophy, hasSub: true },
     { id: 'sports-stats', label: 'Statistiques Multisports', icon: BarChart3, hasSub: true },
     { id: 'bankrolls', label: 'Gestion Multi-Bankrolls', icon: Wallet, hasSub: true },
     { id: 'strategies', label: 'Créateur & Test de Stratégies', icon: Sliders, hasSub: true },
@@ -402,6 +511,20 @@ export function AuthenticatedDashboard() {
             }`}
           >
             Vue d'ensemble
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTabPill('disciplines');
+              setActiveNav('disciplines');
+            }}
+            className={`px-3 py-1 text-xs rounded-md font-medium whitespace-nowrap transition-all ${
+              activeNav === 'disciplines'
+                ? 'bg-white text-zinc-900 border border-zinc-300 shadow-2xs font-semibold'
+                : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50'
+            }`}
+          >
+            35 Disciplines & Cotes (Bwin)
           </button>
           <button
             type="button"
@@ -762,6 +885,33 @@ export function AuthenticatedDashboard() {
                           Ouvrir le tracker <ArrowRight className="w-3 h-3" />
                         </button>
                       </div>
+
+                      {/* Action Row 5: 35 Disciplines & Cotes */}
+                      <div className="py-3 flex items-center justify-between gap-4">
+                        <div className="flex items-start gap-3 min-w-0">
+                          <div className="p-1 text-purple-600 mt-0.5 shrink-0">
+                            <Trophy className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <span className="text-xs font-semibold text-zinc-900 block truncate">
+                              Explorer les 35 disciplines sportives (8 346 cotes réelles Bwin)
+                            </span>
+                            <span className="text-[11px] text-zinc-400 block">
+                              Football US, NHL, NBA, Tennis, Esport, F1 et placement direct de paris
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveNav('disciplines');
+                            setActiveTabPill('disciplines');
+                          }}
+                          className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1 shrink-0 transition-colors"
+                        >
+                          Voir les 35 sports <ArrowRight className="w-3 h-3" />
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -930,6 +1080,201 @@ export function AuthenticatedDashboard() {
                       </div>
                     </div>
                   </div>
+                </div>
+              </div>
+            </div>
+          ) : activeNav === 'disciplines' ? (
+            /* CATALOGUE DES 35 DISCIPLINES SPORTIVES & PLACEMENT DE PARIS */
+            <div className="w-full space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Trophy className="w-5 h-5 text-zinc-800" />
+                    <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-zinc-900">
+                      35 Disciplines & Marchés de Paris
+                    </h1>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      8 346 cotes Bwin
+                    </span>
+                  </div>
+                  <p className="text-xs sm:text-sm text-zinc-500 font-normal">
+                    Catalogue des 35 sports et disciplines issus de la base predictix-api. Cliquez sur « Placer un pari » pour miser instantanément depuis vos bankrolls.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => disciplinesQuery.refetch()}
+                    className="h-8 text-xs gap-1.5 border-zinc-200 text-zinc-700 shadow-2xs"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${disciplinesQuery.isFetching ? 'animate-spin' : ''}`} />
+                    <span>Actualiser ({filteredDisciplines.length} affichés)</span>
+                  </Button>
+                </div>
+              </div>
+
+              {/* 4 Summary Metric Cards */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="p-4 rounded-xl border border-zinc-200 bg-white shadow-2xs space-y-1">
+                  <div className="flex items-center justify-between text-zinc-500 text-xs">
+                    <span>Disciplines Référencées</span>
+                    <Trophy className="w-4 h-4 text-[#1D7CEA]" />
+                  </div>
+                  <div className="text-2xl font-bold font-mono text-zinc-900">35</div>
+                  <div className="text-[11px] text-zinc-400">Collectifs, Raquettes, Esport, Moteurs...</div>
+                </div>
+
+                <div className="p-4 rounded-xl border border-zinc-200 bg-white shadow-2xs space-y-1">
+                  <div className="flex items-center justify-between text-zinc-500 text-xs">
+                    <span>Cotes Capturées</span>
+                    <Percent className="w-4 h-4 text-emerald-600" />
+                  </div>
+                  <div className="text-2xl font-bold font-mono text-zinc-900">8 346</div>
+                  <div className="text-[11px] text-emerald-600 font-medium">Marchés 1X2, Over/Under, Handicap</div>
+                </div>
+
+                <div className="p-4 rounded-xl border border-zinc-200 bg-white shadow-2xs space-y-1">
+                  <div className="flex items-center justify-between text-zinc-500 text-xs">
+                    <span>Fournisseur de Cotes</span>
+                    <Radio className="w-4 h-4 text-amber-500" />
+                  </div>
+                  <div className="text-2xl font-bold text-zinc-900">Bwin</div>
+                  <div className="text-[11px] text-zinc-400">Ingestion continue predictix-api</div>
+                </div>
+
+                <div className="p-4 rounded-xl border border-zinc-200 bg-white shadow-2xs space-y-1">
+                  <div className="flex items-center justify-between text-zinc-500 text-xs">
+                    <span>Événements Observés</span>
+                    <Activity className="w-4 h-4 text-purple-600" />
+                  </div>
+                  <div className="text-2xl font-bold font-mono text-zinc-900">959+</div>
+                  <div className="text-[11px] text-zinc-400">Matchs et courses répertoriés</div>
+                </div>
+              </div>
+
+              {/* Filters & Search Bar */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+                  {[
+                    { id: 'all', label: 'Toutes (35)' },
+                    { id: 'Sports Collectifs', label: 'Sports Collectifs (13)' },
+                    { id: 'Sports Individuels & Précision', label: 'Individuels & Précision (8)' },
+                    { id: 'Sports Mécaniques', label: 'Sports Mécaniques (3)' },
+                    { id: 'Sports de Combat', label: 'Sports de Combat (2)' },
+                    { id: 'Esport & Gaming', label: 'Esport & Gaming (4)' },
+                    { id: 'Courses Hippiques', label: 'Courses Hippiques (1)' },
+                    { id: "Sports d'Hiver", label: "Sports d'Hiver (4)" },
+                  ].map((cat) => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setDisciplineFilterCategory(cat.id)}
+                      className={`px-3 py-1.5 rounded-md font-medium whitespace-nowrap transition-all ${
+                        disciplineFilterCategory === cat.id
+                          ? 'bg-zinc-900 text-white shadow-2xs'
+                          : 'bg-zinc-50 hover:bg-zinc-100 text-zinc-600 border border-zinc-200'
+                      }`}
+                    >
+                      {cat.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="relative">
+                  <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-2.5" />
+                  <Input
+                    type="text"
+                    placeholder="Filtrer les 35 disciplines par nom, ligue ou match (ex: Football, NFL, Tennis, CS2, Basket, Boxe...)"
+                    value={disciplineSearch}
+                    onChange={(e) => setDisciplineSearch(e.target.value)}
+                    className="pl-9 text-xs h-9"
+                  />
+                </div>
+              </div>
+
+              {/* Table of 35 Disciplines */}
+              <div className="rounded-xl border border-zinc-200 bg-white overflow-hidden shadow-2xs">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-zinc-50 border-b border-zinc-200/80 text-zinc-500 text-[11px] font-medium">
+                      <tr>
+                        <th className="py-3 px-4">Discipline</th>
+                        <th className="py-3 px-4">Catégorie</th>
+                        <th className="py-3 px-4">Compétition Référente</th>
+                        <th className="py-3 px-4">Affiche Récente / Événement</th>
+                        <th className="py-3 px-4 text-center">Cotes Disponibles</th>
+                        <th className="py-3 px-4 text-center">Cotes Indicatives</th>
+                        <th className="py-3 px-4 text-right">Parier</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100 text-zinc-800">
+                      {filteredDisciplines.map((disc) => (
+                        <tr key={disc.id} className="hover:bg-zinc-50/80 transition-colors">
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-7 h-7 rounded-md bg-zinc-100 border border-zinc-200 flex items-center justify-center font-bold text-[11px] text-zinc-700 font-mono">
+                                {disc.id}
+                              </div>
+                              <div>
+                                <span className="font-semibold text-zinc-900 block">{disc.name}</span>
+                                {disc.isEsport && (
+                                  <span className="text-[10px] text-purple-600 font-medium">Esport Officiel</span>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            <span className="inline-block px-2 py-0.5 rounded text-[10px] font-medium bg-zinc-100 text-zinc-700 border border-zinc-200">
+                              {disc.category}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-zinc-700 max-w-[200px] truncate font-medium">
+                            {disc.competition}
+                          </td>
+                          <td className="py-3.5 px-4 text-zinc-900 max-w-[240px] truncate">
+                            {disc.sampleMatch}
+                          </td>
+                          <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                            {disc.quotesCount > 0 ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 font-mono">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                {disc.quotesCount.toLocaleString('fr-FR')} cotes
+                              </span>
+                            ) : (
+                              <span className="text-zinc-400 font-mono text-[11px]">En attente flux</span>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                            <div className="inline-flex items-center gap-1.5 font-mono">
+                              {(disc.defaultOdds || [1.85, 3.20]).map((odd, idx) => (
+                                <button
+                                  key={idx}
+                                  type="button"
+                                  onClick={() => handleOpenPlaceBet(disc, odd)}
+                                  className="px-2 py-0.5 rounded bg-zinc-100 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 border border-zinc-200 text-zinc-800 font-semibold text-[11px] transition-colors"
+                                  title={`Parier à cote ${odd.toFixed(2)}`}
+                                >
+                                  {odd.toFixed(2)}
+                                </button>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                            <Button
+                              size="sm"
+                              onClick={() => handleOpenPlaceBet(disc)}
+                              className="h-7 text-xs bg-[#1D7CEA] hover:bg-blue-600 text-white font-medium gap-1 shadow-2xs"
+                            >
+                              <Plus className="w-3 h-3" />
+                              <span>Placer un pari</span>
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
@@ -1318,7 +1663,7 @@ export function AuthenticatedDashboard() {
                 </div>
 
                 <Button
-                  onClick={() => alert('Formulaire d’ajout de pari')}
+                  onClick={() => handleOpenPlaceBet(disciplines[0] || { id: 4, name: 'Football', category: 'Sports Collectifs', competition: 'Ligue 1', sampleMatch: 'Paris vs Marseille', defaultOdds: [1.85] })}
                   className="bg-zinc-900 text-white hover:bg-zinc-800 text-xs gap-1.5 shadow-sm"
                 >
                   <Plus className="w-3.5 h-3.5" />
@@ -1329,7 +1674,7 @@ export function AuthenticatedDashboard() {
               <div className="rounded-xl border border-zinc-200 bg-white overflow-hidden shadow-2xs">
                 <div className="p-4 border-b border-zinc-100 flex items-center justify-between text-xs">
                   <span className="font-semibold text-zinc-900">Journal d'Activité Récente</span>
-                  <span className="text-zinc-500 font-mono">{betsTrackerData.length} paris enregistrés</span>
+                  <span className="text-zinc-500 font-mono">{trackedBets.length} paris enregistrés</span>
                 </div>
 
                 <div className="overflow-x-auto">
@@ -1348,7 +1693,7 @@ export function AuthenticatedDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-100 text-zinc-800">
-                      {betsTrackerData.map((bet) => (
+                      {trackedBets.map((bet) => (
                         <tr key={bet.id} className="hover:bg-zinc-50/80 transition-colors">
                           <td className="py-3 px-4 text-zinc-400 font-mono">{bet.date}</td>
                           <td className="py-3 px-4">
@@ -1359,21 +1704,23 @@ export function AuthenticatedDashboard() {
                           <td className="py-3 px-4 font-semibold text-zinc-900">{bet.match}</td>
                           <td className="py-3 px-4 text-zinc-600">{bet.bet}</td>
                           <td className="py-3 px-4 text-zinc-500">{bet.bankroll}</td>
-                          <td className="py-3 px-4 font-mono font-semibold">{bet.odds.toFixed(2)}</td>
+                          <td className="py-3 px-4 font-mono font-semibold">{Number(bet.odds).toFixed(2)}</td>
                           <td className="py-3 px-4">{bet.stake} €</td>
                           <td className="py-3 px-4">
                             <span
                               className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
                                 bet.status === 'won'
                                   ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : bet.status === 'pending'
+                                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
                                   : 'bg-rose-50 text-rose-700 border border-rose-200'
                               }`}
                             >
-                              {bet.status === 'won' ? 'Gagné' : 'Perdu'}
+                              {bet.status === 'won' ? 'Gagné' : bet.status === 'pending' ? 'En cours' : 'Perdu'}
                             </span>
                           </td>
                           <td className={`py-3 px-4 text-right font-semibold font-mono ${
-                            bet.status === 'won' ? 'text-emerald-600' : 'text-rose-600'
+                            bet.status === 'won' ? 'text-emerald-600' : bet.status === 'pending' ? 'text-amber-600' : 'text-rose-600'
                           }`}>
                             {bet.profit}
                           </td>
@@ -1617,6 +1964,204 @@ export function AuthenticatedDashboard() {
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* PLACE BET MODAL FOR ANY OF THE 35 DISCIPLINES */}
+      {showPlaceBetModal && selectedDisciplineForBet && (
+        <div className="fixed inset-0 bg-zinc-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in-50">
+          <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-6 shadow-2xl space-y-4 animate-in zoom-in-95 text-xs">
+            <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center font-bold text-blue-600 font-mono">
+                  {selectedDisciplineForBet.id}
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-zinc-900">
+                    Placer un Pari • {selectedDisciplineForBet.name}
+                  </h3>
+                  <p className="text-[11px] text-zinc-500">
+                    {selectedDisciplineForBet.competition}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPlaceBetModal(false)}
+                className="text-zinc-400 hover:text-zinc-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmPlaceBet} className="space-y-4">
+              {/* Select Bankroll */}
+              <div className="space-y-1">
+                <label className="font-semibold text-zinc-700 block">
+                  Portefeuille Bankroll à débiter
+                </label>
+                <select
+                  value={betBankrollId}
+                  onChange={(e) => setBetBankrollId(e.target.value)}
+                  className="w-full text-xs p-2 rounded-md border border-zinc-200 bg-white text-zinc-900 focus:outline-none"
+                >
+                  {bankrolls.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} (Solde : {b.current.toLocaleString('fr-FR')} € • ROI {b.roi})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Match / Événement */}
+              <div className="space-y-1">
+                <label className="font-semibold text-zinc-700 block">
+                  Match / Événement
+                </label>
+                <Input
+                  type="text"
+                  value={betMatch}
+                  onChange={(e) => setBetMatch(e.target.value)}
+                  required
+                  placeholder="Ex: Équipe A vs Équipe B"
+                  className="text-xs"
+                />
+              </div>
+
+              {/* Sélection / Type de pari */}
+              <div className="space-y-1">
+                <label className="font-semibold text-zinc-700 block">
+                  Intitulé du pari / Sélection
+                </label>
+                <Input
+                  type="text"
+                  value={betSelection}
+                  onChange={(e) => setBetSelection(e.target.value)}
+                  required
+                  placeholder="Ex: Victoire Domicile, Plus de 2.5 Buts, etc."
+                  className="text-xs"
+                />
+              </div>
+
+              {/* Cote & Mise */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-zinc-700 block">
+                    Cote décimale
+                  </label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="1.01"
+                    value={betOdds}
+                    onChange={(e) => setBetOdds(e.target.value)}
+                    required
+                    className="text-xs font-mono font-semibold"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-zinc-700 block">
+                    Mise engagée (€)
+                  </label>
+                  <Input
+                    type="number"
+                    step="1"
+                    min="1"
+                    value={betStake}
+                    onChange={(e) => setBetStake(e.target.value)}
+                    required
+                    className="text-xs font-mono font-semibold"
+                  />
+                </div>
+              </div>
+
+              {/* Quick stake buttons */}
+              <div className="flex items-center gap-1.5 pt-0.5">
+                {[10, 25, 50, 100, 200].map((amount) => (
+                  <button
+                    key={amount}
+                    type="button"
+                    onClick={() => setBetStake(String(amount))}
+                    className={`px-2 py-1 rounded text-[11px] font-mono border transition-colors ${
+                      betStake === String(amount)
+                        ? 'bg-zinc-900 text-white border-zinc-900 font-bold'
+                        : 'bg-zinc-50 hover:bg-zinc-100 text-zinc-700 border-zinc-200'
+                    }`}
+                  >
+                    +{amount}€
+                  </button>
+                ))}
+              </div>
+
+              {/* Financial Simulation Card */}
+              <div className="p-3 rounded-lg bg-zinc-50 border border-zinc-200/80 space-y-1.5 text-xs">
+                <div className="flex justify-between items-center text-zinc-600">
+                  <span>Mise engagée :</span>
+                  <span className="font-mono font-semibold text-zinc-900">
+                    {(parseFloat(betStake) || 0).toFixed(2)} €
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-zinc-600">
+                  <span>Cote totale :</span>
+                  <span className="font-mono font-semibold text-blue-600">
+                    {(parseFloat(betOdds) || 1).toFixed(2)}
+                  </span>
+                </div>
+                <div className="border-t border-zinc-200/80 pt-1.5 flex justify-between items-center">
+                  <span className="font-semibold text-zinc-900">Gain potentiel brut :</span>
+                  <span className="font-mono font-bold text-sm text-emerald-600">
+                    {((parseFloat(betStake) || 0) * (parseFloat(betOdds) || 1)).toFixed(2)} €
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-[11px] text-zinc-500">
+                  <span>Bénéfice net estimé :</span>
+                  <span className="font-mono font-medium text-emerald-600">
+                    +{((parseFloat(betStake) || 0) * ((parseFloat(betOdds) || 1) - 1)).toFixed(2)} €
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-100">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowPlaceBetModal(false)}
+                  className="text-xs"
+                >
+                  Annuler
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={placeBetMutation.isPending}
+                  className="bg-[#1D7CEA] hover:bg-blue-600 text-white text-xs gap-1 font-semibold"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{placeBetMutation.isPending ? 'Validation...' : 'Confirmer et Placer le Pari'}</span>
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* FLOATING TOAST CONFIRMATION */}
+      {betToastMessage && (
+        <div className="fixed top-14 right-6 z-50 max-w-md bg-emerald-900 text-white p-3.5 rounded-lg shadow-xl border border-emerald-700 animate-in fade-in-50 slide-in-from-top-2 flex items-start gap-3">
+          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+          <div className="flex-1 text-xs">
+            <p className="font-semibold">{betToastMessage.title}</p>
+            <p className="text-emerald-200 mt-0.5">{betToastMessage.desc}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setBetToastMessage(null)}
+            className="text-emerald-300 hover:text-white"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 
