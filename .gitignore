@@ -43,4 +43,4 @@ backend/scratch-*
 backend/scratch_*
 backend/absences_test.json
 backend/src/list-db-matches.js
-db/
+/db/
