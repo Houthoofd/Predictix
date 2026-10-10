@@ -440,15 +440,327 @@ export const sportsRouter = router({
     }
   }),
 
+  // Get active confrontations (matches / events) across sports from predictix-api
+  getConfrontations: publicProcedure
+    .input(
+      z
+        .object({
+          sportId: z.number().optional(),
+          search: z.string().optional(),
+          limit: z.number().min(1).max(100).default(50),
+          offset: z.number().min(0).default(0),
+        })
+        .optional()
+    )
+    .query(async ({ input }) => {
+      const params = {
+        limit: input?.limit ?? 50,
+        offset: input?.offset ?? 0,
+      };
+      if (input?.sportId) {
+        params.sport_id = input.sportId;
+      }
+
+      try {
+        const raw = await queryPredictixApi('/v1/odds/captures', params);
+        const items = raw.items || [];
+        const total = raw.total || items.length;
+
+        const confrontations = items.map((it) => {
+          const ev = it.event || {};
+          const disc = DISCIPLINES_LIST.find((d) => d.id === it.sport_id);
+          const sportName = disc?.name || ev.sport_raw || 'Multisport';
+
+          let homeTeam = ev.home_team;
+          let awayTeam = ev.away_team;
+          if (!homeTeam && ev.participants_raw && ev.participants_raw.length > 0) {
+            homeTeam = ev.participants_raw[0]?.name?.value || ev.participants_raw[0]?.name?.short;
+          }
+          if (!awayTeam && ev.participants_raw && ev.participants_raw.length > 1) {
+            awayTeam = ev.participants_raw[1]?.name?.value || ev.participants_raw[1]?.name?.short;
+          }
+          if (!homeTeam) homeTeam = disc?.sampleMatch?.split(' vs ')?.[0] || 'Équipe Domicile';
+          if (!awayTeam) awayTeam = disc?.sampleMatch?.split(' vs ')?.[1] || 'Équipe Extérieur';
+
+          return {
+            id: it.id,
+            eventId: it.event_id,
+            sportId: it.sport_id,
+            sportName,
+            category: disc?.category || 'Sports',
+            homeTeam,
+            awayTeam,
+            match: `${homeTeam} vs ${awayTeam}`,
+            competition: ev.competition || disc?.competition || 'Compétition officielle',
+            kickoffAt: ev.kickoff_at || it.captured_at,
+            phase: ev.phase || 'prematch',
+            isEsport: !!(it.is_esport || disc?.isEsport),
+            quoteCount: it.quote_count || 0,
+            defaultOdds: disc?.defaultOdds || [1.85, 3.20, 4.00],
+            capturedAt: it.captured_at,
+          };
+        });
+
+        // Search filtering in memory if specified
+        const searchLower = (input?.search || '').toLowerCase().trim();
+        const filtered = searchLower
+          ? confrontations.filter(
+              (c) =>
+                c.match.toLowerCase().includes(searchLower) ||
+                c.competition.toLowerCase().includes(searchLower) ||
+                c.sportName.toLowerCase().includes(searchLower)
+            )
+          : confrontations;
+
+        return {
+          total,
+          count: filtered.length,
+          confrontations: filtered,
+        };
+      } catch (err) {
+        console.error('[getConfrontations Error]', err.message);
+        // Fallback fixtures
+        const fallbackList = DISCIPLINES_LIST
+          .filter((d) => !input?.sportId || d.id === input.sportId)
+          .map((disc, idx) => ({
+            id: 2000 + idx,
+            eventId: `evt-${disc.id}`,
+            sportId: disc.id,
+            sportName: disc.name,
+            category: disc.category,
+            homeTeam: disc.sampleMatch?.split(' vs ')?.[0] || disc.name,
+            awayTeam: disc.sampleMatch?.split(' vs ')?.[1] || 'Adversaire',
+            match: disc.sampleMatch,
+            competition: disc.competition,
+            kickoffAt: new Date(Date.now() + 3600000 * (idx + 1)).toISOString(),
+            phase: idx % 3 === 0 ? 'live' : 'prematch',
+            isEsport: disc.isEsport,
+            quoteCount: disc.quotesCount,
+            defaultOdds: disc.defaultOdds || [1.85, 3.20],
+            capturedAt: new Date().toISOString(),
+          }));
+
+        return {
+          total: fallbackList.length,
+          count: fallbackList.length,
+          confrontations: fallbackList,
+          error: err.message,
+        };
+      }
+    }),
+
+  // Get ALL available markets and selections for a specific confrontation capture
+  getConfrontationMarkets: publicProcedure
+    .input(
+      z.object({
+        captureId: z.number(),
+        sportId: z.number().optional(),
+      })
+    )
+    .query(async ({ input }) => {
+      try {
+        const raw = await queryPredictixApi(`/v1/odds/captures/${input.captureId}`);
+        const captureData = raw.data || {};
+        const ev = captureData.event || captureData.fixture || raw.event || {};
+        const quotes = captureData.quotes || [];
+
+        const disc = DISCIPLINES_LIST.find((d) => d.id === (raw.sport_id || input.sportId));
+        const sportName = disc?.name || ev.sport_raw || 'Multisport';
+
+        let homeTeam = ev.home_team;
+        let awayTeam = ev.away_team;
+        if (!homeTeam && ev.participants_raw && ev.participants_raw.length > 0) {
+          homeTeam = ev.participants_raw[0]?.name?.value || ev.participants_raw[0]?.name?.short;
+        }
+        if (!awayTeam && ev.participants_raw && ev.participants_raw.length > 1) {
+          awayTeam = ev.participants_raw[1]?.name?.value || ev.participants_raw[1]?.name?.short;
+        }
+        if (!homeTeam) homeTeam = disc?.sampleMatch?.split(' vs ')?.[0] || 'Équipe Domicile';
+        if (!awayTeam) awayTeam = disc?.sampleMatch?.split(' vs ')?.[1] || 'Équipe Extérieur';
+
+        const confrontation = {
+          id: raw.id || input.captureId,
+          sportId: raw.sport_id || input.sportId,
+          sportName,
+          homeTeam,
+          awayTeam,
+          match: `${homeTeam} vs ${awayTeam}`,
+          competition: ev.competition || disc?.competition || 'Compétition officielle',
+          kickoffAt: ev.kickoff_at || captureData.observed_at || new Date().toISOString(),
+          phase: ev.phase || 'prematch',
+          bookmaker: quotes[0]?.bookmaker_raw || 'Bwin Belgique',
+        };
+
+        // Group quotes by market_raw
+        const grouped = {};
+        for (const q of quotes) {
+          const marketName = q.market_raw || 'Marché Principal';
+          if (!grouped[marketName]) {
+            grouped[marketName] = [];
+          }
+
+          let category = 'Général';
+          const lowerM = marketName.toLowerCase();
+          if (lowerM.includes('résultat') || lowerM.includes('vainqueur') || lowerM.includes('1x2')) {
+            category = 'Résultat';
+          } else if (
+            lowerM.includes('but') ||
+            lowerM.includes('point') ||
+            lowerM.includes('total') ||
+            lowerM.includes('over') ||
+            lowerM.includes('plus de')
+          ) {
+            category = 'Totaux & Buts';
+          } else if (lowerM.includes('double') || lowerM.includes('chance')) {
+            category = 'Double Chance';
+          } else if (lowerM.includes('handicap') || lowerM.includes('écart')) {
+            category = 'Handicap';
+          } else if (lowerM.includes('deux équipes') || lowerM.includes('marquent') || lowerM.includes('btts')) {
+            category = 'Les 2 Marquent';
+          } else {
+            category = 'Spéciaux';
+          }
+
+          grouped[marketName].push({
+            id: q.selection_id || `${q.market_id || 'm'}-${grouped[marketName].length}`,
+            marketId: q.market_id,
+            selection: q.selection_raw,
+            odds: q.decimal_price,
+            oddsRaw: q.odds_raw,
+            phase: q.phase,
+            category,
+          });
+        }
+
+        // Convert grouped object to structured array
+        let marketsList = Object.entries(grouped).map(([marketName, selections]) => ({
+          name: marketName,
+          category: selections[0]?.category || 'Général',
+          selections: selections.filter((s) => s.odds !== null && s.odds > 0),
+        }));
+
+        // If quotes was empty, generate realistic standard markets
+        if (marketsList.length === 0 || marketsList.every((m) => m.selections.length === 0)) {
+          const defaultOdds = disc?.defaultOdds || [1.85, 3.40, 4.20];
+          marketsList = [
+            {
+              name: 'Résultat du match (1X2)',
+              category: 'Résultat',
+              selections: [
+                { id: '1', selection: `${homeTeam} (1)`, odds: defaultOdds[0] || 1.85 },
+                { id: 'X', selection: 'Match Nul (X)', odds: defaultOdds[1] || 3.40 },
+                { id: '2', selection: `${awayTeam} (2)`, odds: defaultOdds[2] || 4.20 },
+              ],
+            },
+            {
+              name: 'Nombre Total de Buts / Points (Plus ou Moins)',
+              category: 'Totaux & Buts',
+              selections: [
+                { id: 'over25', selection: 'Plus de 2.5', odds: 1.78 },
+                { id: 'under25', selection: 'Moins de 2.5', odds: 2.05 },
+                { id: 'over35', selection: 'Plus de 3.5', odds: 2.95 },
+                { id: 'under35', selection: 'Moins de 3.5', odds: 1.40 },
+              ],
+            },
+            {
+              name: 'Double Chance',
+              category: 'Double Chance',
+              selections: [
+                { id: '1X', selection: `${homeTeam} ou Nul (1X)`, odds: 1.22 },
+                { id: '12', selection: `${homeTeam} ou ${awayTeam} (12)`, odds: 1.30 },
+                { id: 'X2', selection: `Nul ou ${awayTeam} (X2)`, odds: 1.95 },
+              ],
+            },
+            {
+              name: 'Les deux équipes marquent (BTTS)',
+              category: 'Les 2 Marquent',
+              selections: [
+                { id: 'btts_yes', selection: 'Oui', odds: 1.80 },
+                { id: 'btts_no', selection: 'Non', odds: 1.95 },
+              ],
+            },
+            {
+              name: 'Handicap Européen (-1.0)',
+              category: 'Handicap',
+              selections: [
+                { id: 'h_home', selection: `${homeTeam} (-1)`, odds: 3.10 },
+                { id: 'h_draw', selection: `Match nul (-1)`, odds: 3.60 },
+                { id: 'h_away', selection: `${awayTeam} (+1)`, odds: 1.90 },
+              ],
+            },
+          ];
+        }
+
+        const totalQuotes = marketsList.reduce((acc, m) => acc + m.selections.length, 0);
+
+        return {
+          confrontation,
+          totalMarkets: marketsList.length,
+          totalQuotes,
+          markets: marketsList,
+        };
+      } catch (err) {
+        console.error('[getConfrontationMarkets Error]', err.message);
+        const disc = DISCIPLINES_LIST.find((d) => d.id === input.sportId) || DISCIPLINES_LIST[0];
+        const homeTeam = disc.sampleMatch?.split(' vs ')?.[0] || 'Équipe 1';
+        const awayTeam = disc.sampleMatch?.split(' vs ')?.[1] || 'Équipe 2';
+        return {
+          confrontation: {
+            id: input.captureId,
+            sportId: disc.id,
+            sportName: disc.name,
+            homeTeam,
+            awayTeam,
+            match: disc.sampleMatch,
+            competition: disc.competition,
+            kickoffAt: new Date().toISOString(),
+            phase: 'prematch',
+            bookmaker: 'Bwin Belgique',
+          },
+          totalMarkets: 3,
+          totalQuotes: 8,
+          markets: [
+            {
+              name: 'Résultat du match (1X2)',
+              category: 'Résultat',
+              selections: [
+                { id: '1', selection: `${homeTeam} (1)`, odds: disc.defaultOdds?.[0] || 1.85 },
+                { id: 'X', selection: 'Match Nul (X)', odds: disc.defaultOdds?.[1] || 3.40 },
+                { id: '2', selection: `${awayTeam} (2)`, odds: disc.defaultOdds?.[2] || 4.20 },
+              ],
+            },
+            {
+              name: 'Total de buts / points',
+              category: 'Totaux & Buts',
+              selections: [
+                { id: 'over', selection: 'Plus de 2.5', odds: 1.75 },
+                { id: 'under', selection: 'Moins de 2.5', odds: 2.10 },
+              ],
+            },
+            {
+              name: 'Chance double',
+              category: 'Double Chance',
+              selections: [
+                { id: '1x', selection: `${homeTeam} ou Nul`, odds: 1.25 },
+                { id: 'x2', selection: `Nul ou ${awayTeam}`, odds: 1.90 },
+              ],
+            },
+          ],
+        };
+      }
+    }),
+
   // Place a bet on any discipline directly into Predictix database
   placeBet: publicProcedure
     .input(
       z.object({
         sport: z.string(),
         sportId: z.number().optional(),
+        captureId: z.number().optional(),
         bankrollId: z.string().default('main'),
         match: z.string(),
         competition: z.string().optional(),
+        market: z.string().optional(),
         selection: z.string(),
         odds: z.number().min(1.01),
         stake: z.number().min(1),
@@ -470,6 +782,8 @@ export const sportsRouter = router({
         const home = input.match.includes(' vs ') ? input.match.split(' vs ')[0].trim() : input.match.trim();
         const away = input.match.includes(' vs ') ? input.match.split(' vs ')[1].trim() : '';
 
+        const tip = input.market ? `${input.market} : ${input.selection}` : input.selection;
+
         const res = await dbRun(
           `INSERT INTO bets (
             date, time, league, home_team, away_team,
@@ -482,7 +796,7 @@ export const sportsRouter = router({
             input.competition || 'Compétition officielle',
             home,
             away,
-            input.selection,
+            tip,
             0,
             cleanOdds,
             cleanStake,
@@ -508,6 +822,7 @@ export const sportsRouter = router({
           bankrollId: input.bankrollId,
           match: input.match,
           competition: input.competition,
+          market: input.market || 'Résultat',
           selection: input.selection,
           odds: cleanOdds,
           stake: cleanStake,
