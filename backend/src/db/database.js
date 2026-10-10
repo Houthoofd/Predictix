@@ -16,7 +16,7 @@ if (!effectiveDbPath && (process.env.VITEST || process.env.NODE_ENV === 'test'))
   process.env.PREDICTIX_DB_PATH = effectiveDbPath;
   console.warn(`[Database] Test environment detected without PREDICTIX_DB_PATH. Guard activated: using isolated temp database: ${effectiveDbPath}`);
 }
-const dbPath = effectiveDbPath || defaultDbPath;
+const dbPath = effectiveDbPath || (process.env.DATABASE_PATH ? path.resolve(process.env.DATABASE_PATH) : (process.env.DB_PATH ? path.resolve(process.env.DB_PATH) : defaultDbPath));
 const dbDir = path.dirname(dbPath);
 try {
   if (!fs.existsSync(dbDir)) {
