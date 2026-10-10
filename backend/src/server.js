@@ -1,6 +1,9 @@
 import './utils/logger.js';
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
+import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -14,11 +17,35 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Trust reverse proxy (Cloudflare Tunnel / Nginx) to get accurate client IP
+app.set('trust proxy', 1);
+
+// Security headers (keep relaxed CSP to allow React client assets/SVGs)
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+  })
+);
+
 // Enable CORS
 app.use(cors());
 
+// Cookie parser for secure httpOnly sessions
+app.use(cookieParser());
+
 // Body parser
 app.use(express.json());
+
+// Global API rate limiting (protects from abusive floods)
+const apiRateLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute window
+  max: 300, // max 300 requests per minute per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de requêtes. Veuillez patienter une minute.' },
+});
+app.use('/api', apiRateLimiter);
 
 // Disable caching for all API responses
 app.use((req, res, next) => {
