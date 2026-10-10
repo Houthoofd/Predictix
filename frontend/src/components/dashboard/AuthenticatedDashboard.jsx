@@ -49,31 +49,38 @@ export function AuthenticatedDashboard() {
   const { user, logout } = useAuth();
 
   return (
-    <div className="min-h-screen bg-[#fafafa] text-zinc-900 flex flex-col">
+    <div className="min-h-screen bg-[#fafbfc] text-[#0F172A] flex flex-col">
       {/* Top Navigation Bar */}
-      <header className="sticky top-0 z-50 border-b border-zinc-200 bg-white/95 backdrop-blur-md">
+      <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/95 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           {/* Logo & Brand */}
-          <div className="flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded-lg bg-zinc-900 text-white flex items-center justify-center">
-              <TrendingUp className="w-4 h-4 text-white" />
+          <div className="flex items-center gap-3">
+            <div className="relative group">
+              <div className="absolute -inset-1 rounded-xl bg-gradient-to-r from-[#0CBFAA] via-[#1D7CEA] to-[#0EAFE9] opacity-25 blur-xs group-hover:opacity-40 transition" />
+              <div className="relative h-9 w-9 rounded-lg bg-white border border-slate-100 flex items-center justify-center p-1.5 shadow-2xs">
+                <img
+                  src="/predictix-logo.png"
+                  alt="Predictix Logo"
+                  className="h-full w-full object-contain"
+                />
+              </div>
             </div>
-            <span className="text-lg font-bold tracking-tight text-zinc-900">
+            <span className="text-lg font-bold tracking-tight text-[#0F172A]">
               Predictix
             </span>
-            <Badge variant="secondary" className="hidden sm:inline-flex ml-2 text-xs font-normal">
-              shadcn/ui + tRPC
+            <Badge variant="brand" className="hidden sm:inline-flex ml-1.5 text-xs">
+              tRPC + React Query
             </Badge>
           </div>
 
           {/* User profile & Logout */}
           <div className="flex items-center gap-3">
             <div className="hidden md:flex flex-col text-right">
-              <span className="text-xs font-medium text-zinc-900">{user?.name || 'Administrateur'}</span>
-              <span className="text-[11px] text-zinc-500 font-mono">{user?.email || 'admin@predictix.io'}</span>
+              <span className="text-xs font-semibold text-[#0F172A]">{user?.name || 'Administrateur'}</span>
+              <span className="text-[11px] text-slate-500 font-mono">{user?.email || 'admin@predictix.io'}</span>
             </div>
 
-            <div className="h-8 w-8 rounded-full bg-zinc-100 border border-zinc-200 flex items-center justify-center text-zinc-700">
+            <div className="h-8 w-8 rounded-full bg-[#1D7CEA]/10 border border-[#1D7CEA]/20 flex items-center justify-center text-[#1D7CEA]">
               <User className="w-4 h-4" />
             </div>
 
@@ -81,7 +88,7 @@ export function AuthenticatedDashboard() {
               variant="outline"
               size="sm"
               onClick={logout}
-              className="gap-1.5 text-xs text-zinc-700 hover:text-zinc-900 ml-1"
+              className="gap-1.5 text-xs text-slate-700 hover:text-[#0F172A] hover:border-slate-300 ml-1"
             >
               <LogOut className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Déconnexion</span>
@@ -93,29 +100,31 @@ export function AuthenticatedDashboard() {
       {/* Main Content Dashboard */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
         {/* Welcome Section */}
-        <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 relative overflow-hidden">
+          <div className="h-[2px] w-full absolute top-0 left-0 bg-gradient-to-r from-[#0CBFAA] via-[#1D7CEA] to-[#0EAFE9]" />
+          
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <Badge variant="success" className="gap-1 text-[11px]">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+              <Badge variant="teal" className="gap-1.5 text-[11px]">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#0CBFAA]" />
                 Session active
               </Badge>
-              <span className="text-xs text-zinc-500">Style blanc & épuré</span>
+              <span className="text-xs text-slate-500">Design harmonisé avec le logo</span>
             </div>
-            <h1 className="text-2xl font-bold tracking-tight text-zinc-900">
+            <h1 className="text-2xl font-bold tracking-tight text-[#0F172A]">
               Bonjour, {user?.name || 'Administrateur'}
             </h1>
-            <p className="text-sm text-zinc-500 max-w-2xl">
-              Votre interface Predictix est prête avec <strong>shadcn/ui</strong>, <strong>React Query</strong>, <strong>tRPC</strong>, <strong>Zod</strong> et <strong>Recharts</strong>.
+            <p className="text-sm text-slate-500 max-w-2xl">
+              Votre tableau de bord Predictix applique la palette officielle : <strong>Bleu Électrique</strong>, <strong>Cyan Aérien</strong>, <strong>Menthe Émeraude</strong> et <strong>Bleu Nuit</strong>.
             </p>
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
             <Button
-              variant="default"
+              variant="brand"
               size="sm"
-              className="gap-2 bg-zinc-900 text-white hover:bg-zinc-800"
-              onClick={() => alert('Interface épurée prête pour la suite du projet !')}
+              className="gap-2"
+              onClick={() => alert('Interface harmonisée avec le logo !')}
             >
               <Sparkles className="w-3.5 h-3.5" />
               Espace Prêt
@@ -125,75 +134,75 @@ export function AuthenticatedDashboard() {
 
         {/* Top KPIs Row */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="p-5 border-zinc-200 bg-white">
+          <Card className="p-5 border-slate-200/80 bg-white shadow-xs hover:border-[#1D7CEA]/30 transition-all">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-zinc-500 font-medium uppercase tracking-wider">Bankroll</span>
-              <div className="p-1.5 rounded-md bg-zinc-100 text-zinc-800">
+              <span className="text-xs text-slate-500 font-medium uppercase tracking-wider">Bankroll</span>
+              <div className="p-2 rounded-lg bg-[#1D7CEA]/10 text-[#1D7CEA]">
                 <TrendingUp className="w-4 h-4" />
               </div>
             </div>
             <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-zinc-900">1 450.00 €</span>
-              <span className="text-xs font-semibold text-emerald-600">+45.0%</span>
+              <span className="text-2xl font-bold text-[#0F172A]">1 450.00 €</span>
+              <span className="text-xs font-semibold text-[#078575] bg-[#0CBFAA]/10 px-1.5 py-0.5 rounded">+45.0%</span>
             </div>
-            <span className="text-[11px] text-zinc-400 mt-1 block">Capital initial : 1 000.00 €</span>
+            <span className="text-[11px] text-slate-400 mt-1 block">Capital initial : 1 000.00 €</span>
           </Card>
 
-          <Card className="p-5 border-zinc-200 bg-white">
+          <Card className="p-5 border-slate-200/80 bg-white shadow-xs hover:border-[#0EAFE9]/40 transition-all">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-zinc-500 font-medium uppercase tracking-wider">Taux de Réussite</span>
-              <div className="p-1.5 rounded-md bg-zinc-100 text-zinc-800">
+              <span className="text-xs text-slate-500 font-medium uppercase tracking-wider">Taux de Réussite</span>
+              <div className="p-2 rounded-lg bg-[#0EAFE9]/10 text-[#0284C7]">
                 <Target className="w-4 h-4" />
               </div>
             </div>
             <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-zinc-900">71.2%</span>
-              <span className="text-xs text-zinc-500">51 / 71</span>
+              <span className="text-2xl font-bold text-[#0F172A]">71.2%</span>
+              <span className="text-xs text-slate-500">51 / 71</span>
             </div>
-            <span className="text-[11px] text-zinc-400 mt-1 block">Modèles IA calibrés</span>
+            <span className="text-[11px] text-slate-400 mt-1 block">Modèles IA calibrés</span>
           </Card>
 
-          <Card className="p-5 border-zinc-200 bg-white">
+          <Card className="p-5 border-slate-200/80 bg-white shadow-xs hover:border-[#0CBFAA]/40 transition-all">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-zinc-500 font-medium uppercase tracking-wider">ROI Global</span>
-              <div className="p-1.5 rounded-md bg-zinc-100 text-zinc-800">
+              <span className="text-xs text-slate-500 font-medium uppercase tracking-wider">ROI Global</span>
+              <div className="p-2 rounded-lg bg-[#0CBFAA]/10 text-[#078575]">
                 <Activity className="w-4 h-4" />
               </div>
             </div>
             <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-zinc-900">+18.4%</span>
-              <span className="text-xs text-emerald-600">Edge 6.8%</span>
+              <span className="text-2xl font-bold text-[#078575]">+18.4%</span>
+              <span className="text-xs text-[#0284C7] bg-[#0EAFE9]/10 px-1.5 py-0.5 rounded font-medium">Edge 6.8%</span>
             </div>
-            <span className="text-[11px] text-zinc-400 mt-1 block">Value bets optimisés</span>
+            <span className="text-[11px] text-slate-400 mt-1 block">Value bets optimisés</span>
           </Card>
 
-          <Card className="p-5 border-zinc-200 bg-white">
+          <Card className="p-5 border-slate-200/80 bg-white shadow-xs hover:border-slate-300 transition-all">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-zinc-500 font-medium uppercase tracking-wider">Architecture</span>
-              <div className="p-1.5 rounded-md bg-zinc-100 text-zinc-800">
+              <span className="text-xs text-slate-500 font-medium uppercase tracking-wider">Architecture</span>
+              <div className="p-2 rounded-lg bg-[#0F172A]/10 text-[#0F172A]">
                 <Layers className="w-4 h-4" />
               </div>
             </div>
             <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-xl font-bold text-zinc-900">shadcn + tRPC</span>
+              <span className="text-xl font-bold text-[#0F172A]">shadcn + tRPC</span>
             </div>
-            <span className="text-[11px] text-zinc-400 mt-1 block">React Query + Zod</span>
+            <span className="text-[11px] text-slate-400 mt-1 block">React Query + Zod</span>
           </Card>
         </div>
 
         {/* Charts Row with Recharts */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Bankroll AreaChart */}
-          <Card className="lg:col-span-2 border-zinc-200 bg-white p-6 flex flex-col justify-between">
+          <Card className="lg:col-span-2 border-slate-200/90 bg-white p-6 flex flex-col justify-between shadow-xs">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <CardTitle className="text-base font-semibold text-zinc-900">Évolution du Capital</CardTitle>
-                <CardDescription className="text-xs text-zinc-500">
+                <CardTitle className="text-base font-semibold text-[#0F172A]">Évolution du Capital</CardTitle>
+                <CardDescription className="text-xs text-slate-500">
                   Courbe de performance en temps réel avec Recharts
                 </CardDescription>
               </div>
-              <Badge variant="outline" className="text-xs text-zinc-600 border-zinc-200">
-                Recharts Area
+              <Badge variant="sky" className="text-xs">
+                Performance Live
               </Badge>
             </div>
 
@@ -202,21 +211,22 @@ export function AuthenticatedDashboard() {
                 <AreaChart data={bankrollHistoryData}>
                   <defs>
                     <linearGradient id="dashboardAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#18181b" stopOpacity={0.15} />
-                      <stop offset="95%" stopColor="#18181b" stopOpacity={0.0} />
+                      <stop offset="0%" stopColor="#1D7CEA" stopOpacity={0.28} />
+                      <stop offset="60%" stopColor="#0EAFE9" stopOpacity={0.08} />
+                      <stop offset="100%" stopColor="#0CBFAA" stopOpacity={0.0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" />
-                  <XAxis dataKey="date" stroke="#a1a1aa" fontSize={11} tickLine={false} />
-                  <YAxis stroke="#a1a1aa" fontSize={11} tickLine={false} domain={['dataMin - 50', 'dataMax + 50']} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis dataKey="date" stroke="#94a3b8" fontSize={11} tickLine={false} />
+                  <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} domain={['dataMin - 50', 'dataMax + 50']} />
                   <Tooltip
                     content={({ active, payload }) => {
                       if (active && payload && payload.length) {
                         return (
-                          <div className="p-2.5 rounded-md bg-white border border-zinc-200 shadow-md text-xs space-y-0.5">
-                            <div className="font-medium text-zinc-500">{payload[0].payload.date}</div>
-                            <div className="text-sm font-bold text-zinc-900">{payload[0].value} €</div>
-                            <div className={`font-semibold ${payload[0].payload.profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-lg text-xs space-y-1">
+                            <div className="font-medium text-slate-500">{payload[0].payload.date}</div>
+                            <div className="text-base font-bold text-[#0F172A]">{payload[0].value} €</div>
+                            <div className={`font-semibold ${payload[0].payload.profit >= 0 ? 'text-[#078575]' : 'text-rose-600'}`}>
                               {payload[0].payload.profit >= 0 ? '+' : ''}{payload[0].payload.profit} €
                             </div>
                           </div>
@@ -228,8 +238,8 @@ export function AuthenticatedDashboard() {
                   <Area
                     type="monotone"
                     dataKey="bankroll"
-                    stroke="#18181b"
-                    strokeWidth={2}
+                    stroke="#1D7CEA"
+                    strokeWidth={2.5}
                     fill="url(#dashboardAreaGrad)"
                   />
                 </AreaChart>
@@ -238,38 +248,40 @@ export function AuthenticatedDashboard() {
           </Card>
 
           {/* Performance BarChart */}
-          <Card className="border-zinc-200 bg-white p-6 flex flex-col justify-between">
+          <Card className="border-slate-200/90 bg-white p-6 flex flex-col justify-between shadow-xs">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <CardTitle className="text-base font-semibold text-zinc-900">Réussite par Marché</CardTitle>
-                <CardDescription className="text-xs text-zinc-500">
+                <CardTitle className="text-base font-semibold text-[#0F172A]">Réussite par Marché</CardTitle>
+                <CardDescription className="text-xs text-slate-500">
                   Pourcentage de réussite par type
                 </CardDescription>
               </div>
-              <BarChart3 className="w-4 h-4 text-zinc-500" />
+              <div className="p-1.5 rounded-md bg-[#1D7CEA]/10 text-[#1D7CEA]">
+                <BarChart3 className="w-4 h-4" />
+              </div>
             </div>
 
             <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={sportPerformanceData} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" horizontal={false} />
-                  <XAxis type="number" domain={[0, 100]} stroke="#a1a1aa" fontSize={11} tickFormatter={(v) => `${v}%`} />
-                  <YAxis dataKey="sport" type="category" stroke="#a1a1aa" fontSize={11} width={80} tickLine={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
+                  <XAxis type="number" domain={[0, 100]} stroke="#94a3b8" fontSize={11} tickFormatter={(v) => `${v}%`} />
+                  <YAxis dataKey="sport" type="category" stroke="#94a3b8" fontSize={11} width={85} tickLine={false} />
                   <Tooltip
                     content={({ active, payload }) => {
                       if (active && payload && payload.length) {
                         return (
-                          <div className="p-2.5 rounded-md bg-white border border-zinc-200 shadow-md text-xs">
-                            <div className="font-semibold text-zinc-900">{payload[0].payload.sport}</div>
-                            <div className="text-zinc-700">Win Rate: {payload[0].value}%</div>
-                            <div className="text-zinc-400">{payload[0].payload.bets} paris analysés</div>
+                          <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-lg text-xs">
+                            <div className="font-semibold text-[#0F172A]">{payload[0].payload.sport}</div>
+                            <div className="text-[#1D7CEA] font-bold mt-0.5">Win Rate: {payload[0].value}%</div>
+                            <div className="text-slate-400 mt-0.5">{payload[0].payload.bets} paris analysés</div>
                           </div>
                         );
                       }
                       return null;
                     }}
                   />
-                  <Bar dataKey="winRate" fill="#18181b" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="winRate" fill="#1D7CEA" radius={[0, 6, 6, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

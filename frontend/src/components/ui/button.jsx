@@ -9,17 +9,21 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          'bg-zinc-900 text-zinc-50 hover:bg-zinc-800 shadow-sm',
+          'bg-[#0F172A] text-white hover:bg-[#1E293B] shadow-xs transition-all active:scale-[0.99]',
+        brand:
+          'bg-[#1D7CEA] text-white hover:bg-[#156AC7] shadow-xs shadow-[#1D7CEA]/20 transition-all active:scale-[0.99]',
+        gradient:
+          'bg-gradient-to-r from-[#1D7CEA] via-[#0EAFE9] to-[#0CBFAA] text-white hover:opacity-95 shadow-xs shadow-[#1D7CEA]/25 transition-all active:scale-[0.99]',
         destructive:
-          'bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-sm',
+          'bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-xs',
         outline:
-          'border border-zinc-200 bg-white hover:bg-zinc-100 hover:text-zinc-900 text-zinc-900 shadow-sm',
+          'border border-zinc-200 bg-white hover:bg-zinc-50 hover:text-zinc-900 text-zinc-900 shadow-xs transition-colors',
         secondary:
           'bg-zinc-100 text-zinc-900 hover:bg-zinc-200/80',
         ghost:
           'hover:bg-zinc-100 hover:text-zinc-900 text-zinc-600',
         link:
-          'text-zinc-900 underline-offset-4 hover:underline p-0 h-auto font-normal',
+          'text-[#1D7CEA] underline-offset-4 hover:underline p-0 h-auto font-normal',
       },
       size: {
         default: 'h-10 px-4 py-2',

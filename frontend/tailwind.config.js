@@ -50,11 +50,19 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        predictix: {
+          navy: '#0F172A',       // Core dark navy
+          blue: '#1D7CEA',       // Electric / royal blue
+          sky: '#0EAFE9',        // Vibrant sky cyan
+          teal: '#0CBFAA',       // Emerald mint speedline
+          mint: '#0DBD9E',       // Secondary speedline mint
+          surface: '#F8FAFC',    // Clean subtle surface
+        },
         brand: {
-          blue: "#0062ff",
-          cyan: "#00d2ff",
-          green: "#00f5a0",
-          purple: "#7f00ff",
+          blue: '#1D7CEA',
+          cyan: '#0EAFE9',
+          green: '#0CBFAA',
+          navy: '#0F172A',
         },
       },
       borderRadius: {

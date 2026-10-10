@@ -143,30 +143,38 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen w-full flex flex-col items-center justify-center p-4 sm:p-6 bg-[#fafafa] bg-grid-pattern relative overflow-hidden">
-      {/* Subtle Ambient Blurred Gradient Orbs */}
-      <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-blue-100/40 blur-3xl pointer-events-none animate-pulse" />
-      <div className="absolute -bottom-32 -right-32 w-96 h-96 rounded-full bg-violet-100/35 blur-3xl pointer-events-none animate-pulse [animation-delay:2s]" />
+    <div className="min-h-screen w-full flex flex-col items-center justify-center p-4 sm:p-6 bg-[#fafbfc] bg-grid-pattern relative overflow-hidden">
+      {/* Subtle Ambient Blurred Gradient Orbs based on Logo Palette */}
+      <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-[#0EAFE9]/10 blur-3xl pointer-events-none animate-pulse" />
+      <div className="absolute -bottom-32 -right-32 w-96 h-96 rounded-full bg-[#0CBFAA]/10 blur-3xl pointer-events-none animate-pulse [animation-delay:2s]" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[480px] h-[480px] rounded-full bg-[#1D7CEA]/5 blur-3xl pointer-events-none" />
 
       {/* Main Container */}
       <div className="relative w-full max-w-[400px] z-10 animate-in fade-in-50 zoom-in-95 duration-500">
         {/* Main shadcn Card */}
-        <Card className="border border-zinc-200 bg-white/95 backdrop-blur-sm shadow-md shadow-zinc-950/5 rounded-xl overflow-hidden relative">
-          {/* Subtle Accent Hairline on top edge */}
-          <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-zinc-900/40 to-transparent" />
+        <Card className="border border-slate-200/90 bg-white/95 backdrop-blur-sm shadow-xl shadow-slate-900/5 rounded-2xl overflow-hidden relative">
+          {/* Accent Gradient Hairline matching Logo */}
+          <div className="h-[2.5px] w-full bg-gradient-to-r from-[#0CBFAA] via-[#1D7CEA] to-[#0EAFE9]" />
 
-          <CardHeader className="space-y-1 text-center pb-5 pt-6">
-            {/* Centered Brand Logo with smooth hover/scale */}
+          <CardHeader className="space-y-1 text-center pb-5 pt-7">
+            {/* Centered Brand Logo */}
             <div className="flex justify-center mb-3">
-              <div className="h-10 w-10 rounded-xl bg-zinc-900 text-white flex items-center justify-center shadow-xs transition-transform hover:scale-105 duration-200">
-                <TrendingUp className="w-5 h-5 text-white stroke-[2.5]" />
+              <div className="relative group">
+                <div className="absolute -inset-1.5 rounded-2xl bg-gradient-to-r from-[#0CBFAA] via-[#1D7CEA] to-[#0EAFE9] opacity-25 blur-sm group-hover:opacity-40 transition duration-300" />
+                <div className="relative h-13 w-13 rounded-xl bg-white border border-slate-100 flex items-center justify-center shadow-xs transition-transform hover:scale-105 duration-200 p-2">
+                  <img
+                    src="/predictix-logo.png"
+                    alt="Predictix Logo"
+                    className="h-full w-full object-contain"
+                  />
+                </div>
               </div>
             </div>
 
-            <CardTitle className="text-2xl font-bold tracking-tight text-zinc-900">
+            <CardTitle className="text-2xl font-bold tracking-tight text-[#0F172A]">
               Predictix
             </CardTitle>
-            <CardDescription className="text-sm text-zinc-500">
+            <CardDescription className="text-sm text-slate-500">
               Entrez vos identifiants pour vous connecter
             </CardDescription>
           </CardHeader>
@@ -185,9 +193,9 @@ export default function LoginPage() {
 
             {/* Success Alert */}
             {loginSuccess && (
-              <div className="p-3 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 flex items-center gap-2 text-xs animate-in fade-in-50">
-                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
-                <span>Connexion réussie ! Chargement en cours...</span>
+              <div className="p-3 rounded-lg border border-[#0CBFAA]/30 bg-[#0CBFAA]/10 text-[#078575] flex items-center gap-2 text-xs animate-in fade-in-50">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-[#0CBFAA]" />
+                <span className="font-medium">Connexion réussie ! Chargement en cours...</span>
               </div>
             )}
 
@@ -255,7 +263,7 @@ export default function LoginPage() {
                   />
                   <label
                     htmlFor="rememberMe"
-                    className="text-xs font-medium text-zinc-600 cursor-pointer select-none hover:text-zinc-900"
+                    className="text-xs font-medium text-slate-600 cursor-pointer select-none hover:text-[#0F172A]"
                   >
                     Se souvenir de moi
                   </label>
@@ -266,7 +274,7 @@ export default function LoginPage() {
                   onClick={() => {
                     alert('Pour réinitialiser le mot de passe, contactez l’administrateur.');
                   }}
-                  className="text-xs text-zinc-500 hover:text-zinc-900 underline-offset-4 hover:underline transition-colors"
+                  className="text-xs text-slate-500 hover:text-[#1D7CEA] underline-offset-4 hover:underline transition-colors"
                 >
                   Mot de passe oublié ?
                 </button>
@@ -276,7 +284,7 @@ export default function LoginPage() {
               <Button
                 type="submit"
                 size="default"
-                className="w-full mt-2 font-medium bg-zinc-900 text-white hover:bg-zinc-800 shadow-sm transition-all hover:shadow active:scale-[0.99]"
+                className="w-full mt-2 font-medium bg-[#1D7CEA] hover:bg-[#166AC7] text-white shadow-xs shadow-[#1D7CEA]/25 transition-all hover:shadow active:scale-[0.99]"
                 disabled={loginMutation.isLoading || googleMutation.isLoading || loginSuccess}
               >
                 {loginMutation.isLoading ? (
@@ -298,10 +306,10 @@ export default function LoginPage() {
             {/* Separator / Divider */}
             <div className="relative my-4">
               <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-zinc-200" />
+                <span className="w-full border-t border-slate-200" />
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-white px-2.5 text-zinc-400 font-medium">
+                <span className="bg-white px-2.5 text-slate-400 font-medium">
                   ou
                 </span>
               </div>
@@ -311,7 +319,7 @@ export default function LoginPage() {
             <Button
               type="button"
               variant="outline"
-              className="w-full h-10 border-zinc-200 hover:bg-zinc-50 text-zinc-800 font-medium shadow-xs transition-colors"
+              className="w-full h-10 border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-slate-700 hover:text-[#0F172A] font-medium shadow-xs transition-colors"
               onClick={() => setShowGoogleModal(true)}
               disabled={loginMutation.isLoading || googleMutation.isLoading || loginSuccess}
             >

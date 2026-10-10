@@ -14,8 +14,12 @@ const badgeVariants = cva(
         destructive:
           'border-transparent bg-rose-50 text-rose-700 border border-rose-200',
         outline: 'text-zinc-700 border-zinc-200 bg-white',
-        success: 'border-emerald-200 bg-emerald-50 text-emerald-700 font-medium',
-        blue: 'border-blue-200 bg-blue-50 text-blue-700 font-medium',
+        success: 'border-[#0CBFAA]/25 bg-[#0CBFAA]/10 text-[#078575] font-medium',
+        brand: 'border-[#1D7CEA]/20 bg-[#1D7CEA]/10 text-[#1D7CEA] font-medium',
+        teal: 'border-[#0CBFAA]/25 bg-[#0CBFAA]/10 text-[#078575] font-medium',
+        sky: 'border-[#0EAFE9]/25 bg-[#0EAFE9]/10 text-[#0275A0] font-medium',
+        navy: 'border-slate-800 bg-[#0F172A] text-white font-medium',
+        blue: 'border-[#1D7CEA]/25 bg-[#1D7CEA]/10 text-[#1D7CEA] font-medium',
       },
     },
     defaultVariants: {
