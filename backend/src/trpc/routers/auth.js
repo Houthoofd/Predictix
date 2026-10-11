@@ -66,7 +66,7 @@ export const authRouter = router({
         idToken: z.string().optional(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const { authenticateOrRegisterGoogleUser } = await import('../../services/authService.js');
       const result = await authenticateOrRegisterGoogleUser(input);
       if (!result.success) {
@@ -75,6 +75,18 @@ export const authRouter = router({
           message: result.error || 'Erreur lors de la connexion Google',
         });
       }
+
+      // Secure HTTP-Only cookie emission
+      if (ctx.res && ctx.res.cookie) {
+        const isHttps = ctx.req?.secure || ctx.req?.headers?.['x-forwarded-proto'] === 'https';
+        ctx.res.cookie('predictix_session', result.token, {
+          httpOnly: true,
+          secure: isHttps || process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          maxAge: 30 * 24 * 60 * 60 * 1000,
+        });
+      }
+
       return {
         user: result.user,
         token: result.token,

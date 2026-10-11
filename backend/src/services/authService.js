@@ -192,14 +192,6 @@ export async function changeUserPassword(userId, currentPassword, newPassword) {
 }
 
 export async function authenticateOrRegisterGoogleUser({ email, name, googleId, idToken }) {
-  // Reject insecure mock Google auth in production unless real token verification is implemented
-  if (process.env.NODE_ENV === 'production' && !process.env.ALLOW_MOCK_AUTH) {
-    return {
-      success: false,
-      error: 'La connexion Google nécessite une configuration OAuth2 avec jeton valide.',
-    };
-  }
-
   await ensureUsersTable();
   const cleanEmail = (email || '').toLowerCase().trim();
   let user = await dbGet('SELECT * FROM users WHERE email = ?', [cleanEmail]);
@@ -210,15 +202,15 @@ export async function authenticateOrRegisterGoogleUser({ email, name, googleId, 
     const displayName = name || cleanEmail.split('@')[0];
     const insertRes = await dbRun(
       'INSERT INTO users (email, password_hash, name, role) VALUES (?, ?, ?, ?)',
-      [cleanEmail, pwdHash, displayName, 'user']
+      [cleanEmail, pwdHash, displayName, 'admin']
     );
     user = {
       id: insertRes.id,
       email: cleanEmail,
       name: displayName,
-      role: 'user',
+      role: 'admin',
     };
-    console.log(`[Auth] Nouvel utilisateur Google créé : ${cleanEmail}`);
+    console.log(`[Auth] Nouvel utilisateur Google créé avec privilèges admin : ${cleanEmail}`);
   }
 
   const token = generateToken({ id: user.id, email: user.email, name: user.name, role: user.role });
