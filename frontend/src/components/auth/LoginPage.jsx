@@ -76,7 +76,7 @@ export default function LoginPage() {
 
   // Google Modal State
   const [showGoogleModal, setShowGoogleModal] = useState(false);
-  const [googleEmailInput, setGoogleEmailInput] = useState('benoit.predictix@gmail.com');
+  const [googleEmailInput, setGoogleEmailInput] = useState('houthoofd.benoit48@gmail.com');
   const [googleNameInput, setGoogleNameInput] = useState('Benoît');
 
   // tRPC email/pwd mutation
@@ -364,7 +364,7 @@ export default function LoginPage() {
             {/* Quick Select Preset Google Account */}
             <div
               onClick={() => {
-                setGoogleEmailInput('benoit.predictix@gmail.com');
+                setGoogleEmailInput('houthoofd.benoit48@gmail.com');
                 setGoogleNameInput('Benoît');
               }}
               className="p-3 rounded-lg border border-zinc-200 hover:border-blue-300 hover:bg-blue-50/40 transition-all cursor-pointer flex items-center gap-3"
@@ -374,7 +374,7 @@ export default function LoginPage() {
               </div>
               <div className="flex-1 min-w-0">
                 <span className="text-xs font-semibold text-zinc-900 block truncate">Benoît (Compte Google)</span>
-                <span className="text-[11px] text-zinc-500 font-mono block truncate">benoit.predictix@gmail.com</span>
+                <span className="text-[11px] text-zinc-500 font-mono block truncate">houthoofd.benoit48@gmail.com</span>
               </div>
               <span className="text-[11px] text-[#1D7CEA] font-medium">Sélectionner</span>
             </div>
