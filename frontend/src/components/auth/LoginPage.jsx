@@ -210,31 +210,6 @@ export default function LoginPage() {
               </div>
             )}
 
-            {/* Google Sign-in Button */}
-            <Button
-              type="button"
-              variant="outline"
-              size="default"
-              onClick={() => setShowGoogleModal(true)}
-              disabled={loginMutation.isLoading || googleMutation.isLoading || loginSuccess}
-              className="w-full font-medium border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-700 shadow-2xs hover:text-zinc-900 flex items-center justify-center transition-all"
-            >
-              <GoogleIcon />
-              <span>Continuer avec Google</span>
-            </Button>
-
-            {/* Divider */}
-            <div className="relative my-2">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-zinc-200/80" />
-              </div>
-              <div className="relative flex justify-center text-[10px] uppercase">
-                <span className="bg-white px-2 text-zinc-400 font-medium">
-                  ou continuer avec un email
-                </span>
-              </div>
-            </div>
-
             <form onSubmit={handleSubmit} className="space-y-3.5">
               {/* Email Field with Icon inside */}
               <div className="space-y-1">
@@ -336,6 +311,31 @@ export default function LoginPage() {
                 )}
               </Button>
             </form>
+
+            {/* Divider */}
+            <div className="relative my-3">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t border-zinc-200/80" />
+              </div>
+              <div className="relative flex justify-center text-[10px] uppercase">
+                <span className="bg-white px-2 text-zinc-400 font-medium">
+                  ou
+                </span>
+              </div>
+            </div>
+
+            {/* Google Sign-in Button at the bottom */}
+            <Button
+              type="button"
+              variant="outline"
+              size="default"
+              onClick={() => setShowGoogleModal(true)}
+              disabled={loginMutation.isLoading || googleMutation.isLoading || loginSuccess}
+              className="w-full font-medium border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-700 shadow-2xs hover:text-zinc-900 flex items-center justify-center transition-all"
+            >
+              <GoogleIcon />
+              <span>Continuer avec Google</span>
+            </Button>
           </CardContent>
         </Card>
 
