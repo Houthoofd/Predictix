@@ -137,7 +137,21 @@ export function AuthenticatedDashboard() {
     },
   });
 
-  const placeBetMutation = trpc.sports.placeBet.useMutation();
+  const trackedBetsQuery = trpc.sports.getTrackedBets.useQuery(undefined, {
+    staleTime: 5000,
+    refetchInterval: 10000,
+  });
+
+  // Real bets synchronized from database across all devices
+  const effectiveBets = (trackedBetsQuery.data && trackedBetsQuery.data.length > 0)
+    ? trackedBetsQuery.data
+    : trackedBets;
+
+  const placeBetMutation = trpc.sports.placeBet.useMutation({
+    onSuccess: () => {
+      trackedBetsQuery.refetch();
+    },
+  });
 
   const handleOpenConfrontationMarkets = (conf) => {
     setSelectedConfrontation(conf);
@@ -449,7 +463,7 @@ export function AuthenticatedDashboard() {
               selectedBankrollId={selectedBankrollId}
               setSelectedBankrollId={setSelectedBankrollId}
               setShowNewBankrollModal={setShowNewBankrollModal}
-              betsTrackerData={betsTrackerData}
+              betsTrackerData={effectiveBets}
             />
           )}
 
@@ -465,7 +479,7 @@ export function AuthenticatedDashboard() {
 
           {activeNav === 'tracker' && (
             <TrackerView
-              trackedBets={trackedBets}
+              trackedBets={effectiveBets}
               handleOpenPlaceBet={handleOpenPlaceBet}
               disciplines={disciplines}
             />

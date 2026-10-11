@@ -496,4 +496,161 @@ export const sportsRouter = router({
         };
       }
     }),
+
+  // Place a bet in SQLite database
+  placeBet: publicProcedure
+    .input(
+      z.object({
+        sport: z.string(),
+        sportId: z.number().optional(),
+        captureId: z.number().optional(),
+        bankrollId: z.string().default('main'),
+        match: z.string(),
+        competition: z.string().optional(),
+        market: z.string().optional(),
+        selection: z.string(),
+        odds: z.number().min(1.01),
+        stake: z.number().min(1),
+        bookmaker: z.string().default('Bwin'),
+        notes: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const cleanStake = Number(input.stake);
+      const cleanOdds = Number(input.odds);
+      const potentialPayout = +(cleanStake * cleanOdds).toFixed(2);
+      const now = new Date();
+      const dateStr = now.toISOString().split('T')[0];
+      const timeStr = now.toTimeString().split(' ')[0].substring(0, 5);
+
+      let insertId = Date.now();
+      try {
+        const { dbRun } = await import('../../db/database.js');
+        const home = input.match.includes(' vs ') ? input.match.split(' vs ')[0].trim() : input.match.trim();
+        const away = input.match.includes(' vs ') ? input.match.split(' vs ')[1].trim() : '';
+
+        const tip = input.market ? `${input.market} : ${input.selection}` : input.selection;
+
+        const res = await dbRun(
+          `INSERT INTO bets (
+            date, time, league, home_team, away_team,
+            best_tip, card_line, odds, stake, probability,
+            bookmaker, status, payout, notes, sport
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            dateStr,
+            timeStr,
+            input.competition || 'Compétition officielle',
+            home,
+            away,
+            tip,
+            0,
+            cleanOdds,
+            cleanStake,
+            Math.min(99, Math.round((1 / cleanOdds) * 100)),
+            input.bookmaker || 'Bwin',
+            'PENDING',
+            0,
+            input.notes || `Pari sur ${input.sport} (${input.bankrollId})`,
+            input.sport,
+          ]
+        );
+        if (res && res.id) insertId = res.id;
+      } catch (e) {
+        console.warn('[placeBet DB insert fallback]', e.message);
+      }
+
+      return {
+        success: true,
+        bet: {
+          id: insertId,
+          sport: input.sport,
+          sportId: input.sportId,
+          bankrollId: input.bankrollId,
+          match: input.match,
+          competition: input.competition,
+          market: input.market || 'Résultat',
+          selection: input.selection,
+          odds: cleanOdds,
+          stake: cleanStake,
+          payout: potentialPayout,
+          profit: +(potentialPayout - cleanStake).toFixed(2),
+          date: dateStr,
+          time: timeStr,
+          status: 'PENDING',
+          bookmaker: input.bookmaker || 'Bwin',
+        },
+      };
+    }),
+
+  // Get all recorded bets from SQLite database
+  getTrackedBets: publicProcedure.query(async () => {
+    try {
+      const { dbQuery } = await import('../../db/database.js');
+      const rows = await dbQuery('SELECT * FROM bets ORDER BY id DESC LIMIT 100');
+      if (!rows || rows.length === 0) {
+        return [];
+      }
+
+      return rows.map((r) => {
+        const home = r.home_team || '';
+        const away = r.away_team || '';
+        const match = home && away ? `${home} vs ${away}` : (home || away || 'Confrontation');
+
+        const oddsNum = Number(r.odds) || 1.85;
+        const stakeNum = Number(r.stake) || 50;
+        const potentialProfit = +((oddsNum - 1) * stakeNum).toFixed(2);
+
+        let profitText = `Gain pot. +${potentialProfit.toFixed(2)} €`;
+        let statusNormalized = 'pending';
+
+        if (r.status === 'WON' || r.status === 'won') {
+          statusNormalized = 'won';
+          profitText = `+${potentialProfit.toFixed(2)} €`;
+        } else if (r.status === 'LOST' || r.status === 'lost') {
+          statusNormalized = 'lost';
+          profitText = `-${stakeNum.toFixed(2)} €`;
+        }
+
+        // Parse formatted date (e.g. '11 Oct')
+        let displayDate = r.date || 'Aujourd\'hui';
+        try {
+          if (r.date && r.date.includes('-')) {
+            const [y, m, d] = r.date.split('-');
+            const dateObj = new Date(Number(y), Number(m) - 1, Number(d));
+            displayDate = dateObj.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+          }
+        } catch {
+          displayDate = r.date;
+        }
+
+        let bankroll = 'Bankroll Principale';
+        if (r.notes && r.notes.includes('(') && r.notes.includes(')')) {
+          const m = r.notes.match(/\(([^)]+)\)/);
+          if (m && m[1]) bankroll = m[1];
+        } else if (r.sport) {
+          bankroll = `Bankroll ${r.sport}`;
+        }
+
+        return {
+          id: r.id,
+          date: displayDate,
+          time: r.time || '',
+          match,
+          sport: r.sport || 'Football',
+          bet: r.best_tip || 'Pari',
+          odds: oddsNum,
+          stake: stakeNum,
+          status: statusNormalized,
+          profit: profitText,
+          bankroll,
+          competition: r.league || '',
+          bookmaker: r.bookmaker || 'Bwin',
+        };
+      });
+    } catch (err) {
+      console.error('[getTrackedBets error]', err);
+      return [];
+    }
+  }),
 });
